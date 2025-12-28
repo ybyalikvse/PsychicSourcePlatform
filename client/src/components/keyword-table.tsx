@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -7,9 +9,32 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Minus, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { TrendingUp, TrendingDown, Minus, ExternalLink, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Keyword } from "@shared/schema";
+
+interface KeywordAnalysis {
+  keyword: string;
+  metrics: {
+    volume: number;
+    difficulty: number;
+    cpc: number;
+    trafficPotential: number;
+    globalVolume: number;
+    parentTopic: string | null;
+  };
+  recommendations: string[];
+}
 
 interface KeywordTableProps {
   keywords: Keyword[];
@@ -17,6 +42,37 @@ interface KeywordTableProps {
 }
 
 export function KeywordTable({ keywords, isLoading }: KeywordTableProps) {
+  const { toast } = useToast();
+  const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false);
+  const [analysisData, setAnalysisData] = useState<KeywordAnalysis | null>(null);
+  const [analyzingKeywordId, setAnalyzingKeywordId] = useState<string | null>(null);
+
+  const analyzeMutation = useMutation({
+    mutationFn: async (keywordId: string) => {
+      setAnalyzingKeywordId(keywordId);
+      const response = await fetch(`/api/keywords/${keywordId}/analyze`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || data.error || "Failed to analyze keyword");
+      }
+      return data;
+    },
+    onSuccess: (data: KeywordAnalysis) => {
+      setAnalysisData(data);
+      setAnalysisDialogOpen(true);
+      setAnalyzingKeywordId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/keywords"] });
+    },
+    onError: (error: Error) => {
+      setAnalyzingKeywordId(null);
+      toast({
+        title: "Analysis Failed",
+        description: error.message || "Could not analyze keyword. Please check your Ahrefs connection.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const getPositionChange = (current: number | null, previous: number | null) => {
     if (current === null || previous === null) return null;
     return previous - current;
@@ -67,12 +123,13 @@ export function KeywordTable({ keywords, isLoading }: KeywordTableProps) {
             <TableHead className="text-right">Impressions</TableHead>
             <TableHead className="text-right">CTR</TableHead>
             <TableHead>URL</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {keywords.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                 No keywords tracked yet.
               </TableCell>
             </TableRow>
@@ -141,12 +198,85 @@ export function KeywordTable({ keywords, isLoading }: KeywordTableProps) {
                       <span className="text-muted-foreground">--</span>
                     )}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => analyzeMutation.mutate(keyword.id)}
+                      disabled={analyzingKeywordId === keyword.id}
+                      data-testid={`button-analyze-keyword-${keyword.id}`}
+                    >
+                      {analyzingKeywordId === keyword.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      <span className="ml-1">Analyze</span>
+                    </Button>
+                  </TableCell>
                 </TableRow>
               );
             })
           )}
         </TableBody>
       </Table>
+
+      <Dialog open={analysisDialogOpen} onOpenChange={setAnalysisDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Keyword Analysis</DialogTitle>
+            <DialogDescription>
+              SEO insights for "{analysisData?.keyword}"
+            </DialogDescription>
+          </DialogHeader>
+          {analysisData && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Search Volume</p>
+                  <p className="text-2xl font-semibold">{analysisData.metrics.volume.toLocaleString()}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Difficulty</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-2xl font-semibold">{analysisData.metrics.difficulty}</p>
+                    {getDifficultyBadge(analysisData.metrics.difficulty)}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">CPC</p>
+                  <p className="text-2xl font-semibold">${analysisData.metrics.cpc.toFixed(2)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Traffic Potential</p>
+                  <p className="text-2xl font-semibold">{analysisData.metrics.trafficPotential.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {analysisData.metrics.parentTopic && (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Parent Topic</p>
+                  <p className="font-medium">{analysisData.metrics.parentTopic}</p>
+                </div>
+              )}
+
+              {analysisData.recommendations.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">SEO Recommendations</p>
+                  <ul className="space-y-2">
+                    {analysisData.recommendations.map((rec, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm">
+                        <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <span>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
