@@ -993,8 +993,8 @@ Remember: The article MUST be ${targetWordCount} words. Write the complete artic
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      // Calculate max tokens based on word count (roughly 1.3 tokens per word + buffer)
-      const maxTokens = Math.min(16000, Math.max(4096, Math.ceil((wordCount || 1500) * 1.5)));
+      // Calculate max tokens based on word count (roughly 1.5 tokens per word + buffer for HTML tags)
+      const maxTokens = Math.min(16000, Math.max(4096, Math.ceil(targetWordCount * 2)));
 
       const stream = await openai.chat.completions.create({
         model: "gpt-4o",
