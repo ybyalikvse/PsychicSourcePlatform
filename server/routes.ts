@@ -1539,6 +1539,65 @@ Example response:
   });
 
   // ============ ARTICLE OPTIMIZATION ============
+  
+  // Test endpoint to verify Gemini API is working
+  app.get("/api/optimize/test-gemini", async (req, res) => {
+    try {
+      console.log("[Gemini Test] Starting Gemini API test...");
+      console.log("[Gemini Test] API Key exists:", !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
+      console.log("[Gemini Test] Base URL:", process.env.AI_INTEGRATIONS_GEMINI_BASE_URL);
+      
+      const { GoogleGenAI } = await import("@google/genai");
+      const genAI = new GoogleGenAI({
+        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        httpOptions: {
+          apiVersion: "",
+          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        },
+      });
+
+      console.log("[Gemini Test] GoogleGenAI initialized, calling API...");
+      
+      const response = await genAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: "Say 'Hello, Gemini is working!' in exactly those words." }] }],
+      });
+
+      console.log("[Gemini Test] Response received:", JSON.stringify(response).substring(0, 500));
+      
+      // Try to extract text
+      let responseText = "";
+      if (typeof response.text === 'string') {
+        responseText = response.text;
+      } else if (typeof response.text === 'function') {
+        responseText = response.text();
+      }
+      if (!responseText && response.candidates?.[0]) {
+        const candidate = response.candidates[0];
+        const textPart = candidate?.content?.parts?.find((part: any) => part.text);
+        responseText = textPart?.text || "";
+      }
+      
+      console.log("[Gemini Test] Extracted text:", responseText);
+      
+      res.json({ 
+        success: true, 
+        message: responseText,
+        apiKeyExists: !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+      });
+    } catch (error: any) {
+      console.error("[Gemini Test] Error:", error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        stack: error.stack,
+        apiKeyExists: !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+      });
+    }
+  });
+
   app.post("/api/optimize/analyze", async (req, res) => {
     try {
       const { url, targetKeyword, dateRange = "28" } = req.body;
@@ -1854,7 +1913,7 @@ Be extremely specific and actionable. Reference specific competitor content when
         console.log(`[Optimize] Sending ${analysisPrompt.length} chars to Gemini for analysis`);
 
         const response = await genAI.models.generateContent({
-          model: "gemini-2.0-flash",
+          model: "gemini-2.5-flash",
           contents: [{ role: "user", parts: [{ text: analysisPrompt }] }],
         });
 
