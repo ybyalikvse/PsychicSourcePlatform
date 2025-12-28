@@ -15,6 +15,86 @@ const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GSC_SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 
+// Helper function to get valid GSC access token (auto-refresh if expired)
+async function getValidGSCToken(): Promise<string | null> {
+  const gscIntegration = await storage.getIntegration("gsc");
+  if (!gscIntegration || gscIntegration.status !== "connected") {
+    return null;
+  }
+
+  const config = (gscIntegration.config || {}) as { 
+    accessToken?: string; 
+    refreshToken?: string; 
+    expiresAt?: number 
+  };
+
+  if (!config.accessToken) {
+    return null;
+  }
+
+  // Check if token is expired or will expire in the next 5 minutes
+  const isExpired = config.expiresAt && Date.now() > (config.expiresAt - 5 * 60 * 1000);
+  
+  if (!isExpired) {
+    return config.accessToken;
+  }
+
+  // Token is expired, try to refresh
+  if (!config.refreshToken) {
+    console.log("[GSC] Access token expired but no refresh token available");
+    return null;
+  }
+
+  console.log("[GSC] Access token expired, refreshing...");
+  
+  const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET;
+  
+  if (!clientId || !clientSecret) {
+    console.error("[GSC] Missing OAuth credentials for token refresh");
+    return null;
+  }
+
+  try {
+    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: config.refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error("[GSC] Token refresh failed:", errorText);
+      return null;
+    }
+
+    const tokens = await tokenResponse.json();
+    
+    // Update stored tokens
+    await storage.upsertIntegration({
+      name: "gsc",
+      status: "connected",
+      lastSync: new Date().toISOString(),
+      config: JSON.stringify({
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || config.refreshToken, // Keep old refresh token if not provided
+        expiresAt: Date.now() + (tokens.expires_in * 1000),
+      }),
+    });
+
+    console.log("[GSC] Token refreshed successfully");
+    return tokens.access_token;
+  } catch (error) {
+    console.error("[GSC] Token refresh error:", error);
+    return null;
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1490,31 +1570,29 @@ Example response:
 
       console.log(`[Optimize] Starting analysis for URL: ${url}, keyword: "${targetKeyword}"`);
 
-      // Step 1: Fetch GSC keywords for this URL
-      const gscIntegration = await storage.getIntegration("gsc");
+      // Step 1: Fetch GSC keywords for this URL (with auto token refresh)
+      const accessToken = await getValidGSCToken();
       let keywords: Array<{ keyword: string; position: number; clicks: number; impressions: number; ctr: number }> = [];
       
-      if (gscIntegration?.status === "connected") {
-        const config = (gscIntegration.config || {}) as { accessToken?: string };
-        if (config.accessToken) {
-          try {
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setDate(startDate.getDate() - 30);
-            const formatDate = (d: Date) => d.toISOString().split('T')[0];
+      if (accessToken) {
+        try {
+          const endDate = new Date();
+          const startDate = new Date();
+          startDate.setDate(startDate.getDate() - 30);
+          const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
-            // Extract path from URL for filtering
-            const urlObj = new URL(url);
-            const pageFilter = urlObj.href;
+          // Extract path from URL for filtering
+          const urlObj = new URL(url);
+          const pageFilter = urlObj.href;
 
-            const gscResponse = await fetch(
-              "https://www.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fwww.psychicsource.com%2F/searchAnalytics/query",
-              {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${config.accessToken}`,
-                  "Content-Type": "application/json",
-                },
+          const gscResponse = await fetch(
+            "https://www.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fwww.psychicsource.com%2F/searchAnalytics/query",
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
                 body: JSON.stringify({
                   startDate: formatDate(startDate),
                   endDate: formatDate(endDate),
@@ -1544,9 +1622,8 @@ Example response:
             } else {
               console.log(`[Optimize] GSC query failed: ${await gscResponse.text()}`);
             }
-          } catch (gscError) {
-            console.error("[Optimize] GSC fetch error:", gscError);
-          }
+        } catch (gscError) {
+          console.error("[Optimize] GSC fetch error:", gscError);
         }
       }
 
