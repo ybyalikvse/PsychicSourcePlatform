@@ -210,9 +210,11 @@ export default function Settings() {
                 >
                   <div>
                     <div className="font-medium">{style.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      Tone: {style.tone || "professional"}
-                    </div>
+                    {style.guidelines && (
+                      <div className="text-sm text-muted-foreground line-clamp-1 max-w-md">
+                        {style.guidelines}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <Button 
@@ -267,25 +269,6 @@ export default function Settings() {
                     placeholder="e.g., Friendly Expert"
                     data-testid="input-style-name"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="style-tone">Tone</Label>
-                  <Select 
-                    value={styleForm.tone} 
-                    onValueChange={(v) => setStyleForm({ ...styleForm, tone: v })}
-                  >
-                    <SelectTrigger data-testid="select-style-tone">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="professional">Professional</SelectItem>
-                      <SelectItem value="friendly">Friendly</SelectItem>
-                      <SelectItem value="casual">Casual</SelectItem>
-                      <SelectItem value="authoritative">Authoritative</SelectItem>
-                      <SelectItem value="empathetic">Empathetic</SelectItem>
-                      <SelectItem value="mystical">Mystical</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="style-guidelines">Writing Guidelines</Label>
