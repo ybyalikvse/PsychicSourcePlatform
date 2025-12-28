@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,12 +37,13 @@ import {
   FileText,
   Tags,
   ImageIcon,
-  Loader2
+  Loader2,
+  Pencil
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { TiptapEditor } from "@/components/tiptap-editor";
-import type { WritingStyle, SeoSettings, ImageStyle } from "@shared/schema";
+import type { WritingStyle, SeoSettings, ImageStyle, Article } from "@shared/schema";
 
 interface MetaSuggestions {
   titles: string[];
@@ -51,7 +52,12 @@ interface MetaSuggestions {
 
 export default function CreateWithAI() {
   const [, setLocation] = useLocation();
+  const [, editParams] = useRoute("/edit/:id");
   const { toast } = useToast();
+  
+  const articleId = editParams?.id;
+  const isEditMode = !!articleId;
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const [targetKeyword, setTargetKeyword] = useState("");
   const [recommendedKeywords, setRecommendedKeywords] = useState("");
@@ -67,8 +73,25 @@ export default function CreateWithAI() {
   const [metaDialogOpen, setMetaDialogOpen] = useState(false);
   const [selectedTitle, setSelectedTitle] = useState("");
   const [selectedDescription, setSelectedDescription] = useState("");
+  const [articleStatus, setArticleStatus] = useState<string>("draft");
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const { data: existingArticle, isLoading: isLoadingArticle } = useQuery<Article>({
+    queryKey: ["/api/articles", articleId],
+    enabled: isEditMode,
+  });
+
+  useEffect(() => {
+    if (isEditMode && existingArticle && !isInitialized) {
+      setTargetKeyword(existingArticle.targetKeyword || "");
+      setGeneratedContent(existingArticle.content || "");
+      setSelectedTitle(existingArticle.metaTitle || "");
+      setSelectedDescription(existingArticle.metaDescription || "");
+      setArticleStatus(existingArticle.status || "draft");
+      setIsInitialized(true);
+    }
+  }, [isEditMode, existingArticle, isInitialized]);
 
   const { data: writingStyles = [] } = useQuery<WritingStyle[]>({
     queryKey: ["/api/writing-styles"],
@@ -106,21 +129,35 @@ export default function CreateWithAI() {
       metaDescription: string;
     }) => {
       const slug = data.title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-      return await apiRequest("POST", "/api/articles", {
-        ...data,
-        slug,
-        status: "draft",
-        wordCount: data.content.split(/\s+/).filter(Boolean).length,
-      });
+      const wordCountNum = data.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+      
+      if (isEditMode && articleId) {
+        return await apiRequest("PATCH", `/api/articles/${articleId}`, {
+          ...data,
+          slug,
+          status: articleStatus,
+          wordCount: wordCountNum,
+        });
+      } else {
+        return await apiRequest("POST", "/api/articles", {
+          ...data,
+          slug,
+          status: "draft",
+          wordCount: wordCountNum,
+        });
+      }
     },
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Article saved as draft" });
+      if (isEditMode && articleId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/articles", articleId] });
+      }
+      toast({ title: isEditMode ? "Article updated" : "Article saved as draft" });
       setLocation("/content");
     },
     onError: () => {
-      toast({ title: "Failed to save article", variant: "destructive" });
+      toast({ title: isEditMode ? "Failed to update article" : "Failed to save article", variant: "destructive" });
     },
   });
 
@@ -437,13 +474,47 @@ export default function CreateWithAI() {
 
   const currentWordCount = stripHtmlTags(generatedContent).split(/\s+/).filter(Boolean).length;
 
+  if (isEditMode && isLoadingArticle) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]" data-testid="page-create-loading">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6" data-testid="page-create">
-      <div>
-        <h1 className="text-2xl font-semibold">Create with AI</h1>
-        <p className="text-muted-foreground">
-          Generate SEO-optimized content using AI assistance
-        </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold">
+              {isEditMode ? "Edit Article" : "Create with AI"}
+            </h1>
+            {isEditMode && (
+              <Badge variant="secondary" className="gap-1">
+                <Pencil className="h-3 w-3" />
+                Editing
+              </Badge>
+            )}
+          </div>
+          <p className="text-muted-foreground">
+            {isEditMode 
+              ? "Update your article with AI-powered tools" 
+              : "Generate SEO-optimized content using AI assistance"}
+          </p>
+        </div>
+        {isEditMode && (
+          <Select value={articleStatus} onValueChange={setArticleStatus}>
+            <SelectTrigger className="w-[140px]" data-testid="select-article-status">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
