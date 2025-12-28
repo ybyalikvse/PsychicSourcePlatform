@@ -48,7 +48,7 @@ export function IntegrationCard({
     },
   };
 
-  const config = statusConfig[status];
+  const config = statusConfig[status] || statusConfig.disconnected;
   const StatusIcon = config.icon;
 
   return (
