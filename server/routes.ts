@@ -1781,72 +1781,61 @@ Example response:
           baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
         });
 
-        const analysisPrompt = `You are an expert SEO analyst. Analyze this article and compare it against the top-ranking competitors to provide specific, actionable recommendations for improving rankings.
+        const analysisPrompt = `You are an expert SEO analyst. Analyze this article and compare it against competitors to provide specific, actionable recommendations.
 
 TARGET KEYWORD: "${targetKeyword}"
 
-=== YOUR PAGE ===
-Title: ${pageContent.title}
-Meta Description: ${pageContent.metaDescription}
-Word Count: ${pageContent.wordCount}
-H1 Tags: ${pageContent.headings.h1.join(", ") || "None"}
-H2 Tags: ${pageContent.headings.h2.join(", ") || "None"}  
-H3 Tags: ${pageContent.headings.h3.join(", ") || "None"}
+YOUR PAGE ANALYSIS:
+- Title: ${pageContent.title}
+- Meta Description: ${pageContent.metaDescription}
+- Word Count: ${pageContent.wordCount}
+- H1 Tags: ${pageContent.headings.h1.join(", ") || "None"}
+- H2 Tags: ${pageContent.headings.h2.join(", ") || "None"}
+- H3 Tags: ${pageContent.headings.h3.join(", ") || "None"}
+- Content Preview: ${pageContent.content.substring(0, 1000)}
 
-YOUR CONTENT:
-${pageContent.content.substring(0, 4000)}
-
-=== RANKING KEYWORDS FROM GOOGLE SEARCH CONSOLE ===
+RANKING KEYWORDS (keywords this page currently ranks for):
 ${keywords.length > 0 
-  ? keywords.slice(0, 20).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks}, Impressions: ${k.impressions})`).join("\n")
+  ? keywords.slice(0, 20).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks})`).join("\n")
   : "No ranking data available"}
 
-=== TOP RANKING COMPETITORS ===
+TOP COMPETITORS:
 ${competitors.length > 0 
   ? competitors.map((c, i) => `
---- COMPETITOR #${i + 1}: ${c.url} ---
-Title: ${c.title}
-Meta Description: ${c.metaDescription}
-Word Count: ${c.wordCount}
-H1s: ${c.headings.h1.join(", ") || "None"}
-H2s: ${c.headings.h2.slice(0, 8).join(", ") || "None"}
-H3s: ${c.headings.h3.slice(0, 5).join(", ") || "None"}
-Content Preview:
-${c.contentSnippet}
+Competitor #${i + 1}: ${c.url}
+- Title: ${c.title}
+- Meta: ${c.metaDescription}
+- Word Count: ${c.wordCount}
+- H1s: ${c.headings.h1.join(", ") || "None"}
+- H2s: ${c.headings.h2.slice(0, 5).join(", ") || "None"}
 `).join("\n")
   : "No competitor data available"}
 
-=== ANALYSIS INSTRUCTIONS ===
-Compare the user's content against ALL competitors above. Identify:
+Provide specific recommendations to improve rankings for "${targetKeyword}". Focus on:
+1. Title tag optimization (include keyword, make it compelling)
+2. Meta description improvements
+3. Content gaps vs competitors (length, topics, depth)
+4. Heading structure improvements
+5. Keyword usage and related terms
 
-1. **Content Gaps**: What topics/subtopics do competitors cover that this page is missing?
-2. **Title Optimization**: How can the title be more compelling while including the target keyword?
-3. **Meta Description**: Is it compelling? Does it include the keyword and a call to action?
-4. **Content Depth**: Is the word count competitive? Are topics covered with enough depth?
-5. **Heading Structure**: Are H2s and H3s optimized for featured snippets and readability?
-6. **Missing Keywords**: What related terms/entities do competitors use that this page doesn't?
-7. **Content Quality**: Is the content as comprehensive and authoritative as top competitors?
-
-Provide 5-10 specific, actionable recommendations ranked by potential impact.
-
-Return JSON in this exact format:
+Return a JSON array of recommendations:
 {
   "recommendations": [
     {
       "type": "title" | "meta" | "content" | "headings" | "keywords",
       "priority": "high" | "medium" | "low",
-      "current": "What they currently have (quote actual text when possible)",
-      "suggested": "Your specific suggestion - write full titles, full meta descriptions, specific topics to add",
-      "reason": "Explain why this will improve rankings, referencing competitor data when relevant"
+      "current": "What they currently have (or 'N/A')",
+      "suggested": "Your specific suggestion with exact text when applicable",
+      "reason": "Why this change will help rankings"
     }
   ]
 }
 
-Be VERY specific. Don't say "add more content" - say exactly WHAT content to add based on what competitors cover. Don't say "improve title" - write the exact new title you recommend.`;
+Be specific. If suggesting a new title, write the full title. If suggesting adding content, be specific about topics to cover. Prioritize high-impact changes.`;
 
         const response = await anthropic.messages.create({
           model: "claude-sonnet-4-5",
-          max_tokens: 4000,
+          max_tokens: 2000,
           messages: [
             { role: "user", content: analysisPrompt }
           ],
