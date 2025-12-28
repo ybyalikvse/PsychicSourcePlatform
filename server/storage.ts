@@ -5,7 +5,10 @@ import {
   type Integration, type InsertIntegration,
   type ContentSuggestion, type InsertContentSuggestion,
   type AnalyticsSnapshot, type InsertAnalyticsSnapshot,
+  type WritingStyle, type InsertWritingStyle,
+  type SeoSettings, type InsertSeoSettings,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
+  writingStyles, seoSettings,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -44,6 +47,17 @@ export interface IStorage {
   // Analytics
   getAnalyticsSnapshots(days: number): Promise<AnalyticsSnapshot[]>;
   createAnalyticsSnapshot(snapshot: InsertAnalyticsSnapshot): Promise<AnalyticsSnapshot>;
+
+  // Writing Styles
+  getWritingStyles(): Promise<WritingStyle[]>;
+  getWritingStyle(id: string): Promise<WritingStyle | undefined>;
+  createWritingStyle(style: InsertWritingStyle): Promise<WritingStyle>;
+  updateWritingStyle(id: string, style: Partial<InsertWritingStyle>): Promise<WritingStyle | undefined>;
+  deleteWritingStyle(id: string): Promise<boolean>;
+
+  // SEO Settings
+  getSeoSettings(): Promise<SeoSettings | undefined>;
+  upsertSeoSettings(settings: InsertSeoSettings): Promise<SeoSettings>;
 }
 
 export class MemStorage implements IStorage {
@@ -358,6 +372,53 @@ export class DatabaseStorage implements IStorage {
   async createAnalyticsSnapshot(insertSnapshot: InsertAnalyticsSnapshot): Promise<AnalyticsSnapshot> {
     const [snapshot] = await db.insert(analyticsSnapshots).values(insertSnapshot).returning();
     return snapshot;
+  }
+
+  // Writing Styles
+  async getWritingStyles(): Promise<WritingStyle[]> {
+    return db.select().from(writingStyles).orderBy(writingStyles.name);
+  }
+
+  async getWritingStyle(id: string): Promise<WritingStyle | undefined> {
+    const [style] = await db.select().from(writingStyles).where(eq(writingStyles.id, id));
+    return style;
+  }
+
+  async createWritingStyle(insertStyle: InsertWritingStyle): Promise<WritingStyle> {
+    const [style] = await db.insert(writingStyles).values(insertStyle).returning();
+    return style;
+  }
+
+  async updateWritingStyle(id: string, updates: Partial<InsertWritingStyle>): Promise<WritingStyle | undefined> {
+    const [style] = await db.update(writingStyles)
+      .set(updates)
+      .where(eq(writingStyles.id, id))
+      .returning();
+    return style;
+  }
+
+  async deleteWritingStyle(id: string): Promise<boolean> {
+    await db.delete(writingStyles).where(eq(writingStyles.id, id));
+    return true;
+  }
+
+  // SEO Settings
+  async getSeoSettings(): Promise<SeoSettings | undefined> {
+    const [settings] = await db.select().from(seoSettings).limit(1);
+    return settings;
+  }
+
+  async upsertSeoSettings(insertSettings: InsertSeoSettings): Promise<SeoSettings> {
+    const existing = await this.getSeoSettings();
+    if (existing) {
+      const [updated] = await db.update(seoSettings)
+        .set({ ...insertSettings, updatedAt: new Date().toISOString() })
+        .where(eq(seoSettings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [settings] = await db.insert(seoSettings).values(insertSettings).returning();
+    return settings;
   }
 }
 

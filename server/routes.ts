@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertArticleSchema, insertKeywordSchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
+import OpenAI from "openai";
 
 // OAuth state storage (in production, use Redis or similar)
 const oauthStates = new Map<string, { timestamp: number }>();
@@ -844,6 +845,241 @@ export async function registerRoutes(
       res.json({ success: true, message: `Synced ${name} data` });
     } catch (error) {
       res.status(500).json({ error: "Failed to sync integration" });
+    }
+  });
+
+  // Writing Styles endpoints
+  app.get("/api/writing-styles", async (req, res) => {
+    try {
+      const styles = await storage.getWritingStyles();
+      res.json(styles);
+    } catch (error) {
+      console.error("Error fetching writing styles:", error);
+      res.status(500).json({ error: "Failed to fetch writing styles" });
+    }
+  });
+
+  app.get("/api/writing-styles/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const style = await storage.getWritingStyle(id);
+      if (!style) {
+        return res.status(404).json({ error: "Writing style not found" });
+      }
+      res.json(style);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch writing style" });
+    }
+  });
+
+  app.post("/api/writing-styles", async (req, res) => {
+    try {
+      const style = await storage.createWritingStyle(req.body);
+      res.status(201).json(style);
+    } catch (error) {
+      console.error("Error creating writing style:", error);
+      res.status(500).json({ error: "Failed to create writing style" });
+    }
+  });
+
+  app.patch("/api/writing-styles/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const style = await storage.updateWritingStyle(id, req.body);
+      if (!style) {
+        return res.status(404).json({ error: "Writing style not found" });
+      }
+      res.json(style);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update writing style" });
+    }
+  });
+
+  app.delete("/api/writing-styles/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteWritingStyle(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete writing style" });
+    }
+  });
+
+  // SEO Settings endpoints
+  app.get("/api/seo-settings", async (req, res) => {
+    try {
+      const settings = await storage.getSeoSettings();
+      res.json(settings || {
+        metaTitleGuidelines: "Include primary keyword at the beginning. Keep it compelling and under 60 characters.",
+        metaTitleMaxLength: 60,
+        metaDescriptionGuidelines: "Summarize the page content with a clear call to action. Include primary keyword naturally.",
+        metaDescriptionMaxLength: 160,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch SEO settings" });
+    }
+  });
+
+  app.put("/api/seo-settings", async (req, res) => {
+    try {
+      const settings = await storage.upsertSeoSettings(req.body);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error saving SEO settings:", error);
+      res.status(500).json({ error: "Failed to save SEO settings" });
+    }
+  });
+
+  // Content Generation with OpenAI
+  app.post("/api/content/generate", async (req, res) => {
+    try {
+      const { targetKeyword, wordCount, recommendedKeywords, styleId } = req.body;
+      
+      if (!targetKeyword) {
+        return res.status(400).json({ error: "Target keyword is required" });
+      }
+
+      // Get writing style if provided
+      let styleGuidelines = "";
+      if (styleId) {
+        const style = await storage.getWritingStyle(styleId);
+        if (style) {
+          styleGuidelines = `
+Writing Style: ${style.name}
+Tone: ${style.tone || "professional"}
+Guidelines: ${style.guidelines || ""}
+${style.exampleText ? `Example of desired style: ${style.exampleText}` : ""}
+`;
+        }
+      }
+
+      const keywordsList = recommendedKeywords?.length 
+        ? `Include these related keywords/phrases naturally: ${recommendedKeywords.join(", ")}`
+        : "";
+
+      const prompt = `Write a comprehensive SEO-optimized article about "${targetKeyword}".
+
+Requirements:
+- Word count: approximately ${wordCount || 1500} words
+- Use proper HTML heading structure (H1, H2, H3)
+- Include the primary keyword "${targetKeyword}" naturally throughout
+- Make the content informative, engaging, and valuable to readers
+${keywordsList}
+${styleGuidelines}
+
+Output format:
+- Start with an engaging H1 title
+- Include an introduction paragraph
+- Use H2 subheadings for main sections
+- Use H3 subheadings for subsections where appropriate
+- End with a conclusion
+
+Write the article now:`;
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      // Set up SSE for streaming
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const stream = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert SEO content writer for Psychic Source. Write engaging, informative content that helps readers while being optimized for search engines."
+          },
+          { role: "user", content: prompt }
+        ],
+        stream: true,
+        max_completion_tokens: 4096,
+      });
+
+      let fullContent = "";
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        if (content) {
+          fullContent += content;
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true, fullContent })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Content generation error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to generate content" });
+      } else {
+        res.write(`data: ${JSON.stringify({ error: "Content generation failed" })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
+  // Generate meta suggestions
+  app.post("/api/content/meta-suggestions", async (req, res) => {
+    try {
+      const { title, content, targetKeyword } = req.body;
+      
+      if (!targetKeyword) {
+        return res.status(400).json({ error: "Target keyword is required" });
+      }
+
+      // Get SEO settings for guidelines
+      const seoSettings = await storage.getSeoSettings();
+      const titleGuidelines = seoSettings?.metaTitleGuidelines || "Include primary keyword at the beginning. Keep it compelling and under 60 characters.";
+      const descGuidelines = seoSettings?.metaDescriptionGuidelines || "Summarize the page content with a clear call to action. Include primary keyword naturally.";
+      const titleMaxLen = seoSettings?.metaTitleMaxLength || 60;
+      const descMaxLen = seoSettings?.metaDescriptionMaxLength || 160;
+
+      const prompt = `Generate SEO meta tag suggestions for an article.
+
+Article Title: ${title || "Not provided"}
+Target Keyword: ${targetKeyword}
+Content Preview: ${content?.substring(0, 500) || "Not provided"}
+
+Meta Title Guidelines: ${titleGuidelines}
+Maximum title length: ${titleMaxLen} characters
+
+Meta Description Guidelines: ${descGuidelines}
+Maximum description length: ${descMaxLen} characters
+
+Generate exactly 5 unique meta titles and 5 unique meta descriptions.
+
+Respond in JSON format:
+{
+  "titles": ["title1", "title2", "title3", "title4", "title5"],
+  "descriptions": ["desc1", "desc2", "desc3", "desc4", "desc5"]
+}`;
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are an SEO expert. Generate compelling meta titles and descriptions that drive clicks while following best practices. Always respond with valid JSON."
+          },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 1024,
+      });
+
+      const suggestions = JSON.parse(response.choices[0]?.message?.content || '{"titles":[],"descriptions":[]}');
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Meta suggestions error:", error);
+      res.status(500).json({ error: "Failed to generate meta suggestions" });
     }
   });
 
