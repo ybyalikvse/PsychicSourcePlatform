@@ -1226,6 +1226,10 @@ Respond in JSON format:
         return res.status(400).json({ error: "Content is required" });
       }
 
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+
       const prompt = `Analyze this blog post content and suggest ${count} compelling image ideas that would enhance the article visually.
 
 Target Keyword: ${targetKeyword || "not specified"}
