@@ -125,6 +125,44 @@ export const insertAnalyticsSnapshotSchema = createInsertSchema(analyticsSnapsho
 export type InsertAnalyticsSnapshot = z.infer<typeof insertAnalyticsSnapshotSchema>;
 export type AnalyticsSnapshot = typeof analyticsSnapshots.$inferSelect;
 
+// Writing styles table
+export const writingStyles = pgTable("writing_styles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  tone: text("tone"), // professional, casual, friendly, authoritative
+  guidelines: text("guidelines"),
+  exampleText: text("example_text"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertWritingStyleSchema = createInsertSchema(writingStyles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertWritingStyle = z.infer<typeof insertWritingStyleSchema>;
+export type WritingStyle = typeof writingStyles.$inferSelect;
+
+// SEO settings table
+export const seoSettings = pgTable("seo_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metaTitleGuidelines: text("meta_title_guidelines"),
+  metaTitleMaxLength: integer("meta_title_max_length").default(60),
+  metaDescriptionGuidelines: text("meta_description_guidelines"),
+  metaDescriptionMaxLength: integer("meta_description_max_length").default(160),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertSeoSettingsSchema = createInsertSchema(seoSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertSeoSettings = z.infer<typeof insertSeoSettingsSchema>;
+export type SeoSettings = typeof seoSettings.$inferSelect;
+
 // TypeScript interfaces for API responses
 export interface AhrefsKeywordData {
   keyword: string;
@@ -174,3 +212,17 @@ export interface ContentOptimizationResult {
     h3: number;
   };
 }
+
+export interface ContentGenerationRequest {
+  targetKeyword: string;
+  wordCount: number;
+  recommendedKeywords: string[];
+  styleId: string;
+}
+
+export interface MetaSuggestions {
+  titles: string[];
+  descriptions: string[];
+}
+
+export * from "./models/chat";
