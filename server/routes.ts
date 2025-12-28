@@ -199,22 +199,58 @@ export async function registerRoutes(
         });
       }
 
-      // If connected, use stored keywords data (synced from GSC)
-      const keywords = await storage.getKeywords();
-      const totalClicks = keywords.reduce((sum, k) => sum + (k.clicks || 0), 0);
-      const totalImpressions = keywords.reduce((sum, k) => sum + (k.impressions || 0), 0);
-      const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-      const avgPosition = keywords.length > 0
-        ? keywords.reduce((sum, k) => sum + (k.currentPosition || 0), 0) / keywords.length
-        : 0;
+      const config = JSON.parse(gscIntegration.config || "{}");
+      if (!config.accessToken) {
+        return res.status(400).json({ 
+          error: "GSC tokens missing",
+          message: "Please reconnect Google Search Console.",
+          requiresConnection: true
+        });
+      }
+
+      // Get date range (last 30 days)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+      // Call GSC API for aggregate stats (no dimensions = totals)
+      const gscResponse = await fetch(
+        "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Apsychicsource.com/searchAnalytics/query",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${config.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: formatDate(startDate),
+            endDate: formatDate(endDate),
+            rowLimit: 1,
+          }),
+        }
+      );
+
+      if (!gscResponse.ok) {
+        const errorText = await gscResponse.text();
+        console.error("GSC API error (stats):", errorText);
+        return res.status(gscResponse.status).json({ 
+          error: "GSC API error",
+          message: `Failed to fetch stats: ${errorText}`
+        });
+      }
+
+      const gscData = await gscResponse.json();
+      const row = gscData.rows?.[0] || {};
 
       res.json({
-        totalClicks,
-        totalImpressions,
-        avgCtr: parseFloat(avgCtr.toFixed(2)),
-        avgPosition: parseFloat(avgPosition.toFixed(1)),
+        totalClicks: row.clicks || 0,
+        totalImpressions: row.impressions || 0,
+        avgCtr: parseFloat(((row.ctr || 0) * 100).toFixed(2)),
+        avgPosition: parseFloat((row.position || 0).toFixed(1)),
       });
     } catch (error) {
+      console.error("Performance stats error:", error);
       res.status(500).json({ error: "Failed to fetch performance stats" });
     }
   });
@@ -231,13 +267,74 @@ export async function registerRoutes(
         });
       }
 
-      // TODO: Implement actual Google Search Console API call
-      // This requires OAuth tokens stored in gscIntegration.config
-      return res.status(501).json({ 
-        error: "GSC API integration pending",
-        message: "Google Search Console API integration is being set up. The OAuth flow needs to be completed."
-      });
+      const config = JSON.parse(gscIntegration.config || "{}");
+      if (!config.accessToken) {
+        return res.status(400).json({ 
+          error: "GSC tokens missing",
+          message: "Please reconnect Google Search Console.",
+          requiresConnection: true
+        });
+      }
+
+      // Get date range (last 30 days by default)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      
+      const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+      // Call Google Search Console API
+      const gscResponse = await fetch(
+        "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Apsychicsource.com/searchAnalytics/query",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${config.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: formatDate(startDate),
+            endDate: formatDate(endDate),
+            dimensions: ["date"],
+            rowLimit: 30,
+          }),
+        }
+      );
+
+      if (!gscResponse.ok) {
+        const errorText = await gscResponse.text();
+        console.error("GSC API error:", errorText);
+        
+        // If token expired, try to refresh
+        if (gscResponse.status === 401 && config.refreshToken) {
+          // Token refresh would go here - for now return error
+          return res.status(401).json({ 
+            error: "GSC token expired",
+            message: "Please reconnect Google Search Console.",
+            requiresConnection: true
+          });
+        }
+        
+        return res.status(gscResponse.status).json({ 
+          error: "GSC API error",
+          message: `Failed to fetch data from Google Search Console: ${errorText}`
+        });
+      }
+
+      const gscData = await gscResponse.json();
+      
+      // Transform GSC response to chart format
+      const chartData = (gscData.rows || []).map((row: any) => ({
+        date: row.keys[0],
+        clicks: row.clicks || 0,
+        impressions: row.impressions || 0,
+        ctr: (row.ctr || 0) * 100,
+        position: row.position || 0,
+      }));
+
+      res.json(chartData);
     } catch (error) {
+      console.error("Performance chart error:", error);
       res.status(500).json({ error: "Failed to fetch chart data" });
     }
   });
@@ -254,12 +351,61 @@ export async function registerRoutes(
         });
       }
 
-      // TODO: Implement actual GSC API call for top pages
-      return res.status(501).json({ 
-        error: "GSC API integration pending",
-        message: "Google Search Console API integration is being set up."
-      });
+      const config = JSON.parse(gscIntegration.config || "{}");
+      if (!config.accessToken) {
+        return res.status(400).json({ 
+          error: "GSC tokens missing",
+          message: "Please reconnect Google Search Console.",
+          requiresConnection: true
+        });
+      }
+
+      // Get date range (last 30 days)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+      // Call GSC API for top pages
+      const gscResponse = await fetch(
+        "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Apsychicsource.com/searchAnalytics/query",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${config.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: formatDate(startDate),
+            endDate: formatDate(endDate),
+            dimensions: ["page"],
+            rowLimit: 10,
+          }),
+        }
+      );
+
+      if (!gscResponse.ok) {
+        const errorText = await gscResponse.text();
+        console.error("GSC API error (top-pages):", errorText);
+        return res.status(gscResponse.status).json({ 
+          error: "GSC API error",
+          message: `Failed to fetch top pages: ${errorText}`
+        });
+      }
+
+      const gscData = await gscResponse.json();
+      
+      const topPages = (gscData.rows || []).map((row: any) => ({
+        url: row.keys[0],
+        clicks: row.clicks || 0,
+        impressions: row.impressions || 0,
+        ctr: (row.ctr || 0) * 100,
+        position: row.position || 0,
+      }));
+
+      res.json(topPages);
     } catch (error) {
+      console.error("Top pages error:", error);
       res.status(500).json({ error: "Failed to fetch top pages" });
     }
   });
