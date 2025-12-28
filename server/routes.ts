@@ -514,7 +514,9 @@ export async function registerRoutes(
         }
       }
 
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/gsc/callback`;
+      // Use x-forwarded-proto header for proper HTTPS detection behind reverse proxy
+      const protocol = req.get("x-forwarded-proto") || req.protocol;
+      const redirectUri = `${protocol}://${req.get("host")}/api/integrations/gsc/callback`;
       
       const authUrl = new URL(GOOGLE_AUTH_URL);
       authUrl.searchParams.set("client_id", clientId);
@@ -557,7 +559,9 @@ export async function registerRoutes(
         return res.redirect("/integrations?error=OAuth+credentials+not+configured");
       }
 
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/gsc/callback`;
+      // Use x-forwarded-proto header for proper HTTPS detection behind reverse proxy
+      const protocol = req.get("x-forwarded-proto") || req.protocol;
+      const redirectUri = `${protocol}://${req.get("host")}/api/integrations/gsc/callback`;
 
       // Exchange code for tokens
       const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
@@ -617,7 +621,9 @@ export async function registerRoutes(
         const state = crypto.randomBytes(32).toString("hex");
         oauthStates.set(state, { timestamp: Date.now() });
         
-        const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/gsc/callback`;
+        // Use x-forwarded-proto header for proper HTTPS detection behind reverse proxy
+        const protocol = req.get("x-forwarded-proto") || req.protocol;
+        const redirectUri = `${protocol}://${req.get("host")}/api/integrations/gsc/callback`;
         
         const authUrl = new URL(GOOGLE_AUTH_URL);
         authUrl.searchParams.set("client_id", clientId);
