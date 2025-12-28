@@ -33,7 +33,7 @@ export default function Performance() {
     avgCtr: number;
     avgPosition: number;
   }>({
-    queryKey: ["/api/performance/stats"],
+    queryKey: ["/api/performance/stats", dateRange],
     retry: false,
   });
 
@@ -44,12 +44,12 @@ export default function Performance() {
     ctr: number;
     position: number;
   }[]>({
-    queryKey: ["/api/performance/chart"],
+    queryKey: ["/api/performance/chart", dateRange],
     retry: false,
   });
 
   const { data: topPages, isError: isTopPagesError } = useQuery<TopPage[]>({
-    queryKey: ["/api/performance/top-pages"],
+    queryKey: ["/api/performance/top-pages", dateRange],
     retry: false,
   });
   

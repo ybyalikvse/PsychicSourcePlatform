@@ -49,7 +49,7 @@ export default function Analytics() {
   const [dateRange, setDateRange] = useState("30d");
 
   const { data: analytics, isError } = useQuery<AnalyticsData>({
-    queryKey: ["/api/analytics"],
+    queryKey: ["/api/analytics", dateRange],
     retry: false,
   });
   
