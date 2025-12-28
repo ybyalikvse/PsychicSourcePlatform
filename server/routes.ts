@@ -940,16 +940,18 @@ export async function registerRoutes(
       }
 
       // Get writing style if provided
-      let styleGuidelines = "";
+      let styleInstructions = "";
       if (styleId) {
         const style = await storage.getWritingStyle(styleId);
         if (style) {
-          styleGuidelines = `
-Writing Style: ${style.name}
-Tone: ${style.tone || "professional"}
-Guidelines: ${style.guidelines || ""}
-${style.exampleText ? `Example of desired style: ${style.exampleText}` : ""}
-`;
+          styleInstructions = `
+
+CRITICAL WRITING STYLE REQUIREMENTS - YOU MUST FOLLOW THESE EXACTLY:
+${style.guidelines || ""}
+${style.exampleText ? `
+
+Here is an example of the desired writing style to emulate:
+${style.exampleText}` : ""}`;
         }
       }
 
@@ -957,7 +959,12 @@ ${style.exampleText ? `Example of desired style: ${style.exampleText}` : ""}
         ? `Include these related keywords/phrases naturally: ${recommendedKeywords.join(", ")}`
         : "";
 
-      const prompt = `Write a comprehensive SEO-optimized article about "${targetKeyword}".
+      const systemPrompt = `You are an expert SEO content writer for Psychic Source. Write engaging, informative content that helps readers while being optimized for search engines.
+${styleInstructions}
+
+These style requirements are NON-NEGOTIABLE. Follow every instruction precisely.`;
+
+      const userPrompt = `Write a comprehensive SEO-optimized article about "${targetKeyword}".
 
 Requirements:
 - Word count: approximately ${wordCount || 1500} words
@@ -965,7 +972,6 @@ Requirements:
 - Include the primary keyword "${targetKeyword}" naturally throughout
 - Make the content informative, engaging, and valuable to readers
 ${keywordsList}
-${styleGuidelines}
 
 Output format:
 - Start with an engaging H1 title
@@ -986,17 +992,17 @@ Write the article now:`;
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
+      // Calculate max tokens based on word count (roughly 1.3 tokens per word + buffer)
+      const maxTokens = Math.min(16000, Math.max(4096, Math.ceil((wordCount || 1500) * 1.5)));
+
       const stream = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
-          {
-            role: "system",
-            content: "You are an expert SEO content writer for Psychic Source. Write engaging, informative content that helps readers while being optimized for search engines."
-          },
-          { role: "user", content: prompt }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
         ],
         stream: true,
-        max_completion_tokens: 4096,
+        max_completion_tokens: maxTokens,
       });
 
       let fullContent = "";
