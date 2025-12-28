@@ -927,6 +927,9 @@ export async function registerRoutes(
         }
         
         // Test the API key by making a simple request to Keywords Explorer
+        let apiStatus = "connected";
+        let apiMessage = "Connected to Ahrefs";
+        
         try {
           const testResponse = await fetch(
             "https://api.ahrefs.com/v3/keywords-explorer/overview?country=us&keywords=test&select=keyword,volume",
@@ -939,27 +942,32 @@ export async function registerRoutes(
           );
           
           if (!testResponse.ok) {
-            const errorText = await testResponse.text();
-            return res.status(400).json({ 
-              error: "Ahrefs API connection failed",
-              message: `API returned ${testResponse.status}: ${errorText}`
-            });
+            const errorData = await testResponse.json().catch(() => ({}));
+            if (errorData.error === "Insufficient plan") {
+              // API key is valid but plan doesn't include API access
+              apiStatus = "configured";
+              apiMessage = "API key saved. Note: Ahrefs API requires Enterprise plan ($1,249+/month) for full functionality.";
+            } else if (testResponse.status === 401 || testResponse.status === 403) {
+              return res.status(400).json({ 
+                error: "Ahrefs API key invalid",
+                message: "The API key appears to be invalid. Please check and try again."
+              });
+            }
           }
         } catch (apiError) {
-          return res.status(400).json({ 
-            error: "Ahrefs API connection failed",
-            message: "Could not connect to Ahrefs API. Please verify your API key."
-          });
+          // Network error - save anyway since key might be valid
+          apiStatus = "configured";
+          apiMessage = "API key saved. Could not verify connection at this time.";
         }
         
         await storage.upsertIntegration({
           name: "ahrefs",
-          status: "connected",
+          status: apiStatus,
           lastSync: new Date().toISOString(),
-          config: null,
+          config: JSON.stringify({ note: apiMessage }),
         });
         
-        res.json({ success: true, message: "Connected to Ahrefs" });
+        res.json({ success: true, message: apiMessage });
       } else if (name === "ga") {
         // GA tracking is already set up via VITE_GA_MEASUREMENT_ID
         // For data API, we'd need a service account
