@@ -1348,5 +1348,111 @@ Make the first suggestion suitable as a featured/hero image. The rest should be 
     }
   });
 
+  // ============ IMAGE PLACEMENT (AI-powered) ============
+  app.post("/api/images/find-placement", async (req, res) => {
+    try {
+      const { content, imageUrl, imagePrompt } = req.body;
+      
+      if (!content || !imageUrl) {
+        return res.status(400).json({ error: "Content and image URL are required" });
+      }
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const prompt = `You are an expert content editor. Analyze this HTML blog post content and determine the BEST location to insert an image.
+
+Image Description: ${imagePrompt || "Featured image for the article"}
+
+Blog Content:
+${content}
+
+TASK: Find the most appropriate paragraph break to insert this image. The image should:
+1. Be placed after a paragraph that relates to what the image shows
+2. NOT be placed at the very beginning (after title is ok) or very end
+3. Break up long sections of text naturally
+4. Enhance the reader's understanding at that point in the article
+
+Return a JSON object with:
+- "insertAfterText": The EXACT text of the paragraph (first 100 chars) AFTER which to insert the image
+- "altText": A descriptive alt text for SEO and accessibility (15-25 words)
+- "caption": An optional short caption for the image (10-15 words, or empty string if not needed)
+
+Example response:
+{
+  "insertAfterText": "The psychic reading revealed unexpected insights about...",
+  "altText": "A mystical crystal ball glowing with purple light on a velvet cloth surrounded by candles",
+  "caption": "Crystal ball readings can provide clarity and guidance."
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert content editor who knows exactly where images should be placed in articles for maximum visual impact and reader engagement. Always respond with valid JSON."
+          },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 512,
+      });
+
+      const placement = JSON.parse(response.choices[0]?.message?.content || '{}');
+      
+      if (!placement.insertAfterText) {
+        return res.json({ updatedContent: null, error: "Could not determine placement" });
+      }
+
+      // Find the paragraph and insert the image after it
+      const insertAfterText = placement.insertAfterText;
+      const altText = placement.altText || "Article image";
+      const caption = placement.caption || "";
+
+      // Create the image HTML
+      const imageHtml = caption 
+        ? `<figure class="my-6"><img src="${imageUrl}" alt="${altText}" class="w-full rounded-md" /><figcaption class="text-center text-sm text-muted-foreground mt-2">${caption}</figcaption></figure>`
+        : `<p><img src="${imageUrl}" alt="${altText}" class="w-full rounded-md my-6" /></p>`;
+
+      // Try to find and insert after the matching paragraph
+      let updatedContent = content;
+      
+      // Find paragraph that starts with the insertAfterText
+      const paragraphRegex = new RegExp(`(<p[^>]*>)([^<]*${insertAfterText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').substring(0, 50)}[^<]*</p>)`, 'i');
+      const match = content.match(paragraphRegex);
+      
+      if (match) {
+        updatedContent = content.replace(match[0], match[0] + imageHtml);
+      } else {
+        // Fallback: try to find just the text and insert after that paragraph
+        const textIndex = content.toLowerCase().indexOf(insertAfterText.toLowerCase().substring(0, 50));
+        if (textIndex !== -1) {
+          // Find the closing </p> tag after this text
+          const afterText = content.substring(textIndex);
+          const closingPIndex = afterText.indexOf('</p>');
+          if (closingPIndex !== -1) {
+            const insertPosition = textIndex + closingPIndex + 4;
+            updatedContent = content.substring(0, insertPosition) + imageHtml + content.substring(insertPosition);
+          }
+        }
+      }
+
+      if (updatedContent === content) {
+        // Last resort: insert after the first paragraph
+        const firstPClose = content.indexOf('</p>');
+        if (firstPClose !== -1) {
+          updatedContent = content.substring(0, firstPClose + 4) + imageHtml + content.substring(firstPClose + 4);
+        }
+      }
+
+      res.json({ updatedContent, placement: { altText, caption } });
+    } catch (error) {
+      console.error("Image placement error:", error);
+      res.status(500).json({ error: "Failed to find image placement" });
+    }
+  });
+
   return httpServer;
 }

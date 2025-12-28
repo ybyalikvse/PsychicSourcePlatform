@@ -38,7 +38,8 @@ import {
   Tags,
   ImageIcon,
   Loader2,
-  Pencil
+  Pencil,
+  Plus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -119,6 +120,7 @@ export default function CreateWithAI() {
   const [isLoadingImageSuggestions, setIsLoadingImageSuggestions] = useState(false);
   const [imageSuggestionsDialogOpen, setImageSuggestionsDialogOpen] = useState(false);
   const [suggestionTarget, setSuggestionTarget] = useState<"featured" | number>("featured");
+  const [isInsertingImage, setIsInsertingImage] = useState(false);
 
   const saveArticleMutation = useMutation({
     mutationFn: async (data: {
@@ -394,6 +396,37 @@ export default function CreateWithAI() {
       setBlogImages(newBlogImages);
     }
     setImageSuggestionsDialogOpen(false);
+  };
+
+  const handleInsertImageIntoContent = async (imageUrl: string, imageType: "featured" | "blog", index?: number) => {
+    if (!generatedContent) {
+      toast({ title: "No content to insert image into", variant: "destructive" });
+      return;
+    }
+
+    setIsInsertingImage(true);
+
+    try {
+      const response = await apiRequest("POST", "/api/images/find-placement", {
+        content: generatedContent,
+        imageUrl,
+        imagePrompt: imageType === "featured" ? imagePrompt : blogImages[index || 0]?.prompt || "",
+      });
+
+      const data = await response.json();
+      
+      if (data.updatedContent) {
+        setGeneratedContent(data.updatedContent);
+        toast({ title: "Image inserted into article" });
+      } else {
+        toast({ title: "Could not find suitable placement", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Insert image error:", error);
+      toast({ title: "Failed to insert image", variant: "destructive" });
+    } finally {
+      setIsInsertingImage(false);
+    }
   };
 
   const handleGenerateSuggestion = async (suggestion: { title: string; prompt: string; placement: string }) => {
@@ -790,17 +823,38 @@ export default function CreateWithAI() {
                       data-testid="img-featured"
                     />
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full"
-                    onClick={handleGenerateImage}
-                    disabled={isGeneratingImage}
-                    data-testid="button-regenerate-image"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Regenerate
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={handleGenerateImage}
+                      disabled={isGeneratingImage || isInsertingImage}
+                      data-testid="button-regenerate-image"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Regenerate
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => handleInsertImageIntoContent(featuredImage, "featured")}
+                      disabled={isInsertingImage || !generatedContent}
+                      data-testid="button-insert-featured-image"
+                    >
+                      {isInsertingImage ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Inserting...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Insert into Article
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
