@@ -21,6 +21,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   Globe,
   FileText,
@@ -37,11 +44,23 @@ import {
   BarChart3,
   Code,
   Heading,
+  Calendar,
 } from "lucide-react";
+
+const DATE_RANGE_OPTIONS = [
+  { value: "7", label: "Last 7 days" },
+  { value: "28", label: "Last 28 days" },
+  { value: "30", label: "Last 30 days" },
+  { value: "90", label: "Last 3 months" },
+  { value: "180", label: "Last 6 months" },
+  { value: "365", label: "Last 12 months" },
+  { value: "540", label: "Last 16 months" },
+];
 
 const optimizeFormSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
   targetKeyword: z.string().min(1, "Target keyword is required"),
+  dateRange: z.string().default("28"),
 });
 
 type OptimizeFormData = z.infer<typeof optimizeFormSchema>;
@@ -102,6 +121,7 @@ export default function Optimize() {
     defaultValues: {
       url: "",
       targetKeyword: "",
+      dateRange: "28",
     },
   });
 
@@ -235,6 +255,36 @@ export default function Optimize() {
                   )}
                 />
               </div>
+              <FormField
+                control={form.control}
+                name="dateRange"
+                render={({ field }) => (
+                  <FormItem className="w-full md:w-48">
+                    <FormLabel className="flex items-center gap-1">
+                      <Calendar className="h-4 w-4" />
+                      Keyword Data Range
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-date-range">
+                          <SelectValue placeholder="Select date range" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {DATE_RANGE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Date range for GSC keyword rankings
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <Button
                 type="submit"
                 disabled={analyzeMutation.isPending}

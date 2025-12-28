@@ -1540,11 +1540,14 @@ Example response:
   // ============ ARTICLE OPTIMIZATION ============
   app.post("/api/optimize/analyze", async (req, res) => {
     try {
-      const { url, targetKeyword } = req.body;
+      const { url, targetKeyword, dateRange = "28" } = req.body;
       
       if (!url || !targetKeyword) {
         return res.status(400).json({ error: "URL and target keyword are required" });
       }
+      
+      // Parse date range (days)
+      const days = parseInt(dateRange, 10) || 28;
 
       // Security: Validate URL is from allowed domain (psychicsource.com only)
       let validatedUrl: URL;
@@ -1578,8 +1581,9 @@ Example response:
         try {
           const endDate = new Date();
           const startDate = new Date();
-          startDate.setDate(startDate.getDate() - 30);
+          startDate.setDate(startDate.getDate() - days);
           const formatDate = (d: Date) => d.toISOString().split('T')[0];
+          console.log(`[Optimize] Fetching GSC data for last ${days} days`);
 
           // Extract path from URL for filtering
           const urlObj = new URL(url);
