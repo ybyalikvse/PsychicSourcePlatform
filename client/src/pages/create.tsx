@@ -35,12 +35,14 @@ import {
   Check,
   X,
   FileText,
-  Tags
+  Tags,
+  ImageIcon,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { TiptapEditor } from "@/components/tiptap-editor";
-import type { WritingStyle, SeoSettings } from "@shared/schema";
+import type { WritingStyle, SeoSettings, ImageStyle } from "@shared/schema";
 
 interface MetaSuggestions {
   titles: string[];
@@ -72,9 +74,18 @@ export default function CreateWithAI() {
     queryKey: ["/api/writing-styles"],
   });
 
+  const { data: imageStyles = [] } = useQuery<ImageStyle[]>({
+    queryKey: ["/api/image-styles"],
+  });
+
   const { data: seoSettings } = useQuery<SeoSettings>({
     queryKey: ["/api/seo-settings"],
   });
+
+  const [selectedImageStyleId, setSelectedImageStyleId] = useState<string>("default");
+  const [featuredImage, setFeaturedImage] = useState<string>("");
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
 
   const saveArticleMutation = useMutation({
     mutationFn: async (data: {
@@ -244,6 +255,39 @@ export default function CreateWithAI() {
     });
   };
 
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) {
+      toast({ title: "Please enter an image prompt", variant: "destructive" });
+      return;
+    }
+
+    setIsGeneratingImage(true);
+    try {
+      const response = await apiRequest("POST", "/api/images/generate", {
+        prompt: imagePrompt.trim(),
+        styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
+        imageType: "featured",
+      });
+
+      const data = await response.json();
+      if (data.imageData) {
+        setFeaturedImage(data.imageData);
+        toast({ title: "Featured image generated" });
+      }
+    } catch (error) {
+      console.error("Image generation error:", error);
+      toast({ title: "Failed to generate image", variant: "destructive" });
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  const handleAutoPrompt = () => {
+    if (targetKeyword.trim()) {
+      setImagePrompt(`A visually stunning featured image for a blog post about "${targetKeyword}". Professional, high-quality, suitable for a psychic and spiritual wellness website.`);
+    }
+  };
+
   const currentWordCount = stripHtmlTags(generatedContent).split(/\s+/).filter(Boolean).length;
 
   return (
@@ -402,6 +446,107 @@ export default function CreateWithAI() {
               </CardContent>
             </Card>
           )}
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Featured Image
+              </CardTitle>
+              <CardDescription>
+                Generate an AI image for your article
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {imageStyles.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="image-style">Image Style</Label>
+                  <Select value={selectedImageStyleId} onValueChange={setSelectedImageStyleId}>
+                    <SelectTrigger id="image-style" data-testid="select-image-style">
+                      <SelectValue placeholder="Select a style" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default</SelectItem>
+                      {imageStyles.map((style) => (
+                        <SelectItem key={style.id} value={style.id}>
+                          {style.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="image-prompt">Image Prompt</Label>
+                  {targetKeyword && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={handleAutoPrompt}
+                      data-testid="button-auto-prompt"
+                    >
+                      <Wand2 className="h-3 w-3 mr-1" />
+                      Auto
+                    </Button>
+                  )}
+                </div>
+                <Textarea
+                  id="image-prompt"
+                  value={imagePrompt}
+                  onChange={(e) => setImagePrompt(e.target.value)}
+                  placeholder="Describe the image you want to generate..."
+                  className="min-h-[80px]"
+                  data-testid="input-image-prompt"
+                />
+              </div>
+
+              <Button 
+                className="w-full"
+                onClick={handleGenerateImage}
+                disabled={isGeneratingImage || !imagePrompt.trim()}
+                data-testid="button-generate-image"
+              >
+                {isGeneratingImage ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Generate Image
+                  </>
+                )}
+              </Button>
+
+              {featuredImage && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Generated Image</Label>
+                  <div className="rounded-md overflow-hidden border">
+                    <img 
+                      src={featuredImage} 
+                      alt="Generated featured image" 
+                      className="w-full h-auto"
+                      data-testid="img-featured"
+                    />
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={handleGenerateImage}
+                    disabled={isGeneratingImage}
+                    data-testid="button-regenerate-image"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Regenerate
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="lg:col-span-2 space-y-4">

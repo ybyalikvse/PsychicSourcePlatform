@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertArticleSchema, insertKeywordSchema } from "@shared/schema";
+import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
@@ -1116,7 +1116,11 @@ Respond in JSON format:
 
   app.post("/api/image-styles", async (req, res) => {
     try {
-      const style = await storage.createImageStyle(req.body);
+      const parsed = insertImageStyleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid image style data", details: parsed.error });
+      }
+      const style = await storage.createImageStyle(parsed.data);
       res.status(201).json(style);
     } catch (error) {
       console.error("Error creating image style:", error);

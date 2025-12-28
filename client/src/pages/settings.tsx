@@ -22,18 +22,26 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2 } from "lucide-react";
+import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2, Image } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { WritingStyle, SeoSettings as SeoSettingsType } from "@shared/schema";
+import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle } from "@shared/schema";
 
 interface WritingStyleFormData {
   name: string;
   tone: string;
   guidelines: string;
   exampleText: string;
+}
+
+interface ImageStyleFormData {
+  name: string;
+  description: string;
+  stylePrompt: string;
+  aspectRatio: string;
+  additionalInstructions: string;
 }
 
 interface SeoSettingsFormData {
@@ -61,8 +69,22 @@ export default function Settings() {
     exampleText: "",
   });
 
+  const [imageStyleDialogOpen, setImageStyleDialogOpen] = useState(false);
+  const [editingImageStyle, setEditingImageStyle] = useState<ImageStyle | null>(null);
+  const [imageStyleForm, setImageStyleForm] = useState<ImageStyleFormData>({
+    name: "",
+    description: "",
+    stylePrompt: "",
+    aspectRatio: "16:9",
+    additionalInstructions: "",
+  });
+
   const { data: writingStyles = [], isLoading: stylesLoading } = useQuery<WritingStyle[]>({
     queryKey: ["/api/writing-styles"],
+  });
+
+  const { data: imageStyles = [], isLoading: imageStylesLoading } = useQuery<ImageStyle[]>({
+    queryKey: ["/api/image-styles"],
   });
 
   const { data: seoSettings, isLoading: seoLoading } = useQuery<SeoSettingsType>({
@@ -128,6 +150,47 @@ export default function Settings() {
     },
   });
 
+  const createImageStyleMutation = useMutation({
+    mutationFn: (data: ImageStyleFormData) => 
+      apiRequest("POST", "/api/image-styles", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/image-styles"] });
+      setImageStyleDialogOpen(false);
+      resetImageStyleForm();
+      toast({ title: "Image style created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create image style", variant: "destructive" });
+    },
+  });
+
+  const updateImageStyleMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ImageStyleFormData> }) => 
+      apiRequest("PATCH", `/api/image-styles/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/image-styles"] });
+      setImageStyleDialogOpen(false);
+      setEditingImageStyle(null);
+      resetImageStyleForm();
+      toast({ title: "Image style updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update image style", variant: "destructive" });
+    },
+  });
+
+  const deleteImageStyleMutation = useMutation({
+    mutationFn: (id: string) => 
+      apiRequest("DELETE", `/api/image-styles/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/image-styles"] });
+      toast({ title: "Image style deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete image style", variant: "destructive" });
+    },
+  });
+
   const saveSeoMutation = useMutation({
     mutationFn: (data: SeoSettingsFormData) => 
       apiRequest("PUT", "/api/seo-settings", data),
@@ -142,6 +205,10 @@ export default function Settings() {
 
   const resetStyleForm = () => {
     setStyleForm({ name: "", tone: "professional", guidelines: "", exampleText: "" });
+  };
+
+  const resetImageStyleForm = () => {
+    setImageStyleForm({ name: "", description: "", stylePrompt: "", aspectRatio: "16:9", additionalInstructions: "" });
   };
 
   const handleEditStyle = (style: WritingStyle) => {
@@ -160,6 +227,26 @@ export default function Settings() {
       updateStyleMutation.mutate({ id: editingStyle.id, data: styleForm });
     } else {
       createStyleMutation.mutate(styleForm);
+    }
+  };
+
+  const handleEditImageStyle = (style: ImageStyle) => {
+    setEditingImageStyle(style);
+    setImageStyleForm({
+      name: style.name,
+      description: style.description || "",
+      stylePrompt: style.stylePrompt || "",
+      aspectRatio: style.aspectRatio || "16:9",
+      additionalInstructions: style.additionalInstructions || "",
+    });
+    setImageStyleDialogOpen(true);
+  };
+
+  const handleSaveImageStyle = () => {
+    if (editingImageStyle) {
+      updateImageStyleMutation.mutate({ id: editingImageStyle.id, data: imageStyleForm });
+    } else {
+      createImageStyleMutation.mutate(imageStyleForm);
     }
   };
 
@@ -300,6 +387,146 @@ export default function Settings() {
                   data-testid="button-save-style"
                 >
                   {createStyleMutation.isPending || updateStyleMutation.isPending ? "Saving..." : "Save Style"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Image className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Image Styles</CardTitle>
+          </div>
+          <CardDescription>
+            Define image generation styles for featured images and content illustrations
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {imageStylesLoading ? (
+            <div className="text-sm text-muted-foreground">Loading styles...</div>
+          ) : imageStyles.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No image styles defined yet. Create one to guide AI image generation.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {imageStyles.map((style) => (
+                <div 
+                  key={style.id}
+                  className="flex items-center justify-between p-3 rounded-md border bg-muted/30"
+                  data-testid={`image-style-item-${style.id}`}
+                >
+                  <div>
+                    <div className="font-medium">{style.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {style.aspectRatio || "16:9"} {style.stylePrompt && `- ${style.stylePrompt}`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => handleEditImageStyle(style)}
+                      data-testid={`button-edit-image-style-${style.id}`}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => deleteImageStyleMutation.mutate(style.id)}
+                      data-testid={`button-delete-image-style-${style.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <Dialog open={imageStyleDialogOpen} onOpenChange={(open) => {
+            setImageStyleDialogOpen(open);
+            if (!open) {
+              setEditingImageStyle(null);
+              resetImageStyleForm();
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="button-add-image-style">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Image Style
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>{editingImageStyle ? "Edit" : "Add"} Image Style</DialogTitle>
+                <DialogDescription>
+                  Define how AI should generate images for your content
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="image-style-name">Style Name</Label>
+                  <Input
+                    id="image-style-name"
+                    value={imageStyleForm.name}
+                    onChange={(e) => setImageStyleForm({ ...imageStyleForm, name: e.target.value })}
+                    placeholder="e.g., Mystical Featured"
+                    data-testid="input-image-style-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="image-style-prompt">Style Prompt</Label>
+                  <Textarea
+                    id="image-style-prompt"
+                    value={imageStyleForm.stylePrompt}
+                    onChange={(e) => setImageStyleForm({ ...imageStyleForm, stylePrompt: e.target.value })}
+                    placeholder="e.g., mystical, ethereal, soft lighting, purple and gold tones..."
+                    className="min-h-[80px]"
+                    data-testid="input-image-style-prompt"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="image-aspect-ratio">Aspect Ratio</Label>
+                  <Select 
+                    value={imageStyleForm.aspectRatio} 
+                    onValueChange={(v) => setImageStyleForm({ ...imageStyleForm, aspectRatio: v })}
+                  >
+                    <SelectTrigger data-testid="select-aspect-ratio">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="16:9">16:9 (Landscape - Blog Featured)</SelectItem>
+                      <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                      <SelectItem value="1:1">1:1 (Square - Social Media)</SelectItem>
+                      <SelectItem value="9:16">9:16 (Portrait - Stories)</SelectItem>
+                      <SelectItem value="3:2">3:2 (Photo)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="image-additional">Additional Instructions (optional)</Label>
+                  <Textarea
+                    id="image-additional"
+                    value={imageStyleForm.additionalInstructions}
+                    onChange={(e) => setImageStyleForm({ ...imageStyleForm, additionalInstructions: e.target.value })}
+                    placeholder="Additional guidance for image generation..."
+                    className="min-h-[60px]"
+                    data-testid="input-image-additional"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button 
+                  onClick={handleSaveImageStyle}
+                  disabled={!imageStyleForm.name || createImageStyleMutation.isPending || updateImageStyleMutation.isPending}
+                  data-testid="button-save-image-style"
+                >
+                  {createImageStyleMutation.isPending || updateImageStyleMutation.isPending ? "Saving..." : "Save Style"}
                 </Button>
               </DialogFooter>
             </DialogContent>
