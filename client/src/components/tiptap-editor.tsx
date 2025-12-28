@@ -1,5 +1,6 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import Image from '@tiptap/extension-image';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,6 +32,10 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
   const editor = useEditor({
     extensions: [
       StarterKit,
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+      }),
     ],
     content: content,
     editable: editable,
