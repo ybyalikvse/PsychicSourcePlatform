@@ -825,7 +825,7 @@ export default function CreateWithAI() {
         </div>
 
         <div className="lg:col-span-2 space-y-4">
-          <Card className="h-full flex flex-col">
+          <Card className="flex flex-col">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">

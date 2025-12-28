@@ -163,20 +163,18 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
         )}
       </div>
 
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-auto max-h-[calc(100vh-300px)]">
         {viewMode === 'wysiwyg' ? (
-          <ScrollArea className="h-[550px]">
-            <EditorContent 
-              editor={editor} 
-              className="prose prose-sm dark:prose-invert max-w-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[500px]"
-              data-testid="editor-wysiwyg"
-            />
-          </ScrollArea>
+          <EditorContent 
+            editor={editor} 
+            className="prose prose-sm dark:prose-invert max-w-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[400px] pb-8"
+            data-testid="editor-wysiwyg"
+          />
         ) : (
           <Textarea
             value={htmlSource}
             onChange={(e) => handleHtmlChange(e.target.value)}
-            className="h-[550px] font-mono text-sm resize-none"
+            className="min-h-[400px] h-full font-mono text-sm resize-none"
             readOnly={!editable}
             data-testid="editor-html"
           />
