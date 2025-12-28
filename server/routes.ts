@@ -1858,29 +1858,66 @@ Be extremely specific and actionable. Reference specific competitor content when
           contents: [{ role: "user", parts: [{ text: analysisPrompt }] }],
         });
 
-        // Extract text from Gemini response
-        const candidate = response.candidates?.[0];
-        const textPart = candidate?.content?.parts?.find((part: any) => part.text);
-        const responseText = textPart?.text || "";
-        console.log(`[Optimize] Gemini response length: ${responseText.length} chars`);
+        console.log(`[Optimize] Gemini response received:`, JSON.stringify(response).substring(0, 500));
+
+        // Extract text from Gemini response - try multiple methods
+        let responseText = "";
+        
+        // Method 1: Try response.text property/method
+        if (typeof response.text === 'string') {
+          responseText = response.text;
+        } else if (typeof response.text === 'function') {
+          responseText = response.text();
+        }
+        
+        // Method 2: Try candidates array
+        if (!responseText && response.candidates?.[0]) {
+          const candidate = response.candidates[0];
+          const textPart = candidate?.content?.parts?.find((part: any) => part.text);
+          responseText = textPart?.text || "";
+        }
+        
+        // Method 3: Try response.response.text()
+        if (!responseText && (response as any).response?.text) {
+          const respText = (response as any).response.text;
+          responseText = typeof respText === 'function' ? respText() : respText;
+        }
+
+        console.log(`[Optimize] Gemini response text length: ${responseText.length} chars`);
+        if (responseText.length > 0) {
+          console.log(`[Optimize] Gemini response preview: ${responseText.substring(0, 300)}`);
+        }
         
         // Extract JSON from response
         try {
           // First try to find JSON code block
           const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
           if (codeBlockMatch) {
+            console.log(`[Optimize] Found JSON in code block`);
             const parsed = JSON.parse(codeBlockMatch[1].trim());
             recommendations = parsed.recommendations || [];
           } else {
-            // Try to find raw JSON object
-            const jsonMatch = responseText.match(/\{\s*"recommendations"\s*:\s*\[[\s\S]*?\]\s*\}/);
+            // Try to find raw JSON object - use a more flexible regex
+            const jsonMatch = responseText.match(/\{[\s\S]*"recommendations"[\s\S]*\}/);
             if (jsonMatch) {
+              console.log(`[Optimize] Found raw JSON object`);
               const parsed = JSON.parse(jsonMatch[0]);
               recommendations = parsed.recommendations || [];
+            } else {
+              console.log(`[Optimize] No JSON found in response, attempting to parse entire text`);
+              // Try parsing the entire response as JSON
+              try {
+                const parsed = JSON.parse(responseText);
+                recommendations = parsed.recommendations || [];
+              } catch {
+                console.log(`[Optimize] Could not parse response as JSON`);
+              }
             }
           }
+          console.log(`[Optimize] Parsed ${recommendations.length} recommendations`);
         } catch (parseError) {
-          console.error("[Optimize] JSON parse error, using fallback recommendations");
+          console.error("[Optimize] JSON parse error:", parseError);
+          console.log("[Optimize] Using fallback recommendations");
           // Fallback: Generate basic recommendations based on data we have
           if (pageContent.wordCount < 2000 && competitors.some(c => c.wordCount > 2500)) {
             recommendations.push({
