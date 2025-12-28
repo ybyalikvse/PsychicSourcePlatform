@@ -1246,7 +1246,10 @@ Respond in JSON format:
           contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
           config: {
             responseModalities: ["TEXT", "IMAGE"],
-          },
+            imageConfig: {
+              aspectRatio: aspectRatio || "16:9",
+            },
+          } as any,
         });
 
         const candidate = response.candidates?.[0];
