@@ -52,7 +52,7 @@ export default function CreateWithAI() {
   
   const [targetKeyword, setTargetKeyword] = useState("");
   const [recommendedKeywords, setRecommendedKeywords] = useState("");
-  const [selectedStyleId, setSelectedStyleId] = useState<string>("");
+  const [selectedStyleId, setSelectedStyleId] = useState<string>("default");
   const [wordCount, setWordCount] = useState("1500");
   
   const [generatedContent, setGeneratedContent] = useState("");
@@ -128,7 +128,7 @@ export default function CreateWithAI() {
           targetKeyword: targetKeyword.trim(),
           wordCount: parseInt(wordCount) || 1500,
           recommendedKeywords: keywordsArray,
-          styleId: selectedStyleId || undefined,
+          styleId: selectedStyleId !== "default" ? selectedStyleId : undefined,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -299,7 +299,7 @@ export default function CreateWithAI() {
                     <SelectValue placeholder="Select a style..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Default</SelectItem>
+                    <SelectItem value="default">Default</SelectItem>
                     {writingStyles.map((style) => (
                       <SelectItem key={style.id} value={style.id}>
                         {style.name}
@@ -331,7 +331,10 @@ export default function CreateWithAI() {
                     <SelectItem value="1000">1,000 words</SelectItem>
                     <SelectItem value="1500">1,500 words</SelectItem>
                     <SelectItem value="2000">2,000 words</SelectItem>
+                    <SelectItem value="2500">2,500 words</SelectItem>
                     <SelectItem value="3000">3,000 words</SelectItem>
+                    <SelectItem value="4000">4,000 words</SelectItem>
+                    <SelectItem value="5000">5,000 words</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
