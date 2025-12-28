@@ -1949,8 +1949,85 @@ Be extremely specific and actionable. Reference specific competitor content when
         }
         
         console.log(`[Optimize] Generated ${recommendations.length} AI recommendations via Gemini`);
-      } catch (aiError) {
-        console.error("[Optimize] Gemini AI analysis error:", aiError);
+      } catch (aiError: any) {
+        console.error("[Optimize] Gemini AI analysis error:", aiError?.message || aiError);
+        console.error("[Optimize] Full error:", JSON.stringify(aiError, null, 2));
+        
+        // Generate fallback recommendations based on available data
+        console.log("[Optimize] Generating fallback recommendations since Gemini failed");
+        
+        // Always add a content depth recommendation if competitors exist
+        if (competitors.length > 0) {
+          const avgCompetitorWords = competitors.reduce((sum, c) => sum + c.wordCount, 0) / competitors.length;
+          if (pageContent.wordCount < avgCompetitorWords * 0.9) {
+            recommendations.push({
+              type: "content" as const,
+              priority: "high" as const,
+              current: `${pageContent.wordCount} words`,
+              suggested: `Expand content to ${Math.round(avgCompetitorWords * 1.1)} words to match or exceed competitor average (${Math.round(avgCompetitorWords)} words)`,
+              reason: "Top-ranking competitors have more comprehensive content",
+            });
+          }
+          
+          // Check heading coverage
+          const competitorH2Count = Math.round(competitors.reduce((sum, c) => sum + c.headings.h2.length, 0) / competitors.length);
+          if (pageContent.headings.h2.length < competitorH2Count) {
+            recommendations.push({
+              type: "headings" as const,
+              priority: "medium" as const,
+              current: `${pageContent.headings.h2.length} H2 headings`,
+              suggested: `Add more H2 subheadings (competitors average ${competitorH2Count})`,
+              reason: "More subheadings improve content structure and SEO",
+            });
+          }
+          
+          // Suggest topics from competitors
+          const competitorH2s = competitors.flatMap(c => c.headings.h2).slice(0, 5);
+          if (competitorH2s.length > 0) {
+            recommendations.push({
+              type: "content" as const,
+              priority: "medium" as const,
+              current: "Current topics covered",
+              suggested: `Consider adding sections on: ${competitorH2s.join(", ")}`,
+              reason: "Competitors cover these topics that may be missing from your content",
+            });
+          }
+        }
+        
+        // Title optimization
+        if (!pageContent.title.toLowerCase().includes(targetKeyword.toLowerCase())) {
+          recommendations.push({
+            type: "title" as const,
+            priority: "high" as const,
+            current: pageContent.title,
+            suggested: `Include "${targetKeyword}" in your title tag`,
+            reason: "The target keyword should appear in the title for better rankings",
+          });
+        }
+        
+        // Meta description optimization
+        if (!pageContent.metaDescription.toLowerCase().includes(targetKeyword.toLowerCase())) {
+          recommendations.push({
+            type: "meta" as const,
+            priority: "medium" as const,
+            current: pageContent.metaDescription || "No meta description",
+            suggested: `Add "${targetKeyword}" to your meta description`,
+            reason: "Including the keyword in meta description can improve click-through rates",
+          });
+        }
+        
+        // If still no recommendations, add a general one
+        if (recommendations.length === 0) {
+          recommendations.push({
+            type: "content" as const,
+            priority: "low" as const,
+            current: "Content appears optimized",
+            suggested: "Consider adding more internal links, updating with recent information, or expanding FAQ sections",
+            reason: "Regular content updates signal freshness to search engines",
+          });
+        }
+        
+        console.log(`[Optimize] Generated ${recommendations.length} fallback recommendations`);
       }
 
       // Save the analysis to database
