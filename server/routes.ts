@@ -964,10 +964,11 @@ ${styleInstructions}
 
 These style requirements are NON-NEGOTIABLE. Follow every instruction precisely.`;
 
+      const targetWordCount = wordCount || 1500;
       const userPrompt = `Write a comprehensive SEO-optimized article about "${targetKeyword}".
 
-Requirements:
-- Word count: approximately ${wordCount || 1500} words
+CRITICAL REQUIREMENTS:
+- WORD COUNT: You MUST write EXACTLY ${targetWordCount} words (+-5%). This is a strict requirement. Count your words carefully.
 - Use proper HTML heading structure (H1, H2, H3)
 - Include the primary keyword "${targetKeyword}" naturally throughout
 - Make the content informative, engaging, and valuable to readers
@@ -980,7 +981,7 @@ Output format:
 - Use H3 subheadings for subsections where appropriate
 - End with a conclusion
 
-Write the article now:`;
+Remember: The article MUST be ${targetWordCount} words. Write the complete article now:`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,

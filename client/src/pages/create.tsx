@@ -322,21 +322,19 @@ export default function CreateWithAI() {
 
               <div className="space-y-2">
                 <Label htmlFor="word-count">Target Word Count</Label>
-                <Select value={wordCount} onValueChange={setWordCount}>
-                  <SelectTrigger data-testid="select-word-count">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="500">500 words</SelectItem>
-                    <SelectItem value="1000">1,000 words</SelectItem>
-                    <SelectItem value="1500">1,500 words</SelectItem>
-                    <SelectItem value="2000">2,000 words</SelectItem>
-                    <SelectItem value="2500">2,500 words</SelectItem>
-                    <SelectItem value="3000">3,000 words</SelectItem>
-                    <SelectItem value="4000">4,000 words</SelectItem>
-                    <SelectItem value="5000">5,000 words</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="word-count"
+                  type="number"
+                  min="100"
+                  max="10000"
+                  value={wordCount}
+                  onChange={(e) => setWordCount(e.target.value)}
+                  placeholder="e.g., 1500"
+                  data-testid="input-word-count"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter your desired word count (100-10,000)
+                </p>
               </div>
 
               <Separator />
