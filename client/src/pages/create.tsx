@@ -823,38 +823,17 @@ export default function CreateWithAI() {
                       data-testid="img-featured"
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={handleGenerateImage}
-                      disabled={isGeneratingImage || isInsertingImage}
-                      data-testid="button-regenerate-image"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Regenerate
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => handleInsertImageIntoContent(featuredImage, "featured")}
-                      disabled={isInsertingImage || !generatedContent}
-                      data-testid="button-insert-featured-image"
-                    >
-                      {isInsertingImage ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Inserting...
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Insert into Article
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={handleGenerateImage}
+                    disabled={isGeneratingImage}
+                    data-testid="button-regenerate-image"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Regenerate
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -965,13 +944,34 @@ export default function CreateWithAI() {
                   </Button>
 
                   {img.image && (
-                    <div className="rounded-md overflow-hidden border">
-                      <img 
-                        src={img.image} 
-                        alt={`Blog image ${index + 1}`} 
-                        className="w-full h-auto"
-                        data-testid={`img-blog-${index}`}
-                      />
+                    <div className="space-y-2">
+                      <div className="rounded-md overflow-hidden border">
+                        <img 
+                          src={img.image} 
+                          alt={`Blog image ${index + 1}`} 
+                          className="w-full h-auto"
+                          data-testid={`img-blog-${index}`}
+                        />
+                      </div>
+                      <Button 
+                        size="sm" 
+                        className="w-full"
+                        onClick={() => handleInsertImageIntoContent(img.image, "blog", index)}
+                        disabled={isInsertingImage || !generatedContent}
+                        data-testid={`button-insert-blog-image-${index}`}
+                      >
+                        {isInsertingImage ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Inserting...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Insert into Article
+                          </>
+                        )}
+                      </Button>
                     </div>
                   )}
                 </div>
