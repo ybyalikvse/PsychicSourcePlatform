@@ -1669,13 +1669,13 @@ Example response:
             pageContent.headings.h2 = h2Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
             pageContent.headings.h3 = h3Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
             
-            // Get word count from markdown
+            // Get word count from markdown - store FULL content without limits
             const markdown = scrapeResult.markdown || "";
             pageContent.wordCount = markdown.split(/\s+/).filter(Boolean).length;
-            pageContent.content = markdown.substring(0, 8000);
+            pageContent.content = markdown; // No character limit
             
-            // Store HTML for TipTap editor
-            pageContent.htmlContent = scrapeResult.html?.substring(0, 100000) || "";
+            // Store HTML for TipTap editor - no character limit
+            pageContent.htmlContent = scrapeResult.html || "";
             
             console.log(`[Optimize] Firecrawl scraped page: ${pageContent.wordCount} words`);
           } else {
@@ -1702,7 +1702,7 @@ Example response:
         metaDescription: string;
         headings: { h1: string[]; h2: string[]; h3: string[] };
         wordCount: number;
-        contentSnippet: string;
+        content: string; // Full content for AI analysis
       }> = [];
       
       if (firecrawlApiKey) {
@@ -1747,7 +1747,7 @@ Example response:
                   metaDescription: result.description || "",
                   headings: { h1: h1s, h2: h2s, h3: h3s },
                   wordCount,
-                  contentSnippet: markdown.substring(0, 500),
+                  content: markdown, // Full content for AI analysis
                 });
                 
                 // Stop at 5 competitors
@@ -1766,7 +1766,8 @@ Example response:
         console.log("[Optimize] FIRECRAWL_API_KEY not set - skipping competitor analysis");
       }
 
-      // Step 4: Generate AI recommendations using Claude
+      // Step 4: Generate AI recommendations using Google Gemini API
+      // This compares FULL content from your page vs competitors
       let recommendations: Array<{
         type: "title" | "meta" | "content" | "headings" | "keywords";
         priority: "high" | "medium" | "low";
@@ -1776,74 +1777,85 @@ Example response:
       }> = [];
 
       try {
-        const anthropic = new Anthropic({
-          apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        const { GoogleGenAI } = await import("@google/genai");
+        const genAI = new GoogleGenAI({
+          apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
         });
 
-        const analysisPrompt = `You are an expert SEO analyst. Analyze this article and compare it against competitors to provide specific, actionable recommendations.
+        // Build comprehensive prompt with FULL content from all sources
+        const analysisPrompt = `You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
 
 TARGET KEYWORD: "${targetKeyword}"
 
-YOUR PAGE ANALYSIS:
-- Title: ${pageContent.title}
-- Meta Description: ${pageContent.metaDescription}
-- Word Count: ${pageContent.wordCount}
-- H1 Tags: ${pageContent.headings.h1.join(", ") || "None"}
-- H2 Tags: ${pageContent.headings.h2.join(", ") || "None"}
-- H3 Tags: ${pageContent.headings.h3.join(", ") || "None"}
-- Content Preview: ${pageContent.content.substring(0, 1000)}
+=== OUR PAGE CONTENT ===
+URL: ${url}
+Title: ${pageContent.title}
+Meta Description: ${pageContent.metaDescription}
+Word Count: ${pageContent.wordCount}
+H1 Headings: ${pageContent.headings.h1.join(", ") || "None"}
+H2 Headings: ${pageContent.headings.h2.join(", ") || "None"}
+H3 Headings: ${pageContent.headings.h3.join(", ") || "None"}
 
-RANKING KEYWORDS (keywords this page currently ranks for):
+FULL CONTENT:
+${pageContent.content}
+
+=== RANKING KEYWORDS (from Google Search Console) ===
 ${keywords.length > 0 
-  ? keywords.slice(0, 20).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks})`).join("\n")
+  ? keywords.slice(0, 30).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks}, Impressions: ${k.impressions})`).join("\n")
   : "No ranking data available"}
 
-TOP COMPETITORS:
+=== COMPETITOR CONTENT ANALYSIS ===
 ${competitors.length > 0 
   ? competitors.map((c, i) => `
-Competitor #${i + 1}: ${c.url}
-- Title: ${c.title}
-- Meta: ${c.metaDescription}
-- Word Count: ${c.wordCount}
-- H1s: ${c.headings.h1.join(", ") || "None"}
-- H2s: ${c.headings.h2.slice(0, 5).join(", ") || "None"}
-`).join("\n")
+--- COMPETITOR #${i + 1}: ${c.url} ---
+Title: ${c.title}
+Meta Description: ${c.metaDescription}
+Word Count: ${c.wordCount}
+H1 Headings: ${c.headings.h1.join(", ") || "None"}
+H2 Headings: ${c.headings.h2.join(", ") || "None"}
+H3 Headings: ${c.headings.h3.join(", ") || "None"}
+
+FULL CONTENT:
+${c.content}
+`).join("\n\n")
   : "No competitor data available"}
 
-Provide specific recommendations to improve rankings for "${targetKeyword}". Focus on:
-1. Title tag optimization (include keyword, make it compelling)
-2. Meta description improvements
-3. Content gaps vs competitors (length, topics, depth)
-4. Heading structure improvements
-5. Keyword usage and related terms
+=== YOUR ANALYSIS TASK ===
+Compare our content against all competitor content and identify:
 
-Return a JSON array of recommendations:
+1. **Content Gaps**: What topics, subtopics, or information do competitors cover that we're missing?
+2. **Content Depth**: Are competitors going deeper on certain topics? What details should we add?
+3. **Unique Angles**: What unique perspectives or information could we add that competitors don't have?
+4. **Structure Improvements**: How can we improve our heading structure based on what works for competitors?
+5. **Title & Meta Optimization**: How can we make our title and meta description more compelling while incorporating the target keyword?
+6. **Keyword Opportunities**: Based on competitors and our ranking data, what related keywords should we incorporate?
+
+Return your analysis as a JSON object with this exact structure:
 {
   "recommendations": [
     {
       "type": "title" | "meta" | "content" | "headings" | "keywords",
       "priority": "high" | "medium" | "low",
-      "current": "What they currently have (or 'N/A')",
-      "suggested": "Your specific suggestion with exact text when applicable",
-      "reason": "Why this change will help rankings"
+      "current": "What we currently have (quote specific text or say N/A)",
+      "suggested": "Your specific, detailed suggestion. For content, include specific topics/sections to add. For titles, write the full new title.",
+      "reason": "Explain which competitor(s) do this better and why this change will help rankings"
     }
   ]
 }
 
-Be specific. If suggesting a new title, write the full title. If suggesting adding content, be specific about topics to cover. Prioritize high-impact changes.`;
+Be extremely specific and actionable. Reference specific competitor content when making suggestions. Prioritize recommendations that will have the biggest impact on rankings for "${targetKeyword}".`;
 
-        const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
-          max_tokens: 2000,
-          messages: [
-            { role: "user", content: analysisPrompt }
-          ],
+        console.log(`[Optimize] Sending ${analysisPrompt.length} chars to Gemini for analysis`);
+
+        const response = await genAI.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: analysisPrompt,
         });
 
-        const responseText = response.content[0].type === "text" ? response.content[0].text : "";
+        const responseText = response.text || "";
+        console.log(`[Optimize] Gemini response length: ${responseText.length} chars`);
         
-        // Extract JSON from response - try multiple patterns
+        // Extract JSON from response
         try {
           // First try to find JSON code block
           const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -1859,7 +1871,7 @@ Be specific. If suggesting a new title, write the full title. If suggesting addi
             }
           }
         } catch (parseError) {
-          console.error("[Optimize] JSON parse error, trying fallback extraction");
+          console.error("[Optimize] JSON parse error, using fallback recommendations");
           // Fallback: Generate basic recommendations based on data we have
           if (pageContent.wordCount < 2000 && competitors.some(c => c.wordCount > 2500)) {
             recommendations.push({
@@ -1890,9 +1902,9 @@ Be specific. If suggesting a new title, write the full title. If suggesting addi
           }
         }
         
-        console.log(`[Optimize] Generated ${recommendations.length} recommendations`);
+        console.log(`[Optimize] Generated ${recommendations.length} AI recommendations via Gemini`);
       } catch (aiError) {
-        console.error("[Optimize] AI analysis error:", aiError);
+        console.error("[Optimize] Gemini AI analysis error:", aiError);
       }
 
       // Save the analysis to database

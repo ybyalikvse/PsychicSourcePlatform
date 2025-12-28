@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { TiptapEditor } from "@/components/tiptap-editor";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -88,7 +89,7 @@ interface CompetitorData {
     h3: string[];
   };
   wordCount: number;
-  contentSnippet: string;
+  content: string;
 }
 
 interface Recommendation {
@@ -685,6 +686,24 @@ export default function Optimize() {
                             </div>
                           )}
                         </div>
+
+                        {comp.content && (
+                          <Collapsible>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="outline" size="sm" className="w-full">
+                                <FileText className="h-4 w-4 mr-2" />
+                                View Full Content
+                              </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-3">
+                              <ScrollArea className="h-[400px] rounded-md border p-4">
+                                <div className="text-sm text-muted-foreground whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none">
+                                  {comp.content}
+                                </div>
+                              </ScrollArea>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        )}
                       </div>
                     ))}
                   </div>
