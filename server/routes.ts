@@ -1066,7 +1066,8 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
 
 Article Title: ${title || "Not provided"}
 Target Keyword: ${targetKeyword}
-Content Preview: ${content?.substring(0, 500) || "Not provided"}
+Full Article Content:
+${content || "Not provided"}
 
 Meta Title Guidelines: ${titleGuidelines}
 Maximum title length: ${titleMaxLen} characters
@@ -1273,10 +1274,27 @@ Respond in JSON format:
   // ============ IMAGE SUGGESTIONS (AI-powered) ============
   app.post("/api/images/suggest", async (req, res) => {
     try {
-      const { content, targetKeyword, count = 4 } = req.body;
+      const { content, targetKeyword, count = 4, styleId } = req.body;
       
       if (!content) {
         return res.status(400).json({ error: "Content is required" });
+      }
+
+      // Get image style if provided
+      let styleInstructions = "";
+      if (styleId) {
+        const style = await storage.getImageStyle(styleId);
+        if (style) {
+          styleInstructions = `
+IMPORTANT - All image suggestions MUST follow this visual style:
+Style: ${style.name}
+Style Description: ${style.stylePrompt || ""}
+${style.additionalInstructions ? `Additional Requirements: ${style.additionalInstructions}` : ""}
+Aspect Ratio: ${style.aspectRatio || "16:9"}
+
+Incorporate these style elements into every image prompt you generate.
+`;
+        }
       }
 
       const openai = new OpenAI({
@@ -1285,7 +1303,7 @@ Respond in JSON format:
       });
 
       const prompt = `Analyze this blog post content and suggest ${count} compelling image ideas that would enhance the article visually.
-
+${styleInstructions}
 Target Keyword: ${targetKeyword || "not specified"}
 
 Blog Content (excerpt):
@@ -1293,7 +1311,7 @@ ${content.substring(0, 2000)}
 
 For each image, provide:
 1. A descriptive title (short, 5-10 words)
-2. A detailed image generation prompt (30-50 words describing the visual in detail)
+2. A detailed image generation prompt (30-50 words describing the visual in detail)${styleInstructions ? " - MUST incorporate the style requirements above" : ""}
 3. Suggested placement: "featured" for the main hero image, or "inline" for images within the content
 
 Return as JSON array:

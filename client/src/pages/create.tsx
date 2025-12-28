@@ -285,7 +285,7 @@ export default function CreateWithAI() {
     try {
       const response = await apiRequest("POST", "/api/content/meta-suggestions", {
         targetKeyword: targetKeyword.trim(),
-        content: generatedContent.substring(0, 500),
+        content: generatedContent,
         title: extractTitle(generatedContent),
       });
 
@@ -369,6 +369,7 @@ export default function CreateWithAI() {
         content: generatedContent,
         targetKeyword: targetKeyword.trim(),
         count: 4,
+        styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
       });
 
       const data = await response.json();
