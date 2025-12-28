@@ -5,8 +5,11 @@ import {
   type Integration, type InsertIntegration,
   type ContentSuggestion, type InsertContentSuggestion,
   type AnalyticsSnapshot, type InsertAnalyticsSnapshot,
+  users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, desc, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -228,4 +231,135 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database storage implementation - uses PostgreSQL for persistence
+export class DatabaseStorage implements IStorage {
+  // Users
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  // Articles
+  async getArticles(): Promise<Article[]> {
+    return db.select().from(articles).orderBy(desc(articles.updatedAt));
+  }
+
+  async getArticle(id: string): Promise<Article | undefined> {
+    const [article] = await db.select().from(articles).where(eq(articles.id, id));
+    return article;
+  }
+
+  async createArticle(insertArticle: InsertArticle): Promise<Article> {
+    const [article] = await db.insert(articles).values(insertArticle).returning();
+    return article;
+  }
+
+  async updateArticle(id: string, updates: Partial<InsertArticle>): Promise<Article | undefined> {
+    const [article] = await db.update(articles)
+      .set({ ...updates, updatedAt: new Date().toISOString() })
+      .where(eq(articles.id, id))
+      .returning();
+    return article;
+  }
+
+  async deleteArticle(id: string): Promise<boolean> {
+    const result = await db.delete(articles).where(eq(articles.id, id));
+    return true;
+  }
+
+  // Keywords
+  async getKeywords(): Promise<Keyword[]> {
+    return db.select().from(keywords).orderBy(desc(keywords.clicks));
+  }
+
+  async getKeyword(id: string): Promise<Keyword | undefined> {
+    const [keyword] = await db.select().from(keywords).where(eq(keywords.id, id));
+    return keyword;
+  }
+
+  async createKeyword(insertKeyword: InsertKeyword): Promise<Keyword> {
+    const [keyword] = await db.insert(keywords).values(insertKeyword).returning();
+    return keyword;
+  }
+
+  async updateKeyword(id: string, updates: Partial<InsertKeyword>): Promise<Keyword | undefined> {
+    const [keyword] = await db.update(keywords)
+      .set({ ...updates, lastUpdated: new Date().toISOString() })
+      .where(eq(keywords.id, id))
+      .returning();
+    return keyword;
+  }
+
+  async deleteKeyword(id: string): Promise<boolean> {
+    await db.delete(keywords).where(eq(keywords.id, id));
+    return true;
+  }
+
+  // Integrations
+  async getIntegrations(): Promise<Integration[]> {
+    return db.select().from(integrations);
+  }
+
+  async getIntegration(name: string): Promise<Integration | undefined> {
+    const [integration] = await db.select().from(integrations).where(eq(integrations.name, name));
+    return integration;
+  }
+
+  async upsertIntegration(insertIntegration: InsertIntegration): Promise<Integration> {
+    // Check if exists
+    const existing = await this.getIntegration(insertIntegration.name);
+    if (existing) {
+      const [updated] = await db.update(integrations)
+        .set(insertIntegration)
+        .where(eq(integrations.name, insertIntegration.name))
+        .returning();
+      return updated;
+    }
+    const [integration] = await db.insert(integrations).values(insertIntegration).returning();
+    return integration;
+  }
+
+  // Content Suggestions
+  async getSuggestionsByArticle(articleId: string): Promise<ContentSuggestion[]> {
+    return db.select().from(contentSuggestions).where(eq(contentSuggestions.articleId, articleId));
+  }
+
+  async createSuggestion(insertSuggestion: InsertContentSuggestion): Promise<ContentSuggestion> {
+    const [suggestion] = await db.insert(contentSuggestions).values(insertSuggestion).returning();
+    return suggestion;
+  }
+
+  async updateSuggestion(id: string, applied: boolean): Promise<ContentSuggestion | undefined> {
+    const [suggestion] = await db.update(contentSuggestions)
+      .set({ applied })
+      .where(eq(contentSuggestions.id, id))
+      .returning();
+    return suggestion;
+  }
+
+  // Analytics
+  async getAnalyticsSnapshots(days: number): Promise<AnalyticsSnapshot[]> {
+    const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return db.select().from(analyticsSnapshots)
+      .where(gte(analyticsSnapshots.date, cutoffDate))
+      .orderBy(analyticsSnapshots.date);
+  }
+
+  async createAnalyticsSnapshot(insertSnapshot: InsertAnalyticsSnapshot): Promise<AnalyticsSnapshot> {
+    const [snapshot] = await db.insert(analyticsSnapshots).values(insertSnapshot).returning();
+    return snapshot;
+  }
+}
+
+// Use database storage for persistence
+export const storage = new DatabaseStorage();
