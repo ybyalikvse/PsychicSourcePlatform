@@ -1664,18 +1664,65 @@ Example response:
           pageContent.headings.h2 = h2Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
           pageContent.headings.h3 = h3Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
           
-          // Extract main content and word count
-          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-          if (bodyMatch) {
-            const textContent = bodyMatch[1]
-              .replace(/<script[\s\S]*?<\/script>/gi, '')
-              .replace(/<style[\s\S]*?<\/style>/gi, '')
-              .replace(/<[^>]+>/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim();
-            pageContent.wordCount = textContent.split(/\s+/).filter(Boolean).length;
-            pageContent.content = textContent.substring(0, 5000);
+          // Extract main article content (not nav/footer/sidebar)
+          // Try to find the main content area using common patterns
+          let articleHtml = "";
+          
+          // Priority 1: Look for <article> tag
+          const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+          if (articleMatch) {
+            articleHtml = articleMatch[1];
+          } else {
+            // Priority 2: Look for main content containers
+            const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+            if (mainMatch) {
+              articleHtml = mainMatch[1];
+            } else {
+              // Priority 3: Look for common content class patterns
+              const contentPatterns = [
+                /<div[^>]*class="[^"]*(?:article|post|entry|content|blog)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+                /<div[^>]*id="[^"]*(?:article|post|entry|content|blog)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+                /<section[^>]*class="[^"]*(?:article|post|entry|content)[^"]*"[^>]*>([\s\S]*?)<\/section>/i,
+              ];
+              
+              for (const pattern of contentPatterns) {
+                const match = html.match(pattern);
+                if (match) {
+                  articleHtml = match[1];
+                  break;
+                }
+              }
+            }
           }
+          
+          // Fallback to body if no article container found
+          if (!articleHtml) {
+            const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+            if (bodyMatch) {
+              articleHtml = bodyMatch[1];
+            }
+          }
+          
+          // Clean the content - remove nav, header, footer, aside, scripts, styles
+          const cleanHtml = articleHtml
+            .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+            .replace(/<header[\s\S]*?<\/header>/gi, '')
+            .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+            .replace(/<aside[\s\S]*?<\/aside>/gi, '')
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+            .replace(/<form[\s\S]*?<\/form>/gi, '')
+            .replace(/<!--[\s\S]*?-->/g, '');
+          
+          // Extract text content
+          const textContent = cleanHtml
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          pageContent.wordCount = textContent.split(/\s+/).filter(Boolean).length;
+          pageContent.content = textContent.substring(0, 8000); // Increased limit for better context
           
           console.log(`[Optimize] Scraped page: ${pageContent.wordCount} words`);
         }
