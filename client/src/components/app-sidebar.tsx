@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Sparkles,
   Wand2,
+  Target,
 } from "lucide-react";
 import {
   Sidebar,
@@ -58,6 +59,11 @@ const seoNavItems = [
     title: "Analytics",
     url: "/analytics",
     icon: BarChart3,
+  },
+  {
+    title: "Optimize",
+    url: "/optimize",
+    icon: Target,
   },
 ];
 

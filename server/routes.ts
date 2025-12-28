@@ -1457,5 +1457,387 @@ Example response:
     }
   });
 
+  // ============ ARTICLE OPTIMIZATION ============
+  app.post("/api/optimize/analyze", async (req, res) => {
+    try {
+      const { url, targetKeyword } = req.body;
+      
+      if (!url || !targetKeyword) {
+        return res.status(400).json({ error: "URL and target keyword are required" });
+      }
+
+      // Security: Validate URL is from allowed domain (psychicsource.com only)
+      let validatedUrl: URL;
+      try {
+        validatedUrl = new URL(url);
+        const allowedHosts = ['psychicsource.com', 'www.psychicsource.com'];
+        if (!allowedHosts.some(h => validatedUrl.hostname === h || validatedUrl.hostname.endsWith('.' + h))) {
+          return res.status(400).json({ 
+            error: "Invalid URL", 
+            message: "Only psychicsource.com URLs are allowed for optimization analysis." 
+          });
+        }
+        // Block internal IPs and localhost
+        if (validatedUrl.hostname === 'localhost' || 
+            validatedUrl.hostname.startsWith('127.') ||
+            validatedUrl.hostname.startsWith('10.') ||
+            validatedUrl.hostname.startsWith('192.168.')) {
+          return res.status(400).json({ error: "Invalid URL" });
+        }
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      console.log(`[Optimize] Starting analysis for URL: ${url}, keyword: "${targetKeyword}"`);
+
+      // Step 1: Fetch GSC keywords for this URL
+      const gscIntegration = await storage.getIntegration("gsc");
+      let keywords: Array<{ keyword: string; position: number; clicks: number; impressions: number; ctr: number }> = [];
+      
+      if (gscIntegration?.status === "connected") {
+        const config = (gscIntegration.config || {}) as { accessToken?: string };
+        if (config.accessToken) {
+          try {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 30);
+            const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+            // Extract path from URL for filtering
+            const urlObj = new URL(url);
+            const pageFilter = urlObj.href;
+
+            const gscResponse = await fetch(
+              "https://www.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fwww.psychicsource.com%2F/searchAnalytics/query",
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${config.accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  startDate: formatDate(startDate),
+                  endDate: formatDate(endDate),
+                  dimensions: ["query"],
+                  dimensionFilterGroups: [{
+                    filters: [{
+                      dimension: "page",
+                      operator: "equals",
+                      expression: pageFilter,
+                    }]
+                  }],
+                  rowLimit: 100,
+                }),
+              }
+            );
+
+            if (gscResponse.ok) {
+              const gscData = await gscResponse.json();
+              keywords = (gscData.rows || []).map((row: any) => ({
+                keyword: row.keys[0],
+                position: row.position || 0,
+                clicks: row.clicks || 0,
+                impressions: row.impressions || 0,
+                ctr: (row.ctr || 0) * 100,
+              }));
+              console.log(`[Optimize] Found ${keywords.length} keywords from GSC`);
+            } else {
+              console.log(`[Optimize] GSC query failed: ${await gscResponse.text()}`);
+            }
+          } catch (gscError) {
+            console.error("[Optimize] GSC fetch error:", gscError);
+          }
+        }
+      }
+
+      // Step 2: Scrape the target URL to get its content
+      let pageContent = {
+        title: "",
+        metaDescription: "",
+        headings: { h1: [] as string[], h2: [] as string[], h3: [] as string[] },
+        wordCount: 0,
+        content: "",
+      };
+
+      try {
+        const pageResponse = await fetch(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+        });
+        
+        if (pageResponse.ok) {
+          const html = await pageResponse.text();
+          
+          // Extract title
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          pageContent.title = titleMatch ? titleMatch[1].trim() : "";
+          
+          // Extract meta description
+          const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+                               html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+          pageContent.metaDescription = metaDescMatch ? metaDescMatch[1].trim() : "";
+          
+          // Extract headings
+          const h1Matches = html.match(/<h1[^>]*>([^<]+)<\/h1>/gi) || [];
+          const h2Matches = html.match(/<h2[^>]*>([^<]+)<\/h2>/gi) || [];
+          const h3Matches = html.match(/<h3[^>]*>([^<]+)<\/h3>/gi) || [];
+          
+          pageContent.headings.h1 = h1Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
+          pageContent.headings.h2 = h2Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
+          pageContent.headings.h3 = h3Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
+          
+          // Extract main content and word count
+          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+          if (bodyMatch) {
+            const textContent = bodyMatch[1]
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+            pageContent.wordCount = textContent.split(/\s+/).filter(Boolean).length;
+            pageContent.content = textContent.substring(0, 5000);
+          }
+          
+          console.log(`[Optimize] Scraped page: ${pageContent.wordCount} words`);
+        }
+      } catch (scrapeError) {
+        console.error("[Optimize] Page scrape error:", scrapeError);
+      }
+
+      // Step 3: Search Google for the target keyword and get competitors
+      // Sites to skip (social media, UGC, etc.)
+      const skipDomains = [
+        'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com', 'tiktok.com',
+        'reddit.com', 'quora.com', 'linkedin.com', 'pinterest.com', 'tumblr.com',
+        'medium.com', 'amazon.com', 'ebay.com', 'wikipedia.org', 'yelp.com',
+        'tripadvisor.com', 'trustpilot.com'
+      ];
+      
+      let competitors: Array<{
+        url: string;
+        title: string;
+        metaDescription: string;
+        headings: { h1: string[]; h2: string[]; h3: string[] };
+        wordCount: number;
+        contentSnippet: string;
+      }> = [];
+
+      try {
+        // Use Google Custom Search API or scrape SERPs
+        // For now, we'll provide a simulated flow - in production you'd use an API like SerpAPI
+        console.log(`[Optimize] Searching for competitors ranking for "${targetKeyword}"`);
+        
+        // Try to fetch Google search results
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(targetKeyword)}&num=20`;
+        const searchResponse = await fetch(searchUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+          },
+        });
+
+        if (searchResponse.ok) {
+          const searchHtml = await searchResponse.text();
+          
+          // Extract URLs from search results (simplified extraction)
+          const urlMatches = searchHtml.match(/href="\/url\?q=([^&"]+)/g) || [];
+          const resultUrls: string[] = [];
+          
+          for (const match of urlMatches) {
+            try {
+              const urlPart = match.replace('href="/url?q=', '');
+              const decodedUrl = decodeURIComponent(urlPart);
+              const parsedUrl = new URL(decodedUrl);
+              
+              // Skip unwanted domains
+              if (skipDomains.some(d => parsedUrl.hostname.includes(d))) {
+                continue;
+              }
+              
+              // Skip our own domain
+              if (parsedUrl.hostname.includes('psychicsource.com')) {
+                continue;
+              }
+              
+              if (!resultUrls.includes(decodedUrl)) {
+                resultUrls.push(decodedUrl);
+              }
+            } catch {
+              // Skip invalid URLs
+            }
+          }
+
+          console.log(`[Optimize] Found ${resultUrls.length} competitor URLs`);
+
+          // Analyze top 5 competitor pages
+          const competitorPromises = resultUrls.slice(0, 5).map(async (competitorUrl) => {
+            try {
+              const compResponse = await fetch(competitorUrl, {
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                },
+                signal: AbortSignal.timeout(10000),
+              });
+              
+              if (!compResponse.ok) return null;
+              
+              const compHtml = await compResponse.text();
+              
+              // Extract title
+              const titleMatch = compHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+              const title = titleMatch ? titleMatch[1].trim() : "";
+              
+              // Extract meta description
+              const metaMatch = compHtml.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+                               compHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+              const metaDescription = metaMatch ? metaMatch[1].trim() : "";
+              
+              // Extract headings
+              const h1s = (compHtml.match(/<h1[^>]*>([^<]+)<\/h1>/gi) || []).map(h => h.replace(/<[^>]+>/g, '').trim());
+              const h2s = (compHtml.match(/<h2[^>]*>([^<]+)<\/h2>/gi) || []).map(h => h.replace(/<[^>]+>/g, '').trim());
+              const h3s = (compHtml.match(/<h3[^>]*>([^<]+)<\/h3>/gi) || []).map(h => h.replace(/<[^>]+>/g, '').trim());
+              
+              // Get content
+              const bodyMatch = compHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+              let wordCount = 0;
+              let contentSnippet = "";
+              
+              if (bodyMatch) {
+                const textContent = bodyMatch[1]
+                  .replace(/<script[\s\S]*?<\/script>/gi, '')
+                  .replace(/<style[\s\S]*?<\/style>/gi, '')
+                  .replace(/<[^>]+>/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+                wordCount = textContent.split(/\s+/).filter(Boolean).length;
+                contentSnippet = textContent.substring(0, 500);
+              }
+              
+              return {
+                url: competitorUrl,
+                title,
+                metaDescription,
+                headings: { h1: h1s, h2: h2s, h3: h3s },
+                wordCount,
+                contentSnippet,
+              };
+            } catch {
+              return null;
+            }
+          });
+          
+          const competitorResults = await Promise.all(competitorPromises);
+          competitors = competitorResults.filter(Boolean) as typeof competitors;
+          console.log(`[Optimize] Analyzed ${competitors.length} competitor pages`);
+        }
+      } catch (searchError) {
+        console.error("[Optimize] Search error:", searchError);
+      }
+
+      // Step 4: Generate AI recommendations using Claude
+      let recommendations: Array<{
+        type: "title" | "meta" | "content" | "headings" | "keywords";
+        priority: "high" | "medium" | "low";
+        current: string;
+        suggested: string;
+        reason: string;
+      }> = [];
+
+      try {
+        const anthropic = new Anthropic({
+          apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        });
+
+        const analysisPrompt = `You are an expert SEO analyst. Analyze this article and compare it against competitors to provide specific, actionable recommendations.
+
+TARGET KEYWORD: "${targetKeyword}"
+
+YOUR PAGE ANALYSIS:
+- Title: ${pageContent.title}
+- Meta Description: ${pageContent.metaDescription}
+- Word Count: ${pageContent.wordCount}
+- H1 Tags: ${pageContent.headings.h1.join(", ") || "None"}
+- H2 Tags: ${pageContent.headings.h2.join(", ") || "None"}
+- H3 Tags: ${pageContent.headings.h3.join(", ") || "None"}
+- Content Preview: ${pageContent.content.substring(0, 1000)}
+
+RANKING KEYWORDS (keywords this page currently ranks for):
+${keywords.length > 0 
+  ? keywords.slice(0, 20).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks})`).join("\n")
+  : "No ranking data available"}
+
+TOP COMPETITORS:
+${competitors.length > 0 
+  ? competitors.map((c, i) => `
+Competitor #${i + 1}: ${c.url}
+- Title: ${c.title}
+- Meta: ${c.metaDescription}
+- Word Count: ${c.wordCount}
+- H1s: ${c.headings.h1.join(", ") || "None"}
+- H2s: ${c.headings.h2.slice(0, 5).join(", ") || "None"}
+`).join("\n")
+  : "No competitor data available"}
+
+Provide specific recommendations to improve rankings for "${targetKeyword}". Focus on:
+1. Title tag optimization (include keyword, make it compelling)
+2. Meta description improvements
+3. Content gaps vs competitors (length, topics, depth)
+4. Heading structure improvements
+5. Keyword usage and related terms
+
+Return a JSON array of recommendations:
+{
+  "recommendations": [
+    {
+      "type": "title" | "meta" | "content" | "headings" | "keywords",
+      "priority": "high" | "medium" | "low",
+      "current": "What they currently have (or 'N/A')",
+      "suggested": "Your specific suggestion with exact text when applicable",
+      "reason": "Why this change will help rankings"
+    }
+  ]
+}
+
+Be specific. If suggesting a new title, write the full title. If suggesting adding content, be specific about topics to cover. Prioritize high-impact changes.`;
+
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 2000,
+          messages: [
+            { role: "user", content: analysisPrompt }
+          ],
+        });
+
+        const responseText = response.content[0].type === "text" ? response.content[0].text : "";
+        
+        // Extract JSON from response
+        const jsonMatch = responseText.match(/\{[\s\S]*"recommendations"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          recommendations = parsed.recommendations || [];
+        }
+        
+        console.log(`[Optimize] Generated ${recommendations.length} recommendations`);
+      } catch (aiError) {
+        console.error("[Optimize] AI analysis error:", aiError);
+      }
+
+      // Return the complete analysis
+      res.json({
+        keywords,
+        pageContent,
+        competitors,
+        recommendations,
+      });
+    } catch (error) {
+      console.error("Optimization analysis error:", error);
+      res.status(500).json({ error: "Failed to analyze article" });
+    }
+  });
+
   return httpServer;
 }

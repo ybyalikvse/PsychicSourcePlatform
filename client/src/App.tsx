@@ -19,6 +19,7 @@ import Performance from "@/pages/performance";
 import Analytics from "@/pages/analytics";
 import Integrations from "@/pages/integrations";
 import Updates from "@/pages/updates";
+import Optimize from "@/pages/optimize";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/updates" component={Updates} />
+      <Route path="/optimize" component={Optimize} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
