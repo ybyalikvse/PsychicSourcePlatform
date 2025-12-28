@@ -293,12 +293,6 @@ export default function CreateWithAI() {
     }
   };
 
-  const handleAutoPrompt = () => {
-    if (targetKeyword.trim()) {
-      setImagePrompt(`A visually stunning featured image for a blog post about "${targetKeyword}". Professional, high-quality, suitable for a psychic and spiritual wellness website.`);
-    }
-  };
-
   const handleGetImageSuggestions = async (target: "featured" | number) => {
     if (!generatedContent) {
       toast({ title: "Generate content first to get image suggestions", variant: "destructive" });
@@ -656,17 +650,6 @@ export default function CreateWithAI() {
                       >
                         <Sparkles className="h-3 w-3 mr-1" />
                         AI Suggest
-                      </Button>
-                    )}
-                    {targetKeyword && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={handleAutoPrompt}
-                        data-testid="button-auto-prompt"
-                      >
-                        <Wand2 className="h-3 w-3 mr-1" />
-                        Auto
                       </Button>
                     )}
                   </div>
