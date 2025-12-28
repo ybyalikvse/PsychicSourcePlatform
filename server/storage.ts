@@ -8,8 +8,9 @@ import {
   type WritingStyle, type InsertWritingStyle,
   type SeoSettings, type InsertSeoSettings,
   type ImageStyle, type InsertImageStyle,
+  type OptimizationAnalysis, type InsertOptimizationAnalysis,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
-  writingStyles, seoSettings, imageStyles,
+  writingStyles, seoSettings, imageStyles, optimizationAnalyses,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -66,6 +67,12 @@ export interface IStorage {
   createImageStyle(style: InsertImageStyle): Promise<ImageStyle>;
   updateImageStyle(id: string, style: Partial<InsertImageStyle>): Promise<ImageStyle | undefined>;
   deleteImageStyle(id: string): Promise<boolean>;
+
+  // Optimization Analyses
+  getOptimizationAnalyses(): Promise<OptimizationAnalysis[]>;
+  getOptimizationAnalysis(id: string): Promise<OptimizationAnalysis | undefined>;
+  createOptimizationAnalysis(analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis>;
+  deleteOptimizationAnalysis(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -251,6 +258,24 @@ export class MemStorage implements IStorage {
     this.analytics.set(id, snapshot);
     return snapshot;
   }
+
+  // Stub methods for interface compliance (not used since we use DatabaseStorage)
+  async getWritingStyles(): Promise<WritingStyle[]> { return []; }
+  async getWritingStyle(_id: string): Promise<WritingStyle | undefined> { return undefined; }
+  async createWritingStyle(_style: InsertWritingStyle): Promise<WritingStyle> { throw new Error("Not implemented"); }
+  async updateWritingStyle(_id: string, _style: Partial<InsertWritingStyle>): Promise<WritingStyle | undefined> { return undefined; }
+  async deleteWritingStyle(_id: string): Promise<boolean> { return false; }
+  async getSeoSettings(): Promise<SeoSettings | undefined> { return undefined; }
+  async upsertSeoSettings(_settings: InsertSeoSettings): Promise<SeoSettings> { throw new Error("Not implemented"); }
+  async getImageStyles(): Promise<ImageStyle[]> { return []; }
+  async getImageStyle(_id: string): Promise<ImageStyle | undefined> { return undefined; }
+  async createImageStyle(_style: InsertImageStyle): Promise<ImageStyle> { throw new Error("Not implemented"); }
+  async updateImageStyle(_id: string, _style: Partial<InsertImageStyle>): Promise<ImageStyle | undefined> { return undefined; }
+  async deleteImageStyle(_id: string): Promise<boolean> { return false; }
+  async getOptimizationAnalyses(): Promise<OptimizationAnalysis[]> { return []; }
+  async getOptimizationAnalysis(_id: string): Promise<OptimizationAnalysis | undefined> { return undefined; }
+  async createOptimizationAnalysis(_analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis> { throw new Error("Not implemented"); }
+  async deleteOptimizationAnalysis(_id: string): Promise<boolean> { return false; }
 }
 
 // Database storage implementation - uses PostgreSQL for persistence
@@ -454,6 +479,26 @@ export class DatabaseStorage implements IStorage {
 
   async deleteImageStyle(id: string): Promise<boolean> {
     await db.delete(imageStyles).where(eq(imageStyles.id, id));
+    return true;
+  }
+
+  // Optimization Analyses
+  async getOptimizationAnalyses(): Promise<OptimizationAnalysis[]> {
+    return db.select().from(optimizationAnalyses).orderBy(desc(optimizationAnalyses.createdAt));
+  }
+
+  async getOptimizationAnalysis(id: string): Promise<OptimizationAnalysis | undefined> {
+    const [analysis] = await db.select().from(optimizationAnalyses).where(eq(optimizationAnalyses.id, id));
+    return analysis;
+  }
+
+  async createOptimizationAnalysis(insertAnalysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis> {
+    const [analysis] = await db.insert(optimizationAnalyses).values(insertAnalysis).returning();
+    return analysis;
+  }
+
+  async deleteOptimizationAnalysis(id: string): Promise<boolean> {
+    await db.delete(optimizationAnalyses).where(eq(optimizationAnalyses.id, id));
     return true;
   }
 }

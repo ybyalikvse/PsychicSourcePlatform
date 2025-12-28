@@ -183,6 +183,30 @@ export const insertImageStyleSchema = createInsertSchema(imageStyles).omit({
 export type InsertImageStyle = z.infer<typeof insertImageStyleSchema>;
 export type ImageStyle = typeof imageStyles.$inferSelect;
 
+// Saved optimization analyses
+export const optimizationAnalyses = pgTable("optimization_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  url: text("url").notNull(),
+  targetKeyword: text("target_keyword").notNull(),
+  dateRange: text("date_range").default("28"),
+  pageTitle: text("page_title"),
+  pageMetaDescription: text("page_meta_description"),
+  pageWordCount: integer("page_word_count"),
+  keywords: jsonb("keywords"), // Array of keyword data from GSC
+  competitors: jsonb("competitors"), // Array of competitor analysis
+  recommendations: jsonb("recommendations"), // Array of AI recommendations
+  pageContent: jsonb("page_content"), // Full page content data including headings
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertOptimizationAnalysisSchema = createInsertSchema(optimizationAnalyses).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertOptimizationAnalysis = z.infer<typeof insertOptimizationAnalysisSchema>;
+export type OptimizationAnalysis = typeof optimizationAnalyses.$inferSelect;
+
 // TypeScript interfaces for API responses
 export interface AhrefsKeywordData {
   keyword: string;

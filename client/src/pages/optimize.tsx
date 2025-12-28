@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,9 @@ import {
   Code,
   Heading,
   Calendar,
+  History,
+  Trash2,
+  Eye,
 } from "lucide-react";
 
 const DATE_RANGE_OPTIONS = [
@@ -95,6 +99,7 @@ interface Recommendation {
 }
 
 interface AnalysisResult {
+  id?: string;
   keywords: KeywordData[];
   pageContent: {
     title: string;
@@ -111,10 +116,30 @@ interface AnalysisResult {
   recommendations: Recommendation[];
 }
 
+interface SavedAnalysis {
+  id: string;
+  url: string;
+  targetKeyword: string;
+  dateRange: string | null;
+  pageTitle: string | null;
+  pageWordCount: number | null;
+  createdAt: string;
+  keywords: KeywordData[] | null;
+  competitors: CompetitorData[] | null;
+  recommendations: Recommendation[] | null;
+  pageContent: AnalysisResult["pageContent"] | null;
+}
+
 export default function Optimize() {
   const { toast } = useToast();
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisStep, setAnalysisStep] = useState<string>("");
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Fetch saved analyses
+  const { data: savedAnalyses = [], isLoading: loadingAnalyses } = useQuery<SavedAnalysis[]>({
+    queryKey: ["/api/optimize/analyses"],
+  });
 
   const form = useForm<OptimizeFormData>({
     resolver: zodResolver(optimizeFormSchema),
@@ -133,9 +158,10 @@ export default function Optimize() {
     onSuccess: (data) => {
       setAnalysisResult(data);
       setAnalysisStep("");
+      queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
       toast({
         title: "Analysis Complete",
-        description: "Your article has been analyzed with competitor insights.",
+        description: "Your article has been analyzed and saved.",
       });
     },
     onError: (error: Error) => {
@@ -147,6 +173,44 @@ export default function Optimize() {
       });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/optimize/analyses/${id}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
+      toast({
+        title: "Deleted",
+        description: "Analysis has been removed.",
+      });
+    },
+  });
+
+  const loadSavedAnalysis = (analysis: SavedAnalysis) => {
+    setAnalysisResult({
+      id: analysis.id,
+      keywords: analysis.keywords || [],
+      pageContent: analysis.pageContent || {
+        title: analysis.pageTitle || "",
+        metaDescription: "",
+        headings: { h1: [], h2: [], h3: [] },
+        wordCount: analysis.pageWordCount || 0,
+        content: "",
+      },
+      competitors: analysis.competitors || [],
+      recommendations: analysis.recommendations || [],
+    });
+    form.setValue("url", analysis.url);
+    form.setValue("targetKeyword", analysis.targetKeyword);
+    form.setValue("dateRange", analysis.dateRange || "28");
+    setShowHistory(false);
+    toast({
+      title: "Loaded",
+      description: `Loaded analysis from ${new Date(analysis.createdAt).toLocaleDateString()}`,
+    });
+  };
 
   const onSubmit = (data: OptimizeFormData) => {
     setAnalysisResult(null);
@@ -186,14 +250,102 @@ export default function Optimize() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold" data-testid="text-page-title">
-          Article Optimizer
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Analyze your content against top-ranking competitors and get AI-powered recommendations
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold" data-testid="text-page-title">
+            Article Optimizer
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Analyze your content against top-ranking competitors and get AI-powered recommendations
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowHistory(!showHistory)}
+          data-testid="button-toggle-history"
+        >
+          <History className="h-4 w-4 mr-2" />
+          {showHistory ? "Hide History" : "View History"}
+          {savedAnalyses.length > 0 && (
+            <Badge variant="secondary" className="ml-2">
+              {savedAnalyses.length}
+            </Badge>
+          )}
+        </Button>
       </div>
+
+      {/* Saved Analyses History */}
+      {showHistory && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Saved Analyses
+            </CardTitle>
+            <CardDescription>
+              Load a previous analysis or delete old ones
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingAnalyses ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : savedAnalyses.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                No saved analyses yet. Run an analysis to save it automatically.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {savedAnalyses.map((analysis) => (
+                  <div
+                    key={analysis.id}
+                    className="flex items-center justify-between gap-4 p-3 rounded-md border hover-elevate"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate" title={analysis.url}>
+                        {analysis.pageTitle || analysis.url}
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                        <Badge variant="outline" className="text-xs">
+                          {analysis.targetKeyword}
+                        </Badge>
+                        <span>
+                          {new Date(analysis.createdAt).toLocaleDateString()} at{" "}
+                          {new Date(analysis.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        {analysis.recommendations && (
+                          <span>{(analysis.recommendations as Recommendation[]).length} recommendations</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => loadSavedAnalysis(analysis)}
+                        data-testid={`button-load-${analysis.id}`}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Load
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => deleteMutation.mutate(analysis.id)}
+                        disabled={deleteMutation.isPending}
+                        data-testid={`button-delete-${analysis.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

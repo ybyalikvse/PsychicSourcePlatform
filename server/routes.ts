@@ -1994,8 +1994,25 @@ Be specific. If suggesting a new title, write the full title. If suggesting addi
         console.error("[Optimize] AI analysis error:", aiError);
       }
 
-      // Return the complete analysis
+      // Save the analysis to database
+      const savedAnalysis = await storage.createOptimizationAnalysis({
+        url,
+        targetKeyword,
+        dateRange: String(days),
+        pageTitle: pageContent.title,
+        pageMetaDescription: pageContent.metaDescription,
+        pageWordCount: pageContent.wordCount,
+        keywords: keywords,
+        competitors: competitors,
+        recommendations: recommendations,
+        pageContent: pageContent,
+      });
+
+      console.log(`[Optimize] Saved analysis with ID: ${savedAnalysis.id}`);
+
+      // Return the complete analysis with ID
       res.json({
+        id: savedAnalysis.id,
         keywords,
         pageContent,
         competitors,
@@ -2004,6 +2021,42 @@ Be specific. If suggesting a new title, write the full title. If suggesting addi
     } catch (error) {
       console.error("Optimization analysis error:", error);
       res.status(500).json({ error: "Failed to analyze article" });
+    }
+  });
+
+  // Get all saved optimization analyses
+  app.get("/api/optimize/analyses", async (req, res) => {
+    try {
+      const analyses = await storage.getOptimizationAnalyses();
+      res.json(analyses);
+    } catch (error) {
+      console.error("Failed to fetch analyses:", error);
+      res.status(500).json({ error: "Failed to fetch saved analyses" });
+    }
+  });
+
+  // Get a specific optimization analysis
+  app.get("/api/optimize/analyses/:id", async (req, res) => {
+    try {
+      const analysis = await storage.getOptimizationAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      res.json(analysis);
+    } catch (error) {
+      console.error("Failed to fetch analysis:", error);
+      res.status(500).json({ error: "Failed to fetch analysis" });
+    }
+  });
+
+  // Delete an optimization analysis
+  app.delete("/api/optimize/analyses/:id", async (req, res) => {
+    try {
+      await storage.deleteOptimizationAnalysis(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete analysis:", error);
+      res.status(500).json({ error: "Failed to delete analysis" });
     }
   });
 
