@@ -346,7 +346,10 @@ export default function Optimize() {
                 {analysisResult.keywords.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <AlertCircle className="h-12 w-12 mx-auto mb-4" />
-                    <p>No keyword data found for this URL in Search Console.</p>
+                    <p>No keyword data found for this URL.</p>
+                    <p className="text-sm mt-2">
+                      This may mean your GSC connection has expired. Try reconnecting in the Integrations page.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -553,6 +556,17 @@ export default function Optimize() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {analysisResult.pageContent.content && (
+                  <div>
+                    <h4 className="font-medium mb-2">Content Preview</h4>
+                    <ScrollArea className="h-[300px] rounded-md border p-4">
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                        {analysisResult.pageContent.content}
+                      </p>
+                    </ScrollArea>
                   </div>
                 )}
               </CardContent>

@@ -1814,11 +1814,51 @@ Be specific. If suggesting a new title, write the full title. If suggesting addi
 
         const responseText = response.content[0].type === "text" ? response.content[0].text : "";
         
-        // Extract JSON from response
-        const jsonMatch = responseText.match(/\{[\s\S]*"recommendations"[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          recommendations = parsed.recommendations || [];
+        // Extract JSON from response - try multiple patterns
+        try {
+          // First try to find JSON code block
+          const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (codeBlockMatch) {
+            const parsed = JSON.parse(codeBlockMatch[1].trim());
+            recommendations = parsed.recommendations || [];
+          } else {
+            // Try to find raw JSON object
+            const jsonMatch = responseText.match(/\{\s*"recommendations"\s*:\s*\[[\s\S]*?\]\s*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              recommendations = parsed.recommendations || [];
+            }
+          }
+        } catch (parseError) {
+          console.error("[Optimize] JSON parse error, trying fallback extraction");
+          // Fallback: Generate basic recommendations based on data we have
+          if (pageContent.wordCount < 2000 && competitors.some(c => c.wordCount > 2500)) {
+            recommendations.push({
+              type: "content" as const,
+              priority: "high" as const,
+              current: `${pageContent.wordCount} words`,
+              suggested: "Expand content to 2,500+ words to match top competitors",
+              reason: "Top-ranking pages have significantly more content depth",
+            });
+          }
+          if (!pageContent.title.toLowerCase().includes(targetKeyword.toLowerCase())) {
+            recommendations.push({
+              type: "title" as const,
+              priority: "high" as const,
+              current: pageContent.title,
+              suggested: `Include "${targetKeyword}" in your title tag`,
+              reason: "The target keyword should appear in the title for better rankings",
+            });
+          }
+          if (!pageContent.metaDescription.toLowerCase().includes(targetKeyword.toLowerCase())) {
+            recommendations.push({
+              type: "meta" as const,
+              priority: "medium" as const,
+              current: pageContent.metaDescription || "No meta description",
+              suggested: `Add "${targetKeyword}" to your meta description`,
+              reason: "Including the keyword in meta description can improve click-through rates",
+            });
+          }
         }
         
         console.log(`[Optimize] Generated ${recommendations.length} recommendations`);
