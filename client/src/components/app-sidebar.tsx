@@ -2,7 +2,6 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   FileText,
-  Search,
   BarChart3,
   Settings,
   Zap,
@@ -45,11 +44,6 @@ const mainNavItems = [
 ];
 
 const seoNavItems = [
-  {
-    title: "Keywords",
-    url: "/keywords",
-    icon: Search,
-  },
   {
     title: "Performance",
     url: "/performance",
