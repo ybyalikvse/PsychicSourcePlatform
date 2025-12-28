@@ -26,24 +26,26 @@ export default function Editor() {
   const saveMutation = useMutation({
     mutationFn: async (data: Partial<Article>) => {
       if (articleId) {
-        return await apiRequest("PATCH", `/api/articles/${articleId}`, data);
+        const response = await apiRequest("PATCH", `/api/articles/${articleId}`, data);
+        return response.json();
       } else {
-        return await apiRequest("POST", "/api/articles", {
+        const response = await apiRequest("POST", "/api/articles", {
           ...data,
           slug: data.title?.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "untitled",
           status: "draft",
         });
+        return response.json();
       }
     },
-    onSuccess: (response) => {
+    onSuccess: (data: Article) => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({
         title: articleId ? "Article updated" : "Article created",
         description: "Your changes have been saved.",
       });
-      if (!articleId && response?.id) {
-        setLocation(`/editor?id=${response.id}`);
+      if (!articleId && data?.id) {
+        setLocation(`/editor?id=${data.id}`);
       }
     },
     onError: () => {
@@ -58,15 +60,15 @@ export default function Editor() {
   const analyzeMutation = useMutation({
     mutationFn: async (data: { content: string; targetKeyword?: string }) => {
       const response = await apiRequest("POST", "/api/content/analyze", data);
-      return response;
+      return response.json() as Promise<{ optimization: ContentOptimizationResult; suggestions: ContentSuggestion[] }>;
     },
-    onSuccess: (response) => {
-      if (response) {
-        setOptimization(response.optimization);
-        setSuggestions(response.suggestions || []);
+    onSuccess: (data) => {
+      if (data) {
+        setOptimization(data.optimization);
+        setSuggestions(data.suggestions || []);
         toast({
           title: "Analysis complete",
-          description: `SEO Score: ${response.optimization?.seoScore || 0}`,
+          description: `SEO Score: ${data.optimization?.seoScore || 0}`,
         });
       }
     },

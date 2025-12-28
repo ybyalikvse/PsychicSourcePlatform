@@ -9,6 +9,8 @@ import {
   TrendingUp,
   RefreshCw,
   Sparkles,
+  Wand2,
+  Edit3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -36,9 +38,14 @@ const mainNavItems = [
     icon: FileText,
   },
   {
-    title: "Content Editor",
+    title: "Create with AI",
+    url: "/create",
+    icon: Wand2,
+  },
+  {
+    title: "Editor",
     url: "/editor",
-    icon: Sparkles,
+    icon: Edit3,
   },
 ];
 
