@@ -926,19 +926,17 @@ export async function registerRoutes(
           });
         }
         
-        // Test the API key by making a simple request
+        // Test the API key by making a simple request to Keywords Explorer
         try {
-          const testResponse = await fetch("https://api.ahrefs.com/v3/site-explorer/metrics", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${process.env.AHREFS_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              target: "psychicsource.com",
-              mode: "exact",
-            }),
-          });
+          const testResponse = await fetch(
+            "https://api.ahrefs.com/v3/keywords-explorer/overview?country=us&keywords=test&select=keyword,volume",
+            {
+              headers: {
+                "Authorization": `Bearer ${process.env.AHREFS_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
           
           if (!testResponse.ok) {
             const errorText = await testResponse.text();
