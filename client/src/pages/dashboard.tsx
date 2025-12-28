@@ -126,7 +126,7 @@ export default function Dashboard() {
             <CardTitle className="text-lg">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Link href="/editor">
+            <Link href="/create">
               <Button className="w-full justify-start" variant="outline" data-testid="button-new-article">
                 <Sparkles className="mr-2 h-4 w-4" />
                 Create New Article

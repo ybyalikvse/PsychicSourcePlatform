@@ -103,12 +103,11 @@ export default function CreateWithAI() {
         wordCount: data.content.split(/\s+/).filter(Boolean).length,
       });
     },
-    onSuccess: async (response) => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Article saved as draft" });
-      const data = await response.json();
-      setLocation(`/editor?id=${data.id}`);
+      setLocation("/content");
     },
     onError: () => {
       toast({ title: "Failed to save article", variant: "destructive" });

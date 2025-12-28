@@ -78,7 +78,7 @@ export default function Content() {
   };
 
   const handleEdit = (article: Article) => {
-    setLocation(`/editor?id=${article.id}`);
+    toast({ title: "Edit functionality coming soon" });
   };
 
   const handleView = (article: Article) => {
@@ -98,7 +98,7 @@ export default function Content() {
             Manage your articles and content
           </p>
         </div>
-        <Button onClick={() => setLocation("/editor")} data-testid="button-create-article">
+        <Button onClick={() => setLocation("/create")} data-testid="button-create-article">
           <Plus className="mr-2 h-4 w-4" />
           New Article
         </Button>

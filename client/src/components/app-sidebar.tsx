@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Sparkles,
   Wand2,
-  Edit3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,11 +40,6 @@ const mainNavItems = [
     title: "Create with AI",
     url: "/create",
     icon: Wand2,
-  },
-  {
-    title: "Editor",
-    url: "/editor",
-    icon: Edit3,
   },
 ];
 
