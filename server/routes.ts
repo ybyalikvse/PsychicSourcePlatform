@@ -6,6 +6,7 @@ import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schem
 import crypto from "crypto";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import FirecrawlApp from "@mendable/firecrawl-js";
 
 // OAuth state storage (in production, use Redis or similar)
 const oauthStates = new Map<string, { timestamp: number }>();
@@ -1734,13 +1735,12 @@ Example response:
         console.error("[Optimize] Page scrape error:", scrapeError);
       }
 
-      // Step 3: Search Google for the target keyword and get competitors
-      // Sites to skip (social media, UGC, etc.)
+      // Step 3: Search for competitors using Firecrawl
       const skipDomains = [
         'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com', 'tiktok.com',
         'reddit.com', 'quora.com', 'linkedin.com', 'pinterest.com', 'tumblr.com',
-        'medium.com', 'amazon.com', 'ebay.com', 'wikipedia.org', 'yelp.com',
-        'tripadvisor.com', 'trustpilot.com'
+        'amazon.com', 'ebay.com', 'wikipedia.org', 'yelp.com',
+        'tripadvisor.com', 'trustpilot.com', 'psychicsource.com'
       ];
       
       let competitors: Array<{
@@ -1752,117 +1752,66 @@ Example response:
         contentSnippet: string;
       }> = [];
 
-      try {
-        // Use Google Custom Search API or scrape SERPs
-        // For now, we'll provide a simulated flow - in production you'd use an API like SerpAPI
-        console.log(`[Optimize] Searching for competitors ranking for "${targetKeyword}"`);
-        
-        // Try to fetch Google search results
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(targetKeyword)}&num=20`;
-        const searchResponse = await fetch(searchUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-          },
-        });
+      const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+      
+      if (firecrawlApiKey) {
+        try {
+          console.log(`[Optimize] Using Firecrawl to search for competitors ranking for "${targetKeyword}"`);
+          
+          const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey });
+          
+          // Search and scrape in one API call
+          const searchResults = await firecrawl.search(targetKeyword, {
+            limit: 10,
+            scrapeOptions: {
+              formats: ['markdown', 'html'],
+              onlyMainContent: true,
+            },
+          });
 
-        if (searchResponse.ok) {
-          const searchHtml = await searchResponse.text();
-          
-          // Extract URLs from search results (simplified extraction)
-          const urlMatches = searchHtml.match(/href="\/url\?q=([^&"]+)/g) || [];
-          const resultUrls: string[] = [];
-          
-          for (const match of urlMatches) {
-            try {
-              const urlPart = match.replace('href="/url?q=', '');
-              const decodedUrl = decodeURIComponent(urlPart);
-              const parsedUrl = new URL(decodedUrl);
-              
-              // Skip unwanted domains
-              if (skipDomains.some(d => parsedUrl.hostname.includes(d))) {
-                continue;
+          if (searchResults.success && searchResults.data) {
+            for (const result of searchResults.data) {
+              try {
+                const resultUrl = new URL(result.url);
+                
+                // Skip unwanted domains
+                if (skipDomains.some(d => resultUrl.hostname.includes(d))) {
+                  continue;
+                }
+                
+                // Extract headings from HTML if available
+                const html = result.html || "";
+                const h1s = (html.match(/<h1[^>]*>([^<]+)<\/h1>/gi) || []).map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+                const h2s = (html.match(/<h2[^>]*>([^<]+)<\/h2>/gi) || []).map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+                const h3s = (html.match(/<h3[^>]*>([^<]+)<\/h3>/gi) || []).map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+                
+                // Get word count from markdown
+                const markdown = result.markdown || "";
+                const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+                
+                competitors.push({
+                  url: result.url,
+                  title: result.title || "",
+                  metaDescription: result.description || "",
+                  headings: { h1: h1s, h2: h2s, h3: h3s },
+                  wordCount,
+                  contentSnippet: markdown.substring(0, 500),
+                });
+                
+                // Stop at 5 competitors
+                if (competitors.length >= 5) break;
+              } catch {
+                // Skip invalid results
               }
-              
-              // Skip our own domain
-              if (parsedUrl.hostname.includes('psychicsource.com')) {
-                continue;
-              }
-              
-              if (!resultUrls.includes(decodedUrl)) {
-                resultUrls.push(decodedUrl);
-              }
-            } catch {
-              // Skip invalid URLs
             }
           }
-
-          console.log(`[Optimize] Found ${resultUrls.length} competitor URLs`);
-
-          // Analyze top 5 competitor pages
-          const competitorPromises = resultUrls.slice(0, 5).map(async (competitorUrl) => {
-            try {
-              const compResponse = await fetch(competitorUrl, {
-                headers: {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                },
-                signal: AbortSignal.timeout(10000),
-              });
-              
-              if (!compResponse.ok) return null;
-              
-              const compHtml = await compResponse.text();
-              
-              // Extract title
-              const titleMatch = compHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
-              const title = titleMatch ? titleMatch[1].trim() : "";
-              
-              // Extract meta description
-              const metaMatch = compHtml.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
-                               compHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
-              const metaDescription = metaMatch ? metaMatch[1].trim() : "";
-              
-              // Extract headings
-              const h1s = (compHtml.match(/<h1[^>]*>([^<]+)<\/h1>/gi) || []).map(h => h.replace(/<[^>]+>/g, '').trim());
-              const h2s = (compHtml.match(/<h2[^>]*>([^<]+)<\/h2>/gi) || []).map(h => h.replace(/<[^>]+>/g, '').trim());
-              const h3s = (compHtml.match(/<h3[^>]*>([^<]+)<\/h3>/gi) || []).map(h => h.replace(/<[^>]+>/g, '').trim());
-              
-              // Get content
-              const bodyMatch = compHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-              let wordCount = 0;
-              let contentSnippet = "";
-              
-              if (bodyMatch) {
-                const textContent = bodyMatch[1]
-                  .replace(/<script[\s\S]*?<\/script>/gi, '')
-                  .replace(/<style[\s\S]*?<\/style>/gi, '')
-                  .replace(/<[^>]+>/g, ' ')
-                  .replace(/\s+/g, ' ')
-                  .trim();
-                wordCount = textContent.split(/\s+/).filter(Boolean).length;
-                contentSnippet = textContent.substring(0, 500);
-              }
-              
-              return {
-                url: competitorUrl,
-                title,
-                metaDescription,
-                headings: { h1: h1s, h2: h2s, h3: h3s },
-                wordCount,
-                contentSnippet,
-              };
-            } catch {
-              return null;
-            }
-          });
           
-          const competitorResults = await Promise.all(competitorPromises);
-          competitors = competitorResults.filter(Boolean) as typeof competitors;
-          console.log(`[Optimize] Analyzed ${competitors.length} competitor pages`);
+          console.log(`[Optimize] Firecrawl found ${competitors.length} competitor pages`);
+        } catch (firecrawlError) {
+          console.error("[Optimize] Firecrawl error:", firecrawlError);
         }
-      } catch (searchError) {
-        console.error("[Optimize] Search error:", searchError);
+      } else {
+        console.log("[Optimize] FIRECRAWL_API_KEY not set - skipping competitor analysis");
       }
 
       // Step 4: Generate AI recommendations using Claude
