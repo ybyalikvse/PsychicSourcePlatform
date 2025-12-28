@@ -850,18 +850,32 @@ export default function CreateWithAI() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="blog-image-count">Number of Images</Label>
-                <Select value={String(blogImageCount)} onValueChange={(v) => handleBlogImageCountChange(parseInt(v))}>
-                  <SelectTrigger id="blog-image-count" data-testid="select-blog-image-count">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <SelectItem key={n} value={String(n)}>{n} image{n > 1 ? "s" : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="blog-image-count">Number of Images</Label>
+                  <Select value={String(blogImageCount)} onValueChange={(v) => handleBlogImageCountChange(parseInt(v))}>
+                    <SelectTrigger id="blog-image-count" data-testid="select-blog-image-count">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <SelectItem key={n} value={String(n)}>{n} image{n > 1 ? "s" : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="blog-image-provider">AI Provider</Label>
+                  <Select value={imageProvider} onValueChange={(value: "gemini" | "openai") => setImageProvider(value)}>
+                    <SelectTrigger id="blog-image-provider" data-testid="select-blog-image-provider">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gemini">Gemini (Nano Banana)</SelectItem>
+                      <SelectItem value="openai">OpenAI (GPT Image)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <Separator />
