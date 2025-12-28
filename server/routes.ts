@@ -199,7 +199,7 @@ export async function registerRoutes(
         });
       }
 
-      const config = JSON.parse(gscIntegration.config || "{}");
+      const config = (gscIntegration.config || {}) as { accessToken?: string; refreshToken?: string; expiresAt?: number };
       if (!config.accessToken) {
         return res.status(400).json({ 
           error: "GSC tokens missing",
@@ -267,7 +267,7 @@ export async function registerRoutes(
         });
       }
 
-      const config = JSON.parse(gscIntegration.config || "{}");
+      const config = (gscIntegration.config || {}) as { accessToken?: string; refreshToken?: string; expiresAt?: number };
       if (!config.accessToken) {
         return res.status(400).json({ 
           error: "GSC tokens missing",
@@ -351,7 +351,7 @@ export async function registerRoutes(
         });
       }
 
-      const config = JSON.parse(gscIntegration.config || "{}");
+      const config = (gscIntegration.config || {}) as { accessToken?: string; refreshToken?: string; expiresAt?: number };
       if (!config.accessToken) {
         return res.status(400).json({ 
           error: "GSC tokens missing",
