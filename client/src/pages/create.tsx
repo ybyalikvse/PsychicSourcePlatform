@@ -86,6 +86,7 @@ export default function CreateWithAI() {
   const [featuredImage, setFeaturedImage] = useState<string>("");
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
+  const [imageProvider, setImageProvider] = useState<"gemini" | "openai">("gemini");
   
   const [blogImageCount, setBlogImageCount] = useState(3);
   const [blogImages, setBlogImages] = useState<Array<{ image: string; prompt: string; styleId: string; isGenerating: boolean }>>(
@@ -275,12 +276,14 @@ export default function CreateWithAI() {
         prompt: imagePrompt.trim(),
         styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
         imageType: "featured",
+        provider: imageProvider,
       });
 
       const data = await response.json();
       if (data.imageData) {
         setFeaturedImage(data.imageData);
-        toast({ title: "Featured image generated" });
+        const providerName = imageProvider === "openai" ? "OpenAI" : "Gemini";
+        toast({ title: `Featured image generated with ${providerName}` });
       }
     } catch (error) {
       console.error("Image generation error:", error);
@@ -348,11 +351,13 @@ export default function CreateWithAI() {
           prompt: suggestion.prompt,
           styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
           imageType: "featured",
+          provider: imageProvider,
         });
         const data = await response.json();
         if (data.imageData) {
           setFeaturedImage(data.imageData);
-          toast({ title: "Featured image generated" });
+          const providerName = imageProvider === "openai" ? "OpenAI" : "Gemini";
+          toast({ title: `Featured image generated with ${providerName}` });
         }
       } catch (error) {
         toast({ title: "Failed to generate image", variant: "destructive" });
@@ -374,12 +379,14 @@ export default function CreateWithAI() {
           prompt: suggestion.prompt,
           styleId: newBlogImages[idx].styleId !== "default" ? newBlogImages[idx].styleId : undefined,
           imageType: "inline",
+          provider: imageProvider,
         });
         const data = await response.json();
         if (data.imageData) {
           newBlogImages[idx] = { ...newBlogImages[idx], image: data.imageData, isGenerating: false };
           setBlogImages([...newBlogImages]);
-          toast({ title: `Blog image ${idx + 1} generated` });
+          const providerName = imageProvider === "openai" ? "OpenAI" : "Gemini";
+          toast({ title: `Blog image ${idx + 1} generated with ${providerName}` });
         }
       } catch (error) {
         newBlogImages[idx] = { ...newBlogImages[idx], isGenerating: false };
@@ -409,13 +416,15 @@ export default function CreateWithAI() {
         prompt: img.prompt.trim(),
         styleId: img.styleId !== "default" ? img.styleId : undefined,
         imageType: "inline",
+        provider: imageProvider,
       });
 
       const data = await response.json();
       if (data.imageData) {
         newBlogImages[index] = { ...newBlogImages[index], image: data.imageData, isGenerating: false };
         setBlogImages([...newBlogImages]);
-        toast({ title: `Blog image ${index + 1} generated` });
+        const providerName = imageProvider === "openai" ? "OpenAI" : "Gemini";
+        toast({ title: `Blog image ${index + 1} generated with ${providerName}` });
       }
     } catch (error) {
       newBlogImages[index] = { ...newBlogImages[index], isGenerating: false };
@@ -602,21 +611,35 @@ export default function CreateWithAI() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="image-style">Image Style</Label>
-                <Select value={selectedImageStyleId} onValueChange={setSelectedImageStyleId}>
-                  <SelectTrigger id="image-style" data-testid="select-image-style">
-                    <SelectValue placeholder="Select a style" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Default</SelectItem>
-                    {imageStyles.map((style) => (
-                      <SelectItem key={style.id} value={style.id}>
-                        {style.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="image-provider">AI Provider</Label>
+                  <Select value={imageProvider} onValueChange={(value: "gemini" | "openai") => setImageProvider(value)}>
+                    <SelectTrigger id="image-provider" data-testid="select-image-provider">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gemini">Gemini (Nano Banana)</SelectItem>
+                      <SelectItem value="openai">OpenAI (GPT Image)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="image-style">Image Style</Label>
+                  <Select value={selectedImageStyleId} onValueChange={setSelectedImageStyleId}>
+                    <SelectTrigger id="image-style" data-testid="select-image-style">
+                      <SelectValue placeholder="Select a style" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default</SelectItem>
+                      {imageStyles.map((style) => (
+                        <SelectItem key={style.id} value={style.id}>
+                          {style.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-2">

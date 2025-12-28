@@ -1154,7 +1154,7 @@ Respond in JSON format:
   // ============ IMAGE GENERATION (Gemini Nano Banana) ============
   app.post("/api/images/generate", async (req, res) => {
     try {
-      const { prompt, styleId, imageType } = req.body;
+      const { prompt, styleId, imageType, provider = "gemini" } = req.body;
       
       if (!prompt) {
         return res.status(400).json({ error: "Prompt is required" });
@@ -1174,43 +1174,78 @@ Respond in JSON format:
         }
       }
 
-      // Import Gemini client dynamically
-      const { GoogleGenAI } = await import("@google/genai");
-      
-      const ai = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-        httpOptions: {
-          apiVersion: "",
-          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-        },
-      });
-
       const fullPrompt = stylePrompt 
         ? `${prompt}. Style: ${stylePrompt}. Aspect ratio: ${aspectRatio}`
         : `${prompt}. Aspect ratio: ${aspectRatio}`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
-        contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-        config: {
-          responseModalities: ["TEXT", "IMAGE"],
-        },
-      });
+      if (provider === "openai") {
+        // Use OpenAI gpt-image-1 for image generation
+        const openai = new OpenAI({
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        });
 
-      const candidate = response.candidates?.[0];
-      const imagePart = candidate?.content?.parts?.find(
-        (part: any) => part.inlineData
-      );
+        // Map aspect ratio to OpenAI size
+        let size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
+        if (aspectRatio === "16:9") {
+          size = "1536x1024";
+        } else if (aspectRatio === "9:16") {
+          size = "1024x1536";
+        }
 
-      if (!imagePart?.inlineData?.data) {
-        return res.status(500).json({ error: "No image data in response" });
+        const response = await openai.images.generate({
+          model: "gpt-image-1",
+          prompt: fullPrompt,
+          n: 1,
+          size: size,
+        });
+
+        const imageData = response.data?.[0]?.b64_json;
+        if (!imageData) {
+          return res.status(500).json({ error: "No image data in OpenAI response" });
+        }
+
+        res.json({
+          imageData: `data:image/png;base64,${imageData}`,
+          imageType: imageType || "featured",
+          provider: "openai",
+        });
+      } else {
+        // Use Gemini for image generation (default)
+        const { GoogleGenAI } = await import("@google/genai");
+        
+        const ai = new GoogleGenAI({
+          apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+          httpOptions: {
+            apiVersion: "",
+            baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+          },
+        });
+
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-image",
+          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+          config: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        });
+
+        const candidate = response.candidates?.[0];
+        const imagePart = candidate?.content?.parts?.find(
+          (part: any) => part.inlineData
+        );
+
+        if (!imagePart?.inlineData?.data) {
+          return res.status(500).json({ error: "No image data in response" });
+        }
+
+        const mimeType = imagePart.inlineData.mimeType || "image/png";
+        res.json({
+          imageData: `data:${mimeType};base64,${imagePart.inlineData.data}`,
+          imageType: imageType || "featured",
+          provider: "gemini",
+        });
       }
-
-      const mimeType = imagePart.inlineData.mimeType || "image/png";
-      res.json({
-        imageData: `data:${mimeType};base64,${imagePart.inlineData.data}`,
-        imageType: imageType || "featured",
-      });
     } catch (error) {
       console.error("Image generation error:", error);
       res.status(500).json({ error: "Failed to generate image" });
