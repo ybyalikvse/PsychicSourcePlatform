@@ -18,7 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Search, Trash2, Eye, Edit } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +33,7 @@ export default function Content() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteArticle, setDeleteArticle] = useState<Article | null>(null);
+  const [viewArticle, setViewArticle] = useState<Article | null>(null);
 
   const { data: articles = [], isLoading } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
@@ -78,11 +81,11 @@ export default function Content() {
   };
 
   const handleEdit = (article: Article) => {
-    toast({ title: "Edit functionality coming soon" });
+    setLocation(`/edit/${article.id}`);
   };
 
   const handleView = (article: Article) => {
-    window.open(`/${article.slug}`, "_blank");
+    setViewArticle(article);
   };
 
   const handleDelete = (article: Article) => {
@@ -180,6 +183,51 @@ export default function Content() {
               data-testid="button-confirm-delete"
             >
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewArticle} onOpenChange={() => setViewArticle(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="text-xl">{viewArticle?.title}</DialogTitle>
+            <DialogDescription className="flex items-center gap-2 pt-2">
+              <Badge variant={viewArticle?.status === "published" ? "default" : "secondary"}>
+                {viewArticle?.status}
+              </Badge>
+              {viewArticle?.targetKeyword && (
+                <span className="text-sm">Target: {viewArticle.targetKeyword}</span>
+              )}
+              {viewArticle?.wordCount && (
+                <span className="text-sm">{viewArticle.wordCount} words</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[50vh] pr-4">
+            <div 
+              className="prose prose-sm dark:prose-invert max-w-none"
+              dangerouslySetInnerHTML={{ __html: viewArticle?.content || "" }}
+            />
+          </ScrollArea>
+          {(viewArticle?.metaTitle || viewArticle?.metaDescription) && (
+            <div className="border-t pt-4 space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">SEO Metadata</p>
+              {viewArticle.metaTitle && (
+                <p className="text-sm"><strong>Title:</strong> {viewArticle.metaTitle}</p>
+              )}
+              {viewArticle.metaDescription && (
+                <p className="text-sm"><strong>Description:</strong> {viewArticle.metaDescription}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewArticle(null)}>
+              Close
+            </Button>
+            <Button onClick={() => { setViewArticle(null); viewArticle && handleEdit(viewArticle); }}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Article
             </Button>
           </DialogFooter>
         </DialogContent>

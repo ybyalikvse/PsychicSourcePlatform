@@ -14,6 +14,7 @@ import { useEffect } from "react";
 import Dashboard from "@/pages/dashboard";
 import Content from "@/pages/content";
 import Create from "@/pages/create";
+import Edit from "@/pages/edit";
 import Keywords from "@/pages/keywords";
 import Performance from "@/pages/performance";
 import Analytics from "@/pages/analytics";
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/content" component={Content} />
       <Route path="/create" component={Create} />
+      <Route path="/edit/:id" component={Edit} />
       <Route path="/keywords" component={Keywords} />
       <Route path="/performance" component={Performance} />
       <Route path="/analytics" component={Analytics} />
