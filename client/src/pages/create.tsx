@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { TiptapEditor } from "@/components/tiptap-editor";
 import type { WritingStyle, SeoSettings } from "@shared/schema";
 
 interface MetaSuggestions {
@@ -222,6 +223,10 @@ export default function CreateWithAI() {
     return h1Match ? h1Match[1].replace(/<[^>]*>/g, "") : "";
   };
 
+  const stripHtmlTags = (html: string): string => {
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
   const handleCopyContent = () => {
     navigator.clipboard.writeText(generatedContent);
     toast({ title: "Content copied to clipboard" });
@@ -239,7 +244,7 @@ export default function CreateWithAI() {
     });
   };
 
-  const currentWordCount = generatedContent.split(/\s+/).filter(Boolean).length;
+  const currentWordCount = stripHtmlTags(generatedContent).split(/\s+/).filter(Boolean).length;
 
   return (
     <div className="space-y-6" data-testid="page-create">
@@ -458,16 +463,13 @@ export default function CreateWithAI() {
               )}
               
               {generatedContent ? (
-                <ScrollArea className="h-[600px]">
-                  <div 
-                    className="prose prose-sm dark:prose-invert max-w-none"
-                    data-testid="text-generated-content"
-                  >
-                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                      {generatedContent}
-                    </pre>
-                  </div>
-                </ScrollArea>
+                <div data-testid="text-generated-content">
+                  <TiptapEditor 
+                    content={generatedContent}
+                    onChange={(html) => setGeneratedContent(html)}
+                    editable={true}
+                  />
+                </div>
               ) : (
                 <div className="h-[600px] flex items-center justify-center text-center">
                   <div className="max-w-md">
