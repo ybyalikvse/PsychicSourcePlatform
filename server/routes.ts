@@ -147,39 +147,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Keyword is required" });
       }
       
-      let volume: number | null = null;
-      let difficulty: number | null = null;
-      
-      // Try to fetch Ahrefs data if connected
-      const ahrefsIntegration = await storage.getIntegration("ahrefs");
-      if (ahrefsIntegration?.status === "connected" && process.env.AHREFS_API_KEY) {
-        try {
-          const ahrefsResponse = await fetch(
-            `https://api.ahrefs.com/v3/keywords-explorer/overview?country=us&keywords=${encodeURIComponent(keyword)}&select=keyword,volume,keyword_difficulty`,
-            {
-              headers: {
-                "Authorization": `Bearer ${process.env.AHREFS_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-          
-          if (ahrefsResponse.ok) {
-            const ahrefsData = await ahrefsResponse.json();
-            if (ahrefsData.keywords && ahrefsData.keywords[0]) {
-              volume = ahrefsData.keywords[0].volume || null;
-              difficulty = ahrefsData.keywords[0].keyword_difficulty || null;
-            }
-          }
-        } catch (ahrefsError) {
-          console.error("Ahrefs API error:", ahrefsError);
-        }
-      }
-      
       const newKeyword = await storage.createKeyword({
         keyword,
-        volume,
-        difficulty,
+        volume: null,
+        difficulty: null,
         currentPosition: null,
         previousPosition: null,
         url: null,
@@ -190,110 +161,6 @@ export async function registerRoutes(
       res.status(201).json(newKeyword);
     } catch (error) {
       res.status(500).json({ error: "Failed to create keyword" });
-    }
-  });
-  
-  // Analyze keyword with Ahrefs - get SEO recommendations
-  app.get("/api/keywords/:id/analyze", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const keyword = await storage.getKeyword(id);
-      
-      if (!keyword) {
-        return res.status(404).json({ error: "Keyword not found" });
-      }
-      
-      const ahrefsIntegration = await storage.getIntegration("ahrefs");
-      if (!ahrefsIntegration || ahrefsIntegration.status !== "connected") {
-        return res.status(400).json({ 
-          error: "Ahrefs not connected",
-          message: "Please connect Ahrefs in the Integrations page to analyze keywords.",
-          requiresConnection: true
-        });
-      }
-      
-      if (!process.env.AHREFS_API_KEY) {
-        return res.status(400).json({ 
-          error: "Ahrefs API key not configured",
-          message: "AHREFS_API_KEY is not set."
-        });
-      }
-      
-      // Fetch keyword overview from Ahrefs
-      const ahrefsResponse = await fetch(
-        `https://api.ahrefs.com/v3/keywords-explorer/overview?country=us&keywords=${encodeURIComponent(keyword.keyword)}&select=keyword,volume,keyword_difficulty,cpc,traffic_potential,parent_topic,global_volume`,
-        {
-          headers: {
-            "Authorization": `Bearer ${process.env.AHREFS_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      
-      if (!ahrefsResponse.ok) {
-        const errorText = await ahrefsResponse.text();
-        console.error("Ahrefs API error:", errorText);
-        return res.status(ahrefsResponse.status).json({ 
-          error: "Ahrefs API error",
-          message: `Failed to fetch keyword data: ${errorText}`
-        });
-      }
-      
-      const ahrefsData = await ahrefsResponse.json();
-      const keywordData = ahrefsData.keywords?.[0] || {};
-      
-      // Update keyword with Ahrefs data
-      await storage.updateKeyword(id, {
-        volume: keywordData.volume || null,
-        difficulty: keywordData.keyword_difficulty || null,
-      });
-      
-      // Generate recommendations based on keyword data
-      const recommendations: string[] = [];
-      
-      if (keywordData.keyword_difficulty !== undefined) {
-        if (keywordData.keyword_difficulty < 30) {
-          recommendations.push("Low competition keyword - great opportunity for quick wins!");
-        } else if (keywordData.keyword_difficulty < 60) {
-          recommendations.push("Medium competition - requires quality content and some backlinks.");
-        } else {
-          recommendations.push("High competition keyword - focus on long-tail variations or build domain authority first.");
-        }
-      }
-      
-      if (keywordData.volume !== undefined) {
-        if (keywordData.volume > 10000) {
-          recommendations.push("High search volume - prioritize this keyword for maximum traffic impact.");
-        } else if (keywordData.volume > 1000) {
-          recommendations.push("Good search volume - worth targeting with comprehensive content.");
-        } else {
-          recommendations.push("Lower search volume - consider targeting as part of a topic cluster.");
-        }
-      }
-      
-      if (keywordData.parent_topic) {
-        recommendations.push(`Consider also targeting the parent topic: "${keywordData.parent_topic}"`);
-      }
-      
-      if (keywordData.cpc && keywordData.cpc > 5) {
-        recommendations.push("High CPC indicates commercial intent - consider product/service focused content.");
-      }
-      
-      res.json({
-        keyword: keyword.keyword,
-        metrics: {
-          volume: keywordData.volume || 0,
-          difficulty: keywordData.keyword_difficulty || 0,
-          cpc: keywordData.cpc || 0,
-          trafficPotential: keywordData.traffic_potential || 0,
-          globalVolume: keywordData.global_volume || 0,
-          parentTopic: keywordData.parent_topic || null,
-        },
-        recommendations,
-      });
-    } catch (error) {
-      console.error("Keyword analysis error:", error);
-      res.status(500).json({ error: "Failed to analyze keyword" });
     }
   });
 
@@ -918,56 +785,6 @@ export async function registerRoutes(
           authUrl: authUrl.toString(),
           message: "Please complete the OAuth flow to connect Google Search Console."
         });
-      } else if (name === "ahrefs") {
-        if (!process.env.AHREFS_API_KEY) {
-          return res.status(400).json({ 
-            error: "Ahrefs API key not configured",
-            message: "AHREFS_API_KEY is not set. Please add it to your secrets."
-          });
-        }
-        
-        // Test the API key by making a simple request to Keywords Explorer
-        let apiStatus = "connected";
-        let apiMessage = "Connected to Ahrefs";
-        
-        try {
-          const testResponse = await fetch(
-            "https://api.ahrefs.com/v3/keywords-explorer/overview?country=us&keywords=test&select=keyword,volume",
-            {
-              headers: {
-                "Authorization": `Bearer ${process.env.AHREFS_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-          
-          if (!testResponse.ok) {
-            const errorData = await testResponse.json().catch(() => ({}));
-            if (errorData.error === "Insufficient plan") {
-              // API key is valid but plan doesn't include API access
-              apiStatus = "configured";
-              apiMessage = "API key saved. Note: Ahrefs API requires Enterprise plan ($1,249+/month) for full functionality.";
-            } else if (testResponse.status === 401 || testResponse.status === 403) {
-              return res.status(400).json({ 
-                error: "Ahrefs API key invalid",
-                message: "The API key appears to be invalid. Please check and try again."
-              });
-            }
-          }
-        } catch (apiError) {
-          // Network error - save anyway since key might be valid
-          apiStatus = "configured";
-          apiMessage = "API key saved. Could not verify connection at this time.";
-        }
-        
-        await storage.upsertIntegration({
-          name: "ahrefs",
-          status: apiStatus,
-          lastSync: new Date().toISOString(),
-          config: JSON.stringify({ note: apiMessage }),
-        });
-        
-        res.json({ success: true, message: apiMessage });
       } else if (name === "ga") {
         // GA tracking is already set up via VITE_GA_MEASUREMENT_ID
         // For data API, we'd need a service account

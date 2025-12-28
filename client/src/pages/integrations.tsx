@@ -4,7 +4,7 @@ import { useLocation, useSearch } from "wouter";
 import { IntegrationCard } from "@/components/integration-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, Search, Zap, CheckCircle, XCircle, Link2 } from "lucide-react";
+import { BarChart3, Search, Zap, CheckCircle, XCircle } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Integration } from "@shared/schema";
@@ -113,12 +113,6 @@ export default function Integrations() {
   });
 
   const integrationsList = [
-    {
-      name: "Ahrefs",
-      key: "ahrefs",
-      description: "SEO metrics, keyword research, and AI content optimization",
-      icon: <Link2 className="h-5 w-5" />,
-    },
     {
       name: "Google Search Console",
       key: "gsc",
