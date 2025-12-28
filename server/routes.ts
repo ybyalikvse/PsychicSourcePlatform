@@ -1780,7 +1780,13 @@ Example response:
         const { GoogleGenAI } = await import("@google/genai");
         const genAI = new GoogleGenAI({
           apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+          httpOptions: {
+            apiVersion: "",
+            baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+          },
         });
+
+        console.log(`[Optimize] Gemini API initialized, page content: ${pageContent.wordCount} words, competitors: ${competitors.length}`);
 
         // Build comprehensive prompt with FULL content from all sources
         const analysisPrompt = `You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
@@ -1849,10 +1855,13 @@ Be extremely specific and actionable. Reference specific competitor content when
 
         const response = await genAI.models.generateContent({
           model: "gemini-2.0-flash",
-          contents: analysisPrompt,
+          contents: [{ role: "user", parts: [{ text: analysisPrompt }] }],
         });
 
-        const responseText = response.text || "";
+        // Extract text from Gemini response
+        const candidate = response.candidates?.[0];
+        const textPart = candidate?.content?.parts?.find((part: any) => part.text);
+        const responseText = textPart?.text || "";
         console.log(`[Optimize] Gemini response length: ${responseText.length} chars`);
         
         // Extract JSON from response
