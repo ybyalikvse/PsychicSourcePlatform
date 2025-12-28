@@ -217,7 +217,7 @@ export async function registerRoutes(
 
       // Call GSC API for aggregate stats (no dimensions = totals)
       const gscResponse = await fetch(
-        "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Apsychicsource.com/searchAnalytics/query",
+        "https://www.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fwww.psychicsource.com%2F/searchAnalytics/query",
         {
           method: "POST",
           headers: {
@@ -286,7 +286,7 @@ export async function registerRoutes(
 
       // Call Google Search Console API
       const gscResponse = await fetch(
-        "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Apsychicsource.com/searchAnalytics/query",
+        "https://www.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fwww.psychicsource.com%2F/searchAnalytics/query",
         {
           method: "POST",
           headers: {
@@ -369,7 +369,7 @@ export async function registerRoutes(
 
       // Call GSC API for top pages
       const gscResponse = await fetch(
-        "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Apsychicsource.com/searchAnalytics/query",
+        "https://www.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fwww.psychicsource.com%2F/searchAnalytics/query",
         {
           method: "POST",
           headers: {
