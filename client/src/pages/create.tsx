@@ -229,6 +229,9 @@ export default function CreateWithAI() {
         }
       }
 
+      const cleanedContent = cleanGeneratedContent(fullContent);
+      setGeneratedContent(cleanedContent);
+      
       toast({ title: "Content generated successfully" });
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
@@ -240,6 +243,27 @@ export default function CreateWithAI() {
       abortControllerRef.current = null;
     }
   }, [targetKeyword, recommendedKeywords, selectedStyleId, wordCount, toast]);
+
+  const cleanGeneratedContent = (content: string): string => {
+    let cleaned = content;
+    
+    // Remove code block wrappers (```html ... ``` or ``` ... ```)
+    cleaned = cleaned.replace(/^```(?:html)?\s*\n?/i, "");
+    cleaned = cleaned.replace(/\n?```\s*$/i, "");
+    
+    // Convert markdown headers to HTML if they slipped through
+    cleaned = cleaned.replace(/^######\s+(.*)$/gm, "<h6>$1</h6>");
+    cleaned = cleaned.replace(/^#####\s+(.*)$/gm, "<h5>$1</h5>");
+    cleaned = cleaned.replace(/^####\s+(.*)$/gm, "<h4>$1</h4>");
+    cleaned = cleaned.replace(/^###\s+(.*)$/gm, "<h3>$1</h3>");
+    cleaned = cleaned.replace(/^##\s+(.*)$/gm, "<h2>$1</h2>");
+    cleaned = cleaned.replace(/^#\s+(.*)$/gm, "<h1>$1</h1>");
+    
+    // Clean up any standalone ### that might remain
+    cleaned = cleaned.replace(/#{2,6}\s*/g, "");
+    
+    return cleaned.trim();
+  };
 
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {

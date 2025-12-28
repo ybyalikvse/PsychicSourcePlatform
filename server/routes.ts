@@ -959,29 +959,45 @@ ${style.exampleText}` : ""}`;
         ? `Include these related keywords/phrases naturally: ${recommendedKeywords.join(", ")}`
         : "";
 
-      const systemPrompt = `You are an expert SEO content writer for Psychic Source. Write engaging, informative content that helps readers while being optimized for search engines.
-${styleInstructions}
-
-These style requirements are NON-NEGOTIABLE. Follow every instruction precisely.`;
-
       const targetWordCount = wordCount || 1500;
+      
+      const systemPrompt = `You are an expert SEO content writer for Psychic Source, a spiritual wellness and psychic reading website.
+
+ABSOLUTE RULES - VIOLATION OF THESE WILL RESULT IN REJECTION:
+
+1. OUTPUT FORMAT: Write ONLY clean HTML. 
+   - Use <h1>, <h2>, <h3> tags for headings - NEVER use markdown # or ### symbols
+   - Use <p> tags for paragraphs
+   - Use <ul>/<li> for lists
+   - NEVER wrap output in code blocks or backticks
+   - NEVER start with \`\`\`html or end with \`\`\`
+   - Output raw HTML directly with no wrappers
+
+2. WORD COUNT: You MUST write EXACTLY ${targetWordCount} words. This is a strict, non-negotiable requirement.
+   - Plan your article structure to hit this target precisely
+   - If I ask for 1500 words, write 1500 words - not 800, not 2500
+   - Count words carefully as you write
+${styleInstructions}`;
+
       const userPrompt = `Write a comprehensive SEO-optimized article about "${targetKeyword}".
 
-CRITICAL REQUIREMENTS:
-- WORD COUNT: You MUST write EXACTLY ${targetWordCount} words (+-5%). This is a strict requirement. Count your words carefully.
-- Use proper HTML heading structure (H1, H2, H3)
-- Include the primary keyword "${targetKeyword}" naturally throughout
-- Make the content informative, engaging, and valuable to readers
-${keywordsList}
+REQUIREMENTS:
+- Primary keyword: "${targetKeyword}" - use naturally throughout (8-12 times)
+${keywordsList ? `- ${keywordsList}` : ""}
+- Word count: EXACTLY ${targetWordCount} words (count carefully!)
 
-Output format:
-- Start with an engaging H1 title
-- Include an introduction paragraph
-- Use H2 subheadings for main sections
-- Use H3 subheadings for subsections where appropriate
-- End with a conclusion
+STRUCTURE:
+<h1>[Compelling title with keyword]</h1>
+<p>[Engaging intro - 100-150 words]</p>
+<h2>[Main section 1]</h2>
+<p>[Content...]</p>
+<h2>[Main section 2]</h2>
+<p>[Content...]</p>
+[Continue with 4-6 main sections...]
+<h2>Conclusion</h2>
+<p>[Wrap up - 100-150 words]</p>
 
-Remember: The article MUST be ${targetWordCount} words. Write the complete article now:`;
+Write the complete ${targetWordCount}-word article now. Output clean HTML only:`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
