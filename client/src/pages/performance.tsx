@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DataState } from "@/components/data-state";
 import { Eye, MousePointer, TrendingUp, BarChart3, ExternalLink } from "lucide-react";
 
 interface TopPage {
@@ -26,28 +27,54 @@ interface TopPage {
 export default function Performance() {
   const [dateRange, setDateRange] = useState("30d");
 
-  const { data: stats } = useQuery<{
+  const { data: stats, isError: isStatsError } = useQuery<{
     totalClicks: number;
     totalImpressions: number;
     avgCtr: number;
     avgPosition: number;
   }>({
-    queryKey: ["/api/performance/stats", { range: dateRange }],
+    queryKey: ["/api/performance/stats"],
+    retry: false,
   });
 
-  const { data: chartData } = useQuery<{
+  const { data: chartData, isError: isChartError } = useQuery<{
     date: string;
     clicks: number;
     impressions: number;
     ctr: number;
     position: number;
   }[]>({
-    queryKey: ["/api/performance/chart", { range: dateRange }],
+    queryKey: ["/api/performance/chart"],
+    retry: false,
   });
 
-  const { data: topPages } = useQuery<TopPage[]>({
-    queryKey: ["/api/performance/top-pages", { range: dateRange }],
+  const { data: topPages, isError: isTopPagesError } = useQuery<TopPage[]>({
+    queryKey: ["/api/performance/top-pages"],
+    retry: false,
   });
+  
+  const isDisconnected = isStatsError || isChartError || isTopPagesError;
+
+  if (isDisconnected) {
+    return (
+      <div className="space-y-6" data-testid="page-performance">
+        <div>
+          <h1 className="text-2xl font-semibold">Performance</h1>
+          <p className="text-muted-foreground">
+            Search performance from Google Search Console
+          </p>
+        </div>
+        <DataState
+          status="disconnected"
+          title="Google Search Console Not Connected"
+          message="Connect your Google Search Console account to view search performance data including clicks, impressions, CTR, and ranking positions."
+          actions={[
+            { label: "Connect Google Search Console", href: "/integrations" },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" data-testid="page-performance">

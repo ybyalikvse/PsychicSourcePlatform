@@ -3,6 +3,7 @@ import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DataState } from "@/components/data-state";
 import {
   Select,
   SelectContent,
@@ -47,9 +48,31 @@ const CHART_COLORS = [
 export default function Analytics() {
   const [dateRange, setDateRange] = useState("30d");
 
-  const { data: analytics } = useQuery<AnalyticsData>({
-    queryKey: ["/api/analytics", { range: dateRange }],
+  const { data: analytics, isError } = useQuery<AnalyticsData>({
+    queryKey: ["/api/analytics"],
+    retry: false,
   });
+  
+  if (isError) {
+    return (
+      <div className="space-y-6" data-testid="page-analytics">
+        <div>
+          <h1 className="text-2xl font-semibold">Analytics</h1>
+          <p className="text-muted-foreground">
+            Website traffic and engagement metrics
+          </p>
+        </div>
+        <DataState
+          status="disconnected"
+          title="Google Analytics Data API Not Connected"
+          message="To view historical analytics data, you need to set up a Google Analytics 4 service account. The current GA Measurement ID is only used for tracking page views on this site."
+          actions={[
+            { label: "Learn More", href: "/integrations" },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" data-testid="page-analytics">

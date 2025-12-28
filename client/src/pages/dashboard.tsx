@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MultiMetricChart } from "@/components/performance-chart";
+import { InlineDataState } from "@/components/data-state";
 import {
   FileText,
   Search,
@@ -16,6 +17,12 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Article, Keyword } from "@shared/schema";
+
+interface ApiError {
+  error: string;
+  message?: string;
+  requiresConnection?: boolean;
+}
 
 export default function Dashboard() {
   const { data: stats } = useQuery<{
@@ -39,15 +46,20 @@ export default function Dashboard() {
     queryKey: ["/api/keywords?limit=5&sort=clicks"],
   });
 
-  const { data: performanceData } = useQuery<{
+  const { data: performanceData, error: performanceError, isError: isPerformanceError } = useQuery<{
     date: string;
     clicks: number;
     impressions: number;
     ctr: number;
     position: number;
-  }[]>({
+  }[], Error>({
     queryKey: ["/api/performance/chart"],
+    retry: false,
   });
+  
+  const performanceApiError = isPerformanceError ? 
+    (performanceError as any)?.message?.includes("requiresConnection") ||
+    (performanceError as any)?.message?.includes("not connected") : false;
 
   return (
     <div className="space-y-6" data-testid="page-dashboard">
@@ -87,10 +99,26 @@ export default function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <MultiMetricChart
-            data={performanceData || []}
-            title="Performance Trend"
-          />
+          {isPerformanceError ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">Performance Trend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <InlineDataState
+                  status="disconnected"
+                  title="Google Search Console Not Connected"
+                  message="Connect GSC in Integrations to see search performance data."
+                  actions={[{ label: "Go to Integrations", href: "/integrations" }]}
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <MultiMetricChart
+              data={performanceData || []}
+              title="Performance Trend"
+            />
+          )}
         </div>
 
         <Card>

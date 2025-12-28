@@ -1,4 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import { IntegrationCard } from "@/components/integration-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +11,33 @@ import type { Integration } from "@shared/schema";
 
 export default function Integrations() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
+  
+  // Handle OAuth callback messages
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const success = params.get("success");
+    const error = params.get("error");
+    
+    if (success) {
+      toast({
+        title: "Connected",
+        description: decodeURIComponent(success.replace(/\+/g, " ")),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      setLocation("/integrations", { replace: true });
+    }
+    
+    if (error) {
+      toast({
+        title: "Connection Failed",
+        description: decodeURIComponent(error.replace(/\+/g, " ")),
+        variant: "destructive",
+      });
+      setLocation("/integrations", { replace: true });
+    }
+  }, [searchString, toast, setLocation]);
 
   const { data: integrations = [] } = useQuery<Integration[]>({
     queryKey: ["/api/integrations"],
@@ -46,23 +75,25 @@ export default function Integrations() {
 
   const connectMutation = useMutation({
     mutationFn: async (name: string) => {
-      return await apiRequest("POST", `/api/integrations/${name}/connect`);
+      const response = await apiRequest("POST", `/api/integrations/${name}/connect`);
+      return await response.json();
     },
-    onSuccess: (response, name) => {
+    onSuccess: (data, name) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-      if (response?.authUrl) {
-        window.open(response.authUrl, "_blank");
+      if (data?.requiresOAuth && data?.authUrl) {
+        // Redirect to OAuth in same window for GSC
+        window.location.href = data.authUrl;
       } else {
         toast({
           title: "Connected",
-          description: `${name} has been connected successfully.`,
+          description: data?.message || `${name} has been connected successfully.`,
         });
       }
     },
-    onError: (_, name) => {
+    onError: (error: any, name) => {
       toast({
         title: "Connection failed",
-        description: `Could not connect ${name}. Please check your API keys.`,
+        description: error?.message || `Could not connect ${name}. Please check your API keys.`,
         variant: "destructive",
       });
     },

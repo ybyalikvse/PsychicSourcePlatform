@@ -3,6 +3,15 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertArticleSchema, insertKeywordSchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
+import crypto from "crypto";
+
+// OAuth state storage (in production, use Redis or similar)
+const oauthStates = new Map<string, { timestamp: number }>();
+
+// Google OAuth configuration
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GSC_SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 
 export async function registerRoutes(
   httpServer: Server,
@@ -157,9 +166,21 @@ export async function registerRoutes(
 
   app.post("/api/keywords/sync", async (req, res) => {
     try {
-      // In production, this would fetch data from Google Search Console
-      // For now, simulate a sync operation
-      res.json({ success: true, message: "Keywords synced from Search Console" });
+      const gscIntegration = await storage.getIntegration("gsc");
+      
+      if (!gscIntegration || gscIntegration.status !== "connected") {
+        return res.status(400).json({ 
+          error: "Google Search Console not connected",
+          message: "Please connect Google Search Console in the Integrations page to sync keywords.",
+          requiresConnection: true
+        });
+      }
+
+      // TODO: Implement actual GSC API call to fetch search queries
+      return res.status(501).json({ 
+        error: "GSC API integration pending",
+        message: "Google Search Console API integration is being set up."
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to sync keywords" });
     }
@@ -168,6 +189,17 @@ export async function registerRoutes(
   // ============ PERFORMANCE (GSC Data) ============
   app.get("/api/performance/stats", async (req, res) => {
     try {
+      const gscIntegration = await storage.getIntegration("gsc");
+      
+      if (!gscIntegration || gscIntegration.status !== "connected") {
+        return res.status(400).json({ 
+          error: "Google Search Console not connected",
+          message: "Please connect Google Search Console in the Integrations page to view performance stats.",
+          requiresConnection: true
+        });
+      }
+
+      // If connected, use stored keywords data (synced from GSC)
       const keywords = await storage.getKeywords();
       const totalClicks = keywords.reduce((sum, k) => sum + (k.clicks || 0), 0);
       const totalImpressions = keywords.reduce((sum, k) => sum + (k.impressions || 0), 0);
@@ -189,21 +221,22 @@ export async function registerRoutes(
 
   app.get("/api/performance/chart", async (req, res) => {
     try {
-      // Generate sample chart data for the last 30 days
-      const data = [];
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        const baseClicks = 100 + Math.floor(Math.random() * 50);
-        const baseImpressions = baseClicks * (15 + Math.floor(Math.random() * 10));
-        data.push({
-          date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          clicks: baseClicks + Math.floor(i * 2),
-          impressions: baseImpressions + Math.floor(i * 30),
-          ctr: parseFloat(((baseClicks / baseImpressions) * 100).toFixed(2)),
-          position: 8 + Math.random() * 4 - i * 0.05,
+      const gscIntegration = await storage.getIntegration("gsc");
+      
+      if (!gscIntegration || gscIntegration.status !== "connected") {
+        return res.status(400).json({ 
+          error: "Google Search Console not connected",
+          message: "Please connect Google Search Console in the Integrations page to view performance data.",
+          requiresConnection: true
         });
       }
-      res.json(data);
+
+      // TODO: Implement actual Google Search Console API call
+      // This requires OAuth tokens stored in gscIntegration.config
+      return res.status(501).json({ 
+        error: "GSC API integration pending",
+        message: "Google Search Console API integration is being set up. The OAuth flow needs to be completed."
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch chart data" });
     }
@@ -211,15 +244,21 @@ export async function registerRoutes(
 
   app.get("/api/performance/top-pages", async (req, res) => {
     try {
-      // Sample top pages data
-      const topPages = [
-        { url: "https://www.psychicsource.com/how-to-get-psychic-reading", clicks: 1250, impressions: 45000, ctr: 2.78, position: 8.2 },
-        { url: "https://www.psychicsource.com/tarot-card-meanings", clicks: 890, impressions: 32000, ctr: 2.78, position: 5.1 },
-        { url: "https://www.psychicsource.com/love-psychics", clicks: 1800, impressions: 25000, ctr: 7.20, position: 3.4 },
-        { url: "https://www.psychicsource.com/horoscopes", clicks: 650, impressions: 28000, ctr: 2.32, position: 12.3 },
-        { url: "https://www.psychicsource.com/free-reading", clicks: 450, impressions: 28000, ctr: 1.61, position: 15.7 },
-      ];
-      res.json(topPages);
+      const gscIntegration = await storage.getIntegration("gsc");
+      
+      if (!gscIntegration || gscIntegration.status !== "connected") {
+        return res.status(400).json({ 
+          error: "Google Search Console not connected",
+          message: "Please connect Google Search Console in the Integrations page to view top pages.",
+          requiresConnection: true
+        });
+      }
+
+      // TODO: Implement actual GSC API call for top pages
+      return res.status(501).json({ 
+        error: "GSC API integration pending",
+        message: "Google Search Console API integration is being set up."
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch top pages" });
     }
@@ -228,40 +267,23 @@ export async function registerRoutes(
   // ============ ANALYTICS (GA Data) ============
   app.get("/api/analytics", async (req, res) => {
     try {
-      const range = req.query.range as string || "30d";
-      const days = range === "7d" ? 7 : range === "90d" ? 90 : 30;
+      // Google Analytics 4 Data API requires a service account or OAuth
+      // The VITE_GA_MEASUREMENT_ID is only for frontend tracking, not for reading data
+      const gaIntegration = await storage.getIntegration("ga");
       
-      // Generate sample analytics data
-      const chartData = [];
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        chartData.push({
-          date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          views: 500 + Math.floor(Math.random() * 300),
-          visitors: 200 + Math.floor(Math.random() * 150),
+      if (!gaIntegration || gaIntegration.status !== "connected") {
+        return res.status(400).json({ 
+          error: "Google Analytics Data API not connected",
+          message: "To view analytics data, you need to set up a Google Analytics Data API connection with a service account. The current GA Measurement ID is only for tracking, not for reading historical data.",
+          requiresConnection: true,
+          hint: "You'll need to create a service account in Google Cloud Console and grant it access to your GA4 property."
         });
       }
 
-      res.json({
-        pageViews: chartData.reduce((sum, d) => sum + d.views, 0),
-        uniqueVisitors: Math.floor(chartData.reduce((sum, d) => sum + d.visitors, 0) * 0.7),
-        bounceRate: 42.5,
-        avgSessionDuration: "2:34",
-        topPages: [
-          { page: "/how-to-get-psychic-reading", views: 4520 },
-          { page: "/tarot-card-meanings", views: 3890 },
-          { page: "/love-psychics", views: 3210 },
-          { page: "/horoscopes", views: 2850 },
-          { page: "/free-reading", views: 2340 },
-        ],
-        trafficSources: [
-          { source: "Organic", value: 45 },
-          { source: "Direct", value: 25 },
-          { source: "Referral", value: 15 },
-          { source: "Social", value: 10 },
-          { source: "Paid", value: 5 },
-        ],
-        chartData,
+      // TODO: Implement actual GA4 Data API call
+      return res.status(501).json({ 
+        error: "GA Data API integration pending",
+        message: "Google Analytics Data API integration requires a service account to be configured."
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch analytics" });
@@ -469,30 +491,182 @@ export async function registerRoutes(
     }
   });
 
+  // GSC OAuth - Step 1: Get authorization URL
+  app.get("/api/integrations/gsc/auth-url", async (req, res) => {
+    try {
+      const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
+      if (!clientId) {
+        return res.status(400).json({ 
+          error: "Google Search Console not configured",
+          message: "GOOGLE_SEARCH_CONSOLE_CLIENT_ID is not set in environment variables."
+        });
+      }
+
+      // Generate state for CSRF protection
+      const state = crypto.randomBytes(32).toString("hex");
+      oauthStates.set(state, { timestamp: Date.now() });
+
+      // Clean up old states (older than 10 minutes)
+      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+      for (const [key, value] of oauthStates.entries()) {
+        if (value.timestamp < tenMinutesAgo) {
+          oauthStates.delete(key);
+        }
+      }
+
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/gsc/callback`;
+      
+      const authUrl = new URL(GOOGLE_AUTH_URL);
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", GSC_SCOPES.join(" "));
+      authUrl.searchParams.set("access_type", "offline");
+      authUrl.searchParams.set("prompt", "consent");
+      authUrl.searchParams.set("state", state);
+
+      res.json({ authUrl: authUrl.toString() });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate auth URL" });
+    }
+  });
+
+  // GSC OAuth - Step 2: Handle callback
+  app.get("/api/integrations/gsc/callback", async (req, res) => {
+    try {
+      const { code, state, error: oauthError } = req.query;
+
+      if (oauthError) {
+        return res.redirect(`/integrations?error=${encodeURIComponent(oauthError as string)}`);
+      }
+
+      if (!code || !state) {
+        return res.redirect("/integrations?error=Missing+code+or+state");
+      }
+
+      // Verify state
+      if (!oauthStates.has(state as string)) {
+        return res.redirect("/integrations?error=Invalid+state+parameter");
+      }
+      oauthStates.delete(state as string);
+
+      const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET;
+      
+      if (!clientId || !clientSecret) {
+        return res.redirect("/integrations?error=OAuth+credentials+not+configured");
+      }
+
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/gsc/callback`;
+
+      // Exchange code for tokens
+      const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code: code as string,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.text();
+        console.error("Token exchange failed:", errorData);
+        return res.redirect("/integrations?error=Token+exchange+failed");
+      }
+
+      const tokens = await tokenResponse.json();
+
+      // Store tokens in integration config
+      await storage.upsertIntegration({
+        name: "gsc",
+        status: "connected",
+        lastSync: new Date().toISOString(),
+        config: JSON.stringify({
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          expiresAt: Date.now() + (tokens.expires_in * 1000),
+        }),
+      });
+
+      res.redirect("/integrations?success=Google+Search+Console+connected");
+    } catch (error) {
+      console.error("OAuth callback error:", error);
+      res.redirect("/integrations?error=OAuth+callback+failed");
+    }
+  });
+
   app.post("/api/integrations/:name/connect", async (req, res) => {
     try {
       const { name } = req.params;
       
       if (name === "gsc") {
-        // For Google Search Console, we need OAuth
+        // For GSC, return the auth URL instead of connecting directly
         const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
         if (!clientId) {
-          return res.status(400).json({ error: "Google Search Console client ID not configured" });
+          return res.status(400).json({ 
+            error: "Google Search Console not configured",
+            message: "GOOGLE_SEARCH_CONSOLE_CLIENT_ID is not set. Please add it to your secrets."
+          });
         }
         
-        // In production, this would redirect to Google OAuth
-        // For now, simulate connection
-        await storage.upsertIntegration({
-          name: "gsc",
-          status: "connected",
-          lastSync: new Date().toISOString(),
-          config: null,
-        });
+        // Generate auth URL and return it
+        const state = crypto.randomBytes(32).toString("hex");
+        oauthStates.set(state, { timestamp: Date.now() });
         
-        res.json({ success: true, message: "Connected to Google Search Console" });
+        const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/gsc/callback`;
+        
+        const authUrl = new URL(GOOGLE_AUTH_URL);
+        authUrl.searchParams.set("client_id", clientId);
+        authUrl.searchParams.set("redirect_uri", redirectUri);
+        authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("scope", GSC_SCOPES.join(" "));
+        authUrl.searchParams.set("access_type", "offline");
+        authUrl.searchParams.set("prompt", "consent");
+        authUrl.searchParams.set("state", state);
+        
+        return res.json({ 
+          requiresOAuth: true,
+          authUrl: authUrl.toString(),
+          message: "Please complete the OAuth flow to connect Google Search Console."
+        });
       } else if (name === "ahrefs") {
         if (!process.env.AHREFS_API_KEY) {
-          return res.status(400).json({ error: "Ahrefs API key not configured" });
+          return res.status(400).json({ 
+            error: "Ahrefs API key not configured",
+            message: "AHREFS_API_KEY is not set. Please add it to your secrets."
+          });
+        }
+        
+        // Test the API key by making a simple request
+        try {
+          const testResponse = await fetch("https://api.ahrefs.com/v3/site-explorer/metrics", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.AHREFS_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              target: "psychicsource.com",
+              mode: "exact",
+            }),
+          });
+          
+          if (!testResponse.ok) {
+            const errorText = await testResponse.text();
+            return res.status(400).json({ 
+              error: "Ahrefs API connection failed",
+              message: `API returned ${testResponse.status}: ${errorText}`
+            });
+          }
+        } catch (apiError) {
+          return res.status(400).json({ 
+            error: "Ahrefs API connection failed",
+            message: "Could not connect to Ahrefs API. Please verify your API key."
+          });
         }
         
         await storage.upsertIntegration({
@@ -504,18 +678,28 @@ export async function registerRoutes(
         
         res.json({ success: true, message: "Connected to Ahrefs" });
       } else if (name === "ga") {
+        // GA tracking is already set up via VITE_GA_MEASUREMENT_ID
+        // For data API, we'd need a service account
         await storage.upsertIntegration({
           name: "ga",
-          status: "connected",
-          lastSync: new Date().toISOString(),
-          config: null,
+          status: process.env.VITE_GA_MEASUREMENT_ID ? "configured" : "disconnected",
+          lastSync: null,
+          config: JSON.stringify({
+            measurementId: process.env.VITE_GA_MEASUREMENT_ID || null,
+            note: "Tracking is active. For historical data, a service account is needed."
+          }),
         });
         
-        res.json({ success: true, message: "Connected to Google Analytics" });
+        res.json({ 
+          success: true, 
+          message: "Google Analytics tracking is active.",
+          note: "To view historical analytics data, you'll need to set up a GA4 service account."
+        });
       } else {
         res.status(404).json({ error: "Unknown integration" });
       }
     } catch (error) {
+      console.error("Connect integration error:", error);
       res.status(500).json({ error: "Failed to connect integration" });
     }
   });
