@@ -7,8 +7,9 @@ import {
   type AnalyticsSnapshot, type InsertAnalyticsSnapshot,
   type WritingStyle, type InsertWritingStyle,
   type SeoSettings, type InsertSeoSettings,
+  type ImageStyle, type InsertImageStyle,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
-  writingStyles, seoSettings,
+  writingStyles, seoSettings, imageStyles,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -58,6 +59,13 @@ export interface IStorage {
   // SEO Settings
   getSeoSettings(): Promise<SeoSettings | undefined>;
   upsertSeoSettings(settings: InsertSeoSettings): Promise<SeoSettings>;
+
+  // Image Styles
+  getImageStyles(): Promise<ImageStyle[]>;
+  getImageStyle(id: string): Promise<ImageStyle | undefined>;
+  createImageStyle(style: InsertImageStyle): Promise<ImageStyle>;
+  updateImageStyle(id: string, style: Partial<InsertImageStyle>): Promise<ImageStyle | undefined>;
+  deleteImageStyle(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -419,6 +427,34 @@ export class DatabaseStorage implements IStorage {
     }
     const [settings] = await db.insert(seoSettings).values(insertSettings).returning();
     return settings;
+  }
+
+  // Image Styles
+  async getImageStyles(): Promise<ImageStyle[]> {
+    return db.select().from(imageStyles).orderBy(imageStyles.name);
+  }
+
+  async getImageStyle(id: string): Promise<ImageStyle | undefined> {
+    const [style] = await db.select().from(imageStyles).where(eq(imageStyles.id, id));
+    return style;
+  }
+
+  async createImageStyle(insertStyle: InsertImageStyle): Promise<ImageStyle> {
+    const [style] = await db.insert(imageStyles).values(insertStyle).returning();
+    return style;
+  }
+
+  async updateImageStyle(id: string, updates: Partial<InsertImageStyle>): Promise<ImageStyle | undefined> {
+    const [style] = await db.update(imageStyles)
+      .set(updates)
+      .where(eq(imageStyles.id, id))
+      .returning();
+    return style;
+  }
+
+  async deleteImageStyle(id: string): Promise<boolean> {
+    await db.delete(imageStyles).where(eq(imageStyles.id, id));
+    return true;
   }
 }
 

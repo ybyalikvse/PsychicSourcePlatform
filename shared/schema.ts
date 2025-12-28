@@ -163,6 +163,26 @@ export const insertSeoSettingsSchema = createInsertSchema(seoSettings).omit({
 export type InsertSeoSettings = z.infer<typeof insertSeoSettingsSchema>;
 export type SeoSettings = typeof seoSettings.$inferSelect;
 
+// Image styles table
+export const imageStyles = pgTable("image_styles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  stylePrompt: text("style_prompt"), // e.g., "photorealistic", "digital art", "watercolor"
+  aspectRatio: text("aspect_ratio").default("16:9"), // 1:1, 16:9, 4:3, 9:16
+  additionalInstructions: text("additional_instructions"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertImageStyleSchema = createInsertSchema(imageStyles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertImageStyle = z.infer<typeof insertImageStyleSchema>;
+export type ImageStyle = typeof imageStyles.$inferSelect;
+
 // TypeScript interfaces for API responses
 export interface AhrefsKeywordData {
   keyword: string;

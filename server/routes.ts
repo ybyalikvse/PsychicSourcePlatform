@@ -1090,5 +1090,128 @@ Respond in JSON format:
     }
   });
 
+  // ============ IMAGE STYLES ============
+  app.get("/api/image-styles", async (req, res) => {
+    try {
+      const styles = await storage.getImageStyles();
+      res.json(styles);
+    } catch (error) {
+      console.error("Error fetching image styles:", error);
+      res.status(500).json({ error: "Failed to fetch image styles" });
+    }
+  });
+
+  app.get("/api/image-styles/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const style = await storage.getImageStyle(id);
+      if (!style) {
+        return res.status(404).json({ error: "Image style not found" });
+      }
+      res.json(style);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch image style" });
+    }
+  });
+
+  app.post("/api/image-styles", async (req, res) => {
+    try {
+      const style = await storage.createImageStyle(req.body);
+      res.status(201).json(style);
+    } catch (error) {
+      console.error("Error creating image style:", error);
+      res.status(500).json({ error: "Failed to create image style" });
+    }
+  });
+
+  app.patch("/api/image-styles/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const style = await storage.updateImageStyle(id, req.body);
+      if (!style) {
+        return res.status(404).json({ error: "Image style not found" });
+      }
+      res.json(style);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update image style" });
+    }
+  });
+
+  app.delete("/api/image-styles/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteImageStyle(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete image style" });
+    }
+  });
+
+  // ============ IMAGE GENERATION (Gemini Nano Banana) ============
+  app.post("/api/images/generate", async (req, res) => {
+    try {
+      const { prompt, styleId, imageType } = req.body;
+      
+      if (!prompt) {
+        return res.status(400).json({ error: "Prompt is required" });
+      }
+
+      // Get image style if provided
+      let stylePrompt = "";
+      let aspectRatio = "16:9";
+      if (styleId) {
+        const style = await storage.getImageStyle(styleId);
+        if (style) {
+          stylePrompt = style.stylePrompt || "";
+          aspectRatio = style.aspectRatio || "16:9";
+          if (style.additionalInstructions) {
+            stylePrompt += " " + style.additionalInstructions;
+          }
+        }
+      }
+
+      // Import Gemini client dynamically
+      const { GoogleGenAI } = await import("@google/genai");
+      
+      const ai = new GoogleGenAI({
+        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        httpOptions: {
+          apiVersion: "",
+          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        },
+      });
+
+      const fullPrompt = stylePrompt 
+        ? `${prompt}. Style: ${stylePrompt}. Aspect ratio: ${aspectRatio}`
+        : `${prompt}. Aspect ratio: ${aspectRatio}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+        config: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      });
+
+      const candidate = response.candidates?.[0];
+      const imagePart = candidate?.content?.parts?.find(
+        (part: any) => part.inlineData
+      );
+
+      if (!imagePart?.inlineData?.data) {
+        return res.status(500).json({ error: "No image data in response" });
+      }
+
+      const mimeType = imagePart.inlineData.mimeType || "image/png";
+      res.json({
+        imageData: `data:${mimeType};base64,${imagePart.inlineData.data}`,
+        imageType: imageType || "featured",
+      });
+    } catch (error) {
+      console.error("Image generation error:", error);
+      res.status(500).json({ error: "Failed to generate image" });
+    }
+  });
+
   return httpServer;
 }
