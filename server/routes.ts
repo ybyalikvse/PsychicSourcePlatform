@@ -5,6 +5,7 @@ import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema } from
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 // OAuth state storage (in production, use Redis or similar)
 const oauthStates = new Map<string, { timestamp: number }>();
@@ -999,9 +1000,9 @@ STRUCTURE:
 
 Write the complete ${targetWordCount}-word article now. Output clean HTML only:`;
 
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      const anthropic = new Anthropic({
+        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
       });
 
       // Set up SSE for streaming
@@ -1012,22 +1013,23 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
       // Calculate max tokens based on word count (roughly 1.5 tokens per word + buffer for HTML tags)
       const maxTokens = Math.min(16000, Math.max(4096, Math.ceil(targetWordCount * 2)));
 
-      const stream = await openai.chat.completions.create({
-        model: "gpt-4o",
+      const stream = anthropic.messages.stream({
+        model: "claude-sonnet-4-5",
+        max_tokens: maxTokens,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        stream: true,
-        max_completion_tokens: maxTokens,
       });
 
       let fullContent = "";
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || "";
-        if (content) {
-          fullContent += content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      for await (const event of stream) {
+        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          const content = event.delta.text;
+          if (content) {
+            fullContent += content;
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          }
         }
       }
 
