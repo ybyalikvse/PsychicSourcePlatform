@@ -1632,107 +1632,60 @@ Example response:
         }
       }
 
-      // Step 2: Scrape the target URL to get its content
+      // Step 2: Scrape the target URL using Firecrawl for clean content
       let pageContent = {
         title: "",
         metaDescription: "",
         headings: { h1: [] as string[], h2: [] as string[], h3: [] as string[] },
         wordCount: 0,
         content: "",
+        htmlContent: "",
       };
 
-      try {
-        const pageResponse = await fetch(url, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          },
-        });
-        
-        if (pageResponse.ok) {
-          const html = await pageResponse.text();
+      const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+      
+      if (firecrawlApiKey) {
+        try {
+          console.log(`[Optimize] Scraping page with Firecrawl: ${url}`);
+          const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey });
           
-          // Extract title
-          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-          pageContent.title = titleMatch ? titleMatch[1].trim() : "";
+          const scrapeResult = await firecrawl.scrapeUrl(url, {
+            formats: ['markdown', 'html'],
+            onlyMainContent: true,
+          });
           
-          // Extract meta description
-          const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
-                               html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
-          pageContent.metaDescription = metaDescMatch ? metaDescMatch[1].trim() : "";
-          
-          // Extract headings
-          const h1Matches = html.match(/<h1[^>]*>([^<]+)<\/h1>/gi) || [];
-          const h2Matches = html.match(/<h2[^>]*>([^<]+)<\/h2>/gi) || [];
-          const h3Matches = html.match(/<h3[^>]*>([^<]+)<\/h3>/gi) || [];
-          
-          pageContent.headings.h1 = h1Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
-          pageContent.headings.h2 = h2Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
-          pageContent.headings.h3 = h3Matches.map(h => h.replace(/<[^>]+>/g, '').trim());
-          
-          // Extract main article content (not nav/footer/sidebar)
-          // Try to find the main content area using common patterns
-          let articleHtml = "";
-          
-          // Priority 1: Look for <article> tag
-          const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-          if (articleMatch) {
-            articleHtml = articleMatch[1];
+          if (scrapeResult.success) {
+            // Extract metadata
+            pageContent.title = scrapeResult.metadata?.title || "";
+            pageContent.metaDescription = scrapeResult.metadata?.description || "";
+            
+            // Extract headings from HTML
+            const html = scrapeResult.html || "";
+            const h1Matches = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
+            const h2Matches = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
+            const h3Matches = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/gi) || [];
+            
+            pageContent.headings.h1 = h1Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+            pageContent.headings.h2 = h2Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+            pageContent.headings.h3 = h3Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+            
+            // Get word count from markdown
+            const markdown = scrapeResult.markdown || "";
+            pageContent.wordCount = markdown.split(/\s+/).filter(Boolean).length;
+            pageContent.content = markdown.substring(0, 8000);
+            
+            // Store HTML for TipTap editor
+            pageContent.htmlContent = scrapeResult.html?.substring(0, 100000) || "";
+            
+            console.log(`[Optimize] Firecrawl scraped page: ${pageContent.wordCount} words`);
           } else {
-            // Priority 2: Look for main content containers
-            const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
-            if (mainMatch) {
-              articleHtml = mainMatch[1];
-            } else {
-              // Priority 3: Look for common content class patterns
-              const contentPatterns = [
-                /<div[^>]*class="[^"]*(?:article|post|entry|content|blog)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-                /<div[^>]*id="[^"]*(?:article|post|entry|content|blog)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-                /<section[^>]*class="[^"]*(?:article|post|entry|content)[^"]*"[^>]*>([\s\S]*?)<\/section>/i,
-              ];
-              
-              for (const pattern of contentPatterns) {
-                const match = html.match(pattern);
-                if (match) {
-                  articleHtml = match[1];
-                  break;
-                }
-              }
-            }
+            console.log(`[Optimize] Firecrawl scrape failed`);
           }
-          
-          // Fallback to body if no article container found
-          if (!articleHtml) {
-            const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-            if (bodyMatch) {
-              articleHtml = bodyMatch[1];
-            }
-          }
-          
-          // Clean the content - remove nav, header, footer, aside, scripts, styles
-          const cleanHtml = articleHtml
-            .replace(/<nav[\s\S]*?<\/nav>/gi, '')
-            .replace(/<header[\s\S]*?<\/header>/gi, '')
-            .replace(/<footer[\s\S]*?<\/footer>/gi, '')
-            .replace(/<aside[\s\S]*?<\/aside>/gi, '')
-            .replace(/<script[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[\s\S]*?<\/style>/gi, '')
-            .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
-            .replace(/<form[\s\S]*?<\/form>/gi, '')
-            .replace(/<!--[\s\S]*?-->/g, '');
-          
-          // Extract text content
-          const textContent = cleanHtml
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          
-          pageContent.wordCount = textContent.split(/\s+/).filter(Boolean).length;
-          pageContent.content = textContent.substring(0, 8000); // Increased limit for better context
-          
-          console.log(`[Optimize] Scraped page: ${pageContent.wordCount} words`);
+        } catch (scrapeError) {
+          console.error("[Optimize] Firecrawl scrape error:", scrapeError);
         }
-      } catch (scrapeError) {
-        console.error("[Optimize] Page scrape error:", scrapeError);
+      } else {
+        console.log("[Optimize] FIRECRAWL_API_KEY not set - cannot scrape page");
       }
 
       // Step 3: Search for competitors using Firecrawl
@@ -1751,8 +1704,6 @@ Example response:
         wordCount: number;
         contentSnippet: string;
       }> = [];
-
-      const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
       
       if (firecrawlApiKey) {
         try {
@@ -1772,6 +1723,7 @@ Example response:
           if (searchResults.success && searchResults.data) {
             for (const result of searchResults.data) {
               try {
+                if (!result.url) continue;
                 const resultUrl = new URL(result.url);
                 
                 // Skip unwanted domains

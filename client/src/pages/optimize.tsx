@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { TiptapEditor } from "@/components/tiptap-editor";
 import {
   Form,
   FormControl,
@@ -111,6 +112,7 @@ interface AnalysisResult {
     };
     wordCount: number;
     content: string;
+    htmlContent?: string;
   };
   competitors: CompetitorData[];
   recommendations: Recommendation[];
@@ -695,7 +697,7 @@ export default function Optimize() {
             <Card>
               <CardHeader>
                 <CardTitle>Your Content Analysis</CardTitle>
-                <CardDescription>Current state of your article</CardDescription>
+                <CardDescription>Current state of your article - edit content directly below</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -735,33 +737,26 @@ export default function Optimize() {
                   </p>
                 </div>
 
-                {analysisResult.pageContent.headings.h1.length > 0 && (
+                {analysisResult.pageContent.htmlContent ? (
                   <div>
-                    <h4 className="font-medium mb-2">H1 Headings</h4>
-                    <ul className="space-y-1">
-                      {analysisResult.pageContent.headings.h1.map((h, i) => (
-                        <li key={i} className="text-sm bg-muted/50 rounded-md p-2">
-                          {h}
-                        </li>
-                      ))}
-                    </ul>
+                    <h4 className="font-medium mb-2">Article Content</h4>
+                    <div className="border rounded-lg" style={{ height: "500px" }}>
+                      <TiptapEditor
+                        content={analysisResult.pageContent.htmlContent}
+                        editable={true}
+                        onChange={(html) => {
+                          setAnalysisResult(prev => prev ? {
+                            ...prev,
+                            pageContent: {
+                              ...prev.pageContent,
+                              htmlContent: html,
+                            }
+                          } : null);
+                        }}
+                      />
+                    </div>
                   </div>
-                )}
-
-                {analysisResult.pageContent.headings.h2.length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-2">H2 Headings</h4>
-                    <ul className="space-y-1">
-                      {analysisResult.pageContent.headings.h2.map((h, i) => (
-                        <li key={i} className="text-sm bg-muted/50 rounded-md p-2">
-                          {h}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {analysisResult.pageContent.content && (
+                ) : analysisResult.pageContent.content && (
                   <div>
                     <h4 className="font-medium mb-2">Content Preview</h4>
                     <ScrollArea className="h-[300px] rounded-md border p-4">
