@@ -1217,5 +1217,60 @@ Respond in JSON format:
     }
   });
 
+  // ============ IMAGE SUGGESTIONS (AI-powered) ============
+  app.post("/api/images/suggest", async (req, res) => {
+    try {
+      const { content, targetKeyword, count = 4 } = req.body;
+      
+      if (!content) {
+        return res.status(400).json({ error: "Content is required" });
+      }
+
+      const prompt = `Analyze this blog post content and suggest ${count} compelling image ideas that would enhance the article visually.
+
+Target Keyword: ${targetKeyword || "not specified"}
+
+Blog Content (excerpt):
+${content.substring(0, 2000)}
+
+For each image, provide:
+1. A descriptive title (short, 5-10 words)
+2. A detailed image generation prompt (30-50 words describing the visual in detail)
+3. Suggested placement: "featured" for the main hero image, or "inline" for images within the content
+
+Return as JSON array:
+{
+  "suggestions": [
+    {
+      "title": "Mystical Crystal Ball Reading",
+      "prompt": "A glowing crystal ball on a velvet cloth surrounded by soft candlelight, mystical atmosphere with purple and blue hues, professional photography style",
+      "placement": "featured"
+    }
+  ]
+}
+
+Make the first suggestion suitable as a featured/hero image. The rest should be inline images that complement different sections of the content.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are a visual content strategist specializing in blog imagery. Generate compelling, detailed image prompts that will create visually striking images. Always respond with valid JSON."
+          },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 1024,
+      });
+
+      const suggestions = JSON.parse(response.choices[0]?.message?.content || '{"suggestions":[]}');
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Image suggestions error:", error);
+      res.status(500).json({ error: "Failed to generate image suggestions" });
+    }
+  });
+
   return httpServer;
 }

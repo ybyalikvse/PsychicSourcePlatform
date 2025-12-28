@@ -86,6 +86,15 @@ export default function CreateWithAI() {
   const [featuredImage, setFeaturedImage] = useState<string>("");
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
+  
+  const [blogImageCount, setBlogImageCount] = useState(3);
+  const [blogImages, setBlogImages] = useState<Array<{ image: string; prompt: string; styleId: string; isGenerating: boolean }>>(
+    Array(3).fill(null).map(() => ({ image: "", prompt: "", styleId: "default", isGenerating: false }))
+  );
+  const [imageSuggestions, setImageSuggestions] = useState<Array<{ title: string; prompt: string; placement: string }>>([]);
+  const [isLoadingImageSuggestions, setIsLoadingImageSuggestions] = useState(false);
+  const [imageSuggestionsDialogOpen, setImageSuggestionsDialogOpen] = useState(false);
+  const [suggestionTarget, setSuggestionTarget] = useState<"featured" | number>("featured");
 
   const saveArticleMutation = useMutation({
     mutationFn: async (data: {
@@ -287,6 +296,142 @@ export default function CreateWithAI() {
     }
   };
 
+  const handleGetImageSuggestions = async (target: "featured" | number) => {
+    if (!generatedContent) {
+      toast({ title: "Generate content first to get image suggestions", variant: "destructive" });
+      return;
+    }
+
+    setSuggestionTarget(target);
+    setIsLoadingImageSuggestions(true);
+    setImageSuggestionsDialogOpen(true);
+
+    try {
+      const response = await apiRequest("POST", "/api/images/suggest", {
+        content: generatedContent,
+        targetKeyword: targetKeyword.trim(),
+        count: 4,
+      });
+
+      const data = await response.json();
+      setImageSuggestions(data.suggestions || []);
+    } catch (error) {
+      console.error("Image suggestions error:", error);
+      toast({ title: "Failed to get image suggestions", variant: "destructive" });
+      setImageSuggestionsDialogOpen(false);
+    } finally {
+      setIsLoadingImageSuggestions(false);
+    }
+  };
+
+  const handleSelectSuggestion = (suggestion: { title: string; prompt: string; placement: string }) => {
+    if (suggestionTarget === "featured") {
+      setImagePrompt(suggestion.prompt);
+    } else {
+      const newBlogImages = [...blogImages];
+      if (newBlogImages[suggestionTarget]) {
+        newBlogImages[suggestionTarget].prompt = suggestion.prompt;
+      }
+      setBlogImages(newBlogImages);
+    }
+    setImageSuggestionsDialogOpen(false);
+  };
+
+  const handleGenerateSuggestion = async (suggestion: { title: string; prompt: string; placement: string }) => {
+    setImageSuggestionsDialogOpen(false);
+    
+    if (suggestionTarget === "featured") {
+      setImagePrompt(suggestion.prompt);
+      setIsGeneratingImage(true);
+      try {
+        const response = await apiRequest("POST", "/api/images/generate", {
+          prompt: suggestion.prompt,
+          styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
+          imageType: "featured",
+        });
+        const data = await response.json();
+        if (data.imageData) {
+          setFeaturedImage(data.imageData);
+          toast({ title: "Featured image generated" });
+        }
+      } catch (error) {
+        toast({ title: "Failed to generate image", variant: "destructive" });
+      } finally {
+        setIsGeneratingImage(false);
+      }
+    } else {
+      const idx = suggestionTarget as number;
+      const newBlogImages = [...blogImages];
+      if (!newBlogImages[idx]) {
+        toast({ title: "Image slot not found", variant: "destructive" });
+        return;
+      }
+      newBlogImages[idx] = { ...newBlogImages[idx], prompt: suggestion.prompt, isGenerating: true };
+      setBlogImages(newBlogImages);
+
+      try {
+        const response = await apiRequest("POST", "/api/images/generate", {
+          prompt: suggestion.prompt,
+          styleId: newBlogImages[idx].styleId !== "default" ? newBlogImages[idx].styleId : undefined,
+          imageType: "inline",
+        });
+        const data = await response.json();
+        if (data.imageData) {
+          newBlogImages[idx] = { ...newBlogImages[idx], image: data.imageData, isGenerating: false };
+          setBlogImages([...newBlogImages]);
+          toast({ title: `Blog image ${idx + 1} generated` });
+        }
+      } catch (error) {
+        newBlogImages[idx] = { ...newBlogImages[idx], isGenerating: false };
+        setBlogImages([...newBlogImages]);
+        toast({ title: "Failed to generate image", variant: "destructive" });
+      }
+    }
+  };
+
+  const handleGenerateBlogImage = async (index: number) => {
+    const img = blogImages[index];
+    if (!img) {
+      toast({ title: "Image slot not found", variant: "destructive" });
+      return;
+    }
+    if (!img.prompt?.trim()) {
+      toast({ title: "Please enter an image prompt", variant: "destructive" });
+      return;
+    }
+
+    const newBlogImages = [...blogImages];
+    newBlogImages[index] = { ...newBlogImages[index], isGenerating: true };
+    setBlogImages(newBlogImages);
+
+    try {
+      const response = await apiRequest("POST", "/api/images/generate", {
+        prompt: img.prompt.trim(),
+        styleId: img.styleId !== "default" ? img.styleId : undefined,
+        imageType: "inline",
+      });
+
+      const data = await response.json();
+      if (data.imageData) {
+        newBlogImages[index] = { ...newBlogImages[index], image: data.imageData, isGenerating: false };
+        setBlogImages([...newBlogImages]);
+        toast({ title: `Blog image ${index + 1} generated` });
+      }
+    } catch (error) {
+      newBlogImages[index] = { ...newBlogImages[index], isGenerating: false };
+      setBlogImages([...newBlogImages]);
+      toast({ title: "Failed to generate image", variant: "destructive" });
+    }
+  };
+
+  const handleBlogImageCountChange = (count: number) => {
+    setBlogImageCount(count);
+    const newImages = Array(count).fill(null).map((_, i) => 
+      blogImages[i] || { image: "", prompt: "", styleId: "default", isGenerating: false }
+    );
+    setBlogImages(newImages);
+  };
+
   const currentWordCount = stripHtmlTags(generatedContent).split(/\s+/).filter(Boolean).length;
 
   return (
@@ -453,43 +598,55 @@ export default function CreateWithAI() {
                 Featured Image
               </CardTitle>
               <CardDescription>
-                Generate an AI image for your article
+                Generate a hero image for your article
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {imageStyles.length > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="image-style">Image Style</Label>
-                  <Select value={selectedImageStyleId} onValueChange={setSelectedImageStyleId}>
-                    <SelectTrigger id="image-style" data-testid="select-image-style">
-                      <SelectValue placeholder="Select a style" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Default</SelectItem>
-                      {imageStyles.map((style) => (
-                        <SelectItem key={style.id} value={style.id}>
-                          {style.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="image-style">Image Style</Label>
+                <Select value={selectedImageStyleId} onValueChange={setSelectedImageStyleId}>
+                  <SelectTrigger id="image-style" data-testid="select-image-style">
+                    <SelectValue placeholder="Select a style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    {imageStyles.map((style) => (
+                      <SelectItem key={style.id} value={style.id}>
+                        {style.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="image-prompt">Image Prompt</Label>
-                  {targetKeyword && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={handleAutoPrompt}
-                      data-testid="button-auto-prompt"
-                    >
-                      <Wand2 className="h-3 w-3 mr-1" />
-                      Auto
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {generatedContent && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleGetImageSuggestions("featured")}
+                        disabled={isLoadingImageSuggestions}
+                        data-testid="button-ai-suggestions"
+                      >
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        AI Suggest
+                      </Button>
+                    )}
+                    {targetKeyword && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={handleAutoPrompt}
+                        data-testid="button-auto-prompt"
+                      >
+                        <Wand2 className="h-3 w-3 mr-1" />
+                        Auto
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <Textarea
                   id="image-prompt"
@@ -544,6 +701,125 @@ export default function CreateWithAI() {
                   </Button>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Blog Images
+              </CardTitle>
+              <CardDescription>
+                Generate images to use throughout your article
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="blog-image-count">Number of Images</Label>
+                <Select value={String(blogImageCount)} onValueChange={(v) => handleBlogImageCountChange(parseInt(v))}>
+                  <SelectTrigger id="blog-image-count" data-testid="select-blog-image-count">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n} image{n > 1 ? "s" : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+
+              {blogImages.map((img, index) => (
+                <div key={index} className="space-y-3 p-3 border rounded-md">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="font-medium">Image {index + 1}</Label>
+                    {generatedContent && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleGetImageSuggestions(index)}
+                        disabled={isLoadingImageSuggestions}
+                        data-testid={`button-ai-suggest-${index}`}
+                      >
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        AI Suggest
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Style</Label>
+                    <Select 
+                      value={img.styleId} 
+                      onValueChange={(v) => {
+                        const newImages = [...blogImages];
+                        newImages[index] = { ...newImages[index], styleId: v };
+                        setBlogImages(newImages);
+                      }}
+                    >
+                      <SelectTrigger data-testid={`select-blog-style-${index}`}>
+                        <SelectValue placeholder="Select a style" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Default</SelectItem>
+                        {imageStyles.map((style) => (
+                          <SelectItem key={style.id} value={style.id}>
+                            {style.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Prompt</Label>
+                    <Textarea
+                      value={img.prompt}
+                      onChange={(e) => {
+                        const newImages = [...blogImages];
+                        newImages[index] = { ...newImages[index], prompt: e.target.value };
+                        setBlogImages(newImages);
+                      }}
+                      placeholder="Describe this image..."
+                      className="min-h-[60px]"
+                      data-testid={`input-blog-prompt-${index}`}
+                    />
+                  </div>
+
+                  <Button 
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleGenerateBlogImage(index)}
+                    disabled={img.isGenerating || !img.prompt?.trim()}
+                    data-testid={`button-generate-blog-${index}`}
+                  >
+                    {img.isGenerating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="h-4 w-4 mr-2" />
+                        Generate
+                      </>
+                    )}
+                  </Button>
+
+                  {img.image && (
+                    <div className="rounded-md overflow-hidden border">
+                      <img 
+                        src={img.image} 
+                        alt={`Blog image ${index + 1}`} 
+                        className="w-full h-auto"
+                        data-testid={`img-blog-${index}`}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
             </CardContent>
           </Card>
         </div>
@@ -723,6 +999,77 @@ export default function CreateWithAI() {
               disabled={!selectedTitle && !selectedDescription}
             >
               Apply Selection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={imageSuggestionsDialogOpen} onOpenChange={setImageSuggestionsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>AI Image Suggestions</DialogTitle>
+            <DialogDescription>
+              {suggestionTarget === "featured" 
+                ? "Choose a suggested image for your featured hero image"
+                : `Choose a suggested image for Blog Image ${(suggestionTarget as number) + 1}`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          {isLoadingImageSuggestions ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : imageSuggestions.length > 0 ? (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {imageSuggestions.map((suggestion, i) => (
+                <div 
+                  key={i}
+                  className="p-4 rounded-md border space-y-2"
+                  data-testid={`image-suggestion-${i}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{suggestion.title}</p>
+                      <Badge variant="secondary" className="mt-1">
+                        {suggestion.placement}
+                      </Badge>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{suggestion.prompt}</p>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button 
+                      size="sm"
+                      onClick={() => handleGenerateSuggestion(suggestion)}
+                      data-testid={`button-generate-suggestion-${i}`}
+                    >
+                      <ImageIcon className="h-4 w-4 mr-2" />
+                      Generate This
+                    </Button>
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSelectSuggestion(suggestion)}
+                      data-testid={`button-use-prompt-${i}`}
+                    >
+                      Use Prompt Only
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No suggestions available
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setImageSuggestionsDialogOpen(false)}
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
