@@ -40,7 +40,6 @@ interface ImageStyleFormData {
   name: string;
   description: string;
   stylePrompt: string;
-  aspectRatio: string;
   additionalInstructions: string;
 }
 
@@ -76,7 +75,6 @@ export default function Settings() {
     name: "",
     description: "",
     stylePrompt: "",
-    aspectRatio: "16:9",
     additionalInstructions: "",
   });
 
@@ -211,7 +209,7 @@ export default function Settings() {
   };
 
   const resetImageStyleForm = () => {
-    setImageStyleForm({ name: "", description: "", stylePrompt: "", aspectRatio: "16:9", additionalInstructions: "" });
+    setImageStyleForm({ name: "", description: "", stylePrompt: "", additionalInstructions: "" });
   };
 
   const handleEditStyle = (style: WritingStyle) => {
@@ -239,7 +237,6 @@ export default function Settings() {
       name: style.name,
       description: style.description || "",
       stylePrompt: style.stylePrompt || "",
-      aspectRatio: style.aspectRatio || "16:9",
       additionalInstructions: style.additionalInstructions || "",
     });
     setImageStyleDialogOpen(true);
@@ -425,7 +422,7 @@ export default function Settings() {
                   <div>
                     <div className="font-medium">{style.name}</div>
                     <div className="text-sm text-muted-foreground">
-                      {style.aspectRatio || "16:9"} {style.stylePrompt && `- ${style.stylePrompt}`}
+                      {style.stylePrompt || "No style prompt"}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -493,25 +490,7 @@ export default function Settings() {
                     data-testid="input-image-style-prompt"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="image-aspect-ratio">Aspect Ratio</Label>
-                  <Select 
-                    value={imageStyleForm.aspectRatio} 
-                    onValueChange={(v) => setImageStyleForm({ ...imageStyleForm, aspectRatio: v })}
-                  >
-                    <SelectTrigger data-testid="select-aspect-ratio">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="16:9">16:9 (Landscape - Blog Featured)</SelectItem>
-                      <SelectItem value="4:3">4:3 (Standard)</SelectItem>
-                      <SelectItem value="1:1">1:1 (Square - Social Media)</SelectItem>
-                      <SelectItem value="9:16">9:16 (Portrait - Stories)</SelectItem>
-                      <SelectItem value="3:2">3:2 (Photo)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
+                                <div className="space-y-2">
                   <Label htmlFor="image-additional">Additional Instructions (optional)</Label>
                   <Textarea
                     id="image-additional"
