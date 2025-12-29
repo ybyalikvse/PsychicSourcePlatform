@@ -745,9 +745,20 @@ export default function Optimize() {
 
           <TabsContent value="content" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Your Content Analysis</CardTitle>
-                <CardDescription>Current state of your article - edit content directly below</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Your Content Analysis</CardTitle>
+                  <CardDescription>Current state of your article - edit content directly below</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(form.getValues("url"), "_blank")}
+                  data-testid="button-open-url"
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open URL
+                </Button>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
