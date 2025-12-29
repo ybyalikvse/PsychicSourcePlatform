@@ -2155,5 +2155,26 @@ Be extremely specific and actionable. Reference specific competitor content when
     }
   });
 
+  // Update article content for an optimization analysis
+  app.patch("/api/optimize/analyses/:id/content", async (req, res) => {
+    try {
+      const { htmlContent } = req.body;
+      if (!htmlContent) {
+        return res.status(400).json({ error: "htmlContent is required" });
+      }
+      
+      const analysis = await storage.getOptimizationAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      const updatedAnalysis = await storage.updateOptimizationAnalysisContent(req.params.id, htmlContent);
+      res.json(updatedAnalysis);
+    } catch (error) {
+      console.error("Failed to update analysis content:", error);
+      res.status(500).json({ error: "Failed to update analysis content" });
+    }
+  });
+
   return httpServer;
 }

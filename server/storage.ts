@@ -72,6 +72,7 @@ export interface IStorage {
   getOptimizationAnalyses(): Promise<OptimizationAnalysis[]>;
   getOptimizationAnalysis(id: string): Promise<OptimizationAnalysis | undefined>;
   createOptimizationAnalysis(analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis>;
+  updateOptimizationAnalysisContent(id: string, htmlContent: string): Promise<OptimizationAnalysis | undefined>;
   deleteOptimizationAnalysis(id: string): Promise<boolean>;
 }
 
@@ -275,6 +276,7 @@ export class MemStorage implements IStorage {
   async getOptimizationAnalyses(): Promise<OptimizationAnalysis[]> { return []; }
   async getOptimizationAnalysis(_id: string): Promise<OptimizationAnalysis | undefined> { return undefined; }
   async createOptimizationAnalysis(_analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis> { throw new Error("Not implemented"); }
+  async updateOptimizationAnalysisContent(_id: string, _htmlContent: string): Promise<OptimizationAnalysis | undefined> { return undefined; }
   async deleteOptimizationAnalysis(_id: string): Promise<boolean> { return false; }
 }
 
@@ -494,6 +496,22 @@ export class DatabaseStorage implements IStorage {
 
   async createOptimizationAnalysis(insertAnalysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis> {
     const [analysis] = await db.insert(optimizationAnalyses).values(insertAnalysis).returning();
+    return analysis;
+  }
+
+  async updateOptimizationAnalysisContent(id: string, htmlContent: string): Promise<OptimizationAnalysis | undefined> {
+    const existing = await this.getOptimizationAnalysis(id);
+    if (!existing) return undefined;
+    
+    const updatedPageContent = {
+      ...(existing.pageContent as object),
+      htmlContent,
+    };
+    
+    const [analysis] = await db.update(optimizationAnalyses)
+      .set({ pageContent: updatedPageContent })
+      .where(eq(optimizationAnalyses.id, id))
+      .returning();
     return analysis;
   }
 

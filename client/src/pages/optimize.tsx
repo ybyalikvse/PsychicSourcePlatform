@@ -51,6 +51,7 @@ import {
   History,
   Trash2,
   Eye,
+  Save,
 } from "lucide-react";
 
 const DATE_RANGE_OPTIONS = [
@@ -138,6 +139,8 @@ export default function Optimize() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisStep, setAnalysisStep] = useState<string>("");
   const [showHistory, setShowHistory] = useState(false);
+  const [hasContentChanges, setHasContentChanges] = useState(false);
+  const [originalContent, setOriginalContent] = useState<string>("");
 
   // Fetch saved analyses
   const { data: savedAnalyses = [], isLoading: loadingAnalyses } = useQuery<SavedAnalysis[]>({
@@ -160,6 +163,8 @@ export default function Optimize() {
     },
     onSuccess: (data) => {
       setAnalysisResult(data);
+      setOriginalContent(data.pageContent?.htmlContent || "");
+      setHasContentChanges(false);
       setAnalysisStep("");
       queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
       toast({
@@ -191,20 +196,46 @@ export default function Optimize() {
     },
   });
 
+  const saveContentMutation = useMutation({
+    mutationFn: async ({ id, htmlContent }: { id: string; htmlContent: string }) => {
+      const response = await apiRequest("PATCH", `/api/optimize/analyses/${id}/content`, { htmlContent });
+      return response.json();
+    },
+    onSuccess: () => {
+      setHasContentChanges(false);
+      setOriginalContent(analysisResult?.pageContent.htmlContent || "");
+      queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
+      toast({
+        title: "Content Saved",
+        description: "Your article content changes have been saved.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Save Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const loadSavedAnalysis = (analysis: SavedAnalysis) => {
+    const pageContent = analysis.pageContent || {
+      title: analysis.pageTitle || "",
+      metaDescription: "",
+      headings: { h1: [], h2: [], h3: [] },
+      wordCount: analysis.pageWordCount || 0,
+      content: "",
+    };
     setAnalysisResult({
       id: analysis.id,
       keywords: analysis.keywords || [],
-      pageContent: analysis.pageContent || {
-        title: analysis.pageTitle || "",
-        metaDescription: "",
-        headings: { h1: [], h2: [], h3: [] },
-        wordCount: analysis.pageWordCount || 0,
-        content: "",
-      },
+      pageContent,
       competitors: analysis.competitors || [],
       recommendations: analysis.recommendations || [],
     });
+    setOriginalContent(pageContent.htmlContent || "");
+    setHasContentChanges(false);
     form.setValue("url", analysis.url);
     form.setValue("targetKeyword", analysis.targetKeyword);
     form.setValue("dateRange", analysis.dateRange || "28");
@@ -758,7 +789,41 @@ export default function Optimize() {
 
                 {analysisResult.pageContent.htmlContent ? (
                   <div>
-                    <h4 className="font-medium mb-2">Article Content</h4>
+                    <div className="flex items-center justify-between gap-4 mb-2">
+                      <h4 className="font-medium">Article Content</h4>
+                      <div className="flex items-center gap-2">
+                        {hasContentChanges && (
+                          <Badge variant="outline" className="text-orange-600 border-orange-300">
+                            Unsaved changes
+                          </Badge>
+                        )}
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (analysisResult?.id && analysisResult.pageContent.htmlContent) {
+                              saveContentMutation.mutate({
+                                id: analysisResult.id,
+                                htmlContent: analysisResult.pageContent.htmlContent,
+                              });
+                            }
+                          }}
+                          disabled={!hasContentChanges || saveContentMutation.isPending || !analysisResult?.id}
+                          data-testid="button-save-content"
+                        >
+                          {saveContentMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4 mr-2" />
+                              Save Content
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                     <div className="border rounded-lg" style={{ height: "500px" }}>
                       <TiptapEditor
                         content={analysisResult.pageContent.htmlContent}
@@ -771,6 +836,9 @@ export default function Optimize() {
                               htmlContent: html,
                             }
                           } : null);
+                          if (!hasContentChanges && html !== originalContent) {
+                            setHasContentChanges(true);
+                          }
                         }}
                       />
                     </div>
