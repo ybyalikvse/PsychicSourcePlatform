@@ -2296,14 +2296,17 @@ Be extremely specific and actionable. Reference specific competitor content when
 Title: ${c.title}
 Meta Description: ${c.metaDescription}
 Word Count: ${c.wordCount}
-H1 Headings: ${c.headings.h1.join(", ") || "None"}
-H2 Headings: ${c.headings.h2.join(", ") || "None"}
-H3 Headings: ${c.headings.h3.join(", ") || "None"}
+H1 Headings: ${c.headings?.h1?.join(", ") || "None"}
+H2 Headings: ${c.headings?.h2?.join(", ") || "None"}
+H3 Headings: ${c.headings?.h3?.join(", ") || "None"}
 
 FULL CONTENT:
-${c.content}
+${c.content || "No content available"}
 `).join("\n\n")
         : "No competitor data available";
+
+      console.log("[Optimize Refresh] Competitors formatted length:", competitorsFormatted.length);
+      console.log("[Optimize Refresh] Using custom prompt:", !!customPrompt);
 
       let analysisPrompt: string;
       
