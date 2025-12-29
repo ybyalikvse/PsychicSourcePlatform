@@ -8,8 +8,6 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { initGA } from "@/lib/analytics";
-import { useEffect } from "react";
 
 import Dashboard from "@/pages/dashboard";
 import Content from "@/pages/content";
@@ -67,12 +65,6 @@ function AppLayout() {
 }
 
 function App() {
-  useEffect(() => {
-    if (import.meta.env.VITE_GA_MEASUREMENT_ID) {
-      initGA();
-    }
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>

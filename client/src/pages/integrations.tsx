@@ -1,10 +1,13 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { IntegrationCard } from "@/components/integration-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, Search, Zap, CheckCircle, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { BarChart3, Search, Zap, CheckCircle, XCircle, Settings } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Integration } from "@shared/schema";
@@ -13,12 +16,36 @@ export default function Integrations() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
+  const [gaPropertyId, setGaPropertyId] = useState("");
+  const [showPropertyIdInput, setShowPropertyIdInput] = useState(false);
   
-  // Handle OAuth callback messages
+  const { data: integrations = [] } = useQuery<Integration[]>({
+    queryKey: ["/api/integrations"],
+  });
+
+  const getIntegration = (name: string): Integration | undefined => {
+    return integrations.find((i) => i.name === name);
+  };
+
+  const getIntegrationStatus = (name: string): "connected" | "configured" | "disconnected" | "error" => {
+    const integration = getIntegration(name);
+    return (integration?.status as "connected" | "configured" | "disconnected" | "error") || "disconnected";
+  };
+
+  const getLastSync = (name: string): string | undefined => {
+    const integration = getIntegration(name);
+    return integration?.lastSync || undefined;
+  };
+
+  const gaIntegration = getIntegration("ga");
+  const gaConfig = (gaIntegration?.config || {}) as { propertyId?: string };
+  const gaPropertyIdSet = !!gaConfig.propertyId;
+
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     const success = params.get("success");
     const error = params.get("error");
+    const needsPropertyId = params.get("needsPropertyId");
     
     if (success) {
       toast({
@@ -26,6 +53,15 @@ export default function Integrations() {
         description: decodeURIComponent(success.replace(/\+/g, " ")),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      
+      if (needsPropertyId === "true") {
+        setShowPropertyIdInput(true);
+        toast({
+          title: "Property ID Required",
+          description: "Please enter your GA4 Property ID to complete the setup.",
+        });
+      }
+      
       setLocation("/integrations", { replace: true });
     }
     
@@ -38,20 +74,6 @@ export default function Integrations() {
       setLocation("/integrations", { replace: true });
     }
   }, [searchString, toast, setLocation]);
-
-  const { data: integrations = [] } = useQuery<Integration[]>({
-    queryKey: ["/api/integrations"],
-  });
-
-  const getIntegrationStatus = (name: string): "connected" | "configured" | "disconnected" | "error" => {
-    const integration = integrations.find((i) => i.name === name);
-    return (integration?.status as "connected" | "configured" | "disconnected" | "error") || "disconnected";
-  };
-
-  const getLastSync = (name: string): string | undefined => {
-    const integration = integrations.find((i) => i.name === name);
-    return integration?.lastSync || undefined;
-  };
 
   const syncMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -81,7 +103,6 @@ export default function Integrations() {
     onSuccess: (data, name) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       if (data?.requiresOAuth && data?.authUrl) {
-        // Redirect to OAuth in same window for GSC
         window.location.href = data.authUrl;
       } else {
         toast({
@@ -108,6 +129,29 @@ export default function Integrations() {
       toast({
         title: "Disconnected",
         description: `${name} has been disconnected.`,
+      });
+    },
+  });
+
+  const savePropertyIdMutation = useMutation({
+    mutationFn: async (propertyId: string) => {
+      const response = await apiRequest("POST", "/api/integrations/ga/property", { propertyId });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      setShowPropertyIdInput(false);
+      setGaPropertyId("");
+      toast({
+        title: "Property ID Saved",
+        description: "Your GA4 Property ID has been saved. You can now view analytics data.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to save",
+        description: "Could not save the Property ID. Please try again.",
+        variant: "destructive",
       });
     },
   });
@@ -153,6 +197,72 @@ export default function Integrations() {
         ))}
       </div>
 
+      {getIntegrationStatus("ga") === "connected" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Google Analytics Configuration
+            </CardTitle>
+            <CardDescription>
+              {gaPropertyIdSet && !showPropertyIdInput
+                ? `Connected to GA4 Property: ${gaConfig.propertyId}`
+                : "Enter your GA4 Property ID to fetch analytics data. You can find this in Google Analytics under Admin > Property Settings."
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {(showPropertyIdInput || !gaPropertyIdSet) ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label htmlFor="propertyId" className="sr-only">GA4 Property ID</Label>
+                    <Input
+                      id="propertyId"
+                      placeholder="e.g., 123456789"
+                      value={gaPropertyId}
+                      onChange={(e) => setGaPropertyId(e.target.value.replace(/\D/g, ""))}
+                      data-testid="input-ga-property-id"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => savePropertyIdMutation.mutate(gaPropertyId)}
+                    disabled={!gaPropertyId || gaPropertyId.length < 6 || savePropertyIdMutation.isPending}
+                    data-testid="button-save-property-id"
+                  >
+                    {savePropertyIdMutation.isPending ? "Saving..." : "Save"}
+                  </Button>
+                  {showPropertyIdInput && gaPropertyIdSet && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowPropertyIdInput(false);
+                        setGaPropertyId("");
+                      }}
+                      data-testid="button-cancel-property-id"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Property ID must be a numeric value (at least 6 digits)
+                </p>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPropertyIdInput(true)}
+                data-testid="button-change-property-id"
+              >
+                Change Property ID
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -193,7 +303,7 @@ export default function Integrations() {
               </div>
               <Badge variant="outline" className="text-green-600 dark:text-green-400">
                 <CheckCircle className="mr-1 h-3 w-3" />
-                Measurement ID Set
+                OAuth Configured
               </Badge>
             </div>
           </div>

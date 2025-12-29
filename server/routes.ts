@@ -15,6 +15,7 @@ const oauthStates = new Map<string, { timestamp: number }>();
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GSC_SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
+const GA_SCOPES = ["https://www.googleapis.com/auth/analytics.readonly"];
 
 // Helper function to get valid GSC access token (auto-refresh if expired)
 async function getValidGSCToken(): Promise<string | null> {
@@ -92,6 +93,88 @@ async function getValidGSCToken(): Promise<string | null> {
     return tokens.access_token;
   } catch (error) {
     console.error("[GSC] Token refresh error:", error);
+    return null;
+  }
+}
+
+// Helper function to get valid GA access token (auto-refresh if expired)
+async function getValidGAToken(): Promise<string | null> {
+  const gaIntegration = await storage.getIntegration("ga");
+  if (!gaIntegration || gaIntegration.status !== "connected") {
+    return null;
+  }
+
+  const config = (gaIntegration.config || {}) as { 
+    accessToken?: string; 
+    refreshToken?: string; 
+    expiresAt?: number;
+    propertyId?: string;
+  };
+
+  if (!config.accessToken) {
+    return null;
+  }
+
+  // Check if token is expired or will expire in the next 5 minutes
+  const isExpired = config.expiresAt && Date.now() > (config.expiresAt - 5 * 60 * 1000);
+  
+  if (!isExpired) {
+    return config.accessToken;
+  }
+
+  // Token is expired, try to refresh
+  if (!config.refreshToken) {
+    console.log("[GA] Access token expired but no refresh token available");
+    return null;
+  }
+
+  console.log("[GA] Access token expired, refreshing...");
+  
+  const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET;
+  
+  if (!clientId || !clientSecret) {
+    console.error("[GA] Missing OAuth credentials for token refresh");
+    return null;
+  }
+
+  try {
+    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: config.refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error("[GA] Token refresh failed:", errorText);
+      return null;
+    }
+
+    const tokens = await tokenResponse.json();
+    
+    // Update stored tokens
+    await storage.upsertIntegration({
+      name: "ga",
+      status: "connected",
+      lastSync: new Date().toISOString(),
+      config: JSON.stringify({
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || config.refreshToken,
+        expiresAt: Date.now() + (tokens.expires_in * 1000),
+        propertyId: config.propertyId,
+      }),
+    });
+
+    console.log("[GA] Token refreshed successfully");
+    return tokens.access_token;
+  } catch (error) {
+    console.error("[GA] Token refresh error:", error);
     return null;
   }
 }
@@ -470,44 +553,213 @@ export async function registerRoutes(
   // ============ ANALYTICS (GA Data) ============
   app.get("/api/analytics", async (req, res) => {
     try {
-      // Google Analytics 4 Data API requires a service account or OAuth
-      // The VITE_GA_MEASUREMENT_ID is only for frontend tracking, not for reading data
       const gaIntegration = await storage.getIntegration("ga");
       
-      // If GA is configured with just a measurement ID, tracking is active but data API is not
-      // Only status === "connected" with full API credentials can read data
       if (!gaIntegration) {
         return res.status(400).json({ 
           error: "Google Analytics not configured",
-          message: "Please configure Google Analytics in the Integrations page.",
+          message: "Please connect Google Analytics in the Integrations page.",
           requiresConnection: true
-        });
-      }
-
-      // "configured" status means tracking is active, but no Data API access
-      if (gaIntegration.status === "configured") {
-        return res.status(400).json({ 
-          error: "Analytics Tracking Active - Data API Not Connected",
-          message: "Your GA Measurement ID is working for tracking page views. To view historical analytics data in this dashboard, you would need to set up a GA4 Data API service account (advanced setup).",
-          trackingActive: true,
-          requiresServiceAccount: true
         });
       }
 
       if (gaIntegration.status !== "connected") {
         return res.status(400).json({ 
-          error: "Google Analytics Data API not connected",
-          message: "To view analytics data, please connect Google Analytics in the Integrations page.",
+          error: "Google Analytics not connected",
+          message: "Please connect Google Analytics in the Integrations page.",
           requiresConnection: true
         });
       }
 
-      // TODO: Implement actual GA4 Data API call when service account is available
-      return res.status(501).json({ 
-        error: "GA Data API integration pending",
-        message: "Google Analytics Data API integration requires a service account to be configured."
+      const config = (gaIntegration.config || {}) as { 
+        accessToken?: string; 
+        refreshToken?: string;
+        propertyId?: string;
+      };
+
+      if (!config.propertyId) {
+        return res.status(400).json({ 
+          error: "GA Property ID not set",
+          message: "Please set your GA4 Property ID in the Integrations page.",
+          needsPropertyId: true
+        });
+      }
+
+      // Get valid access token (with auto-refresh)
+      const accessToken = await getValidGAToken();
+      if (!accessToken) {
+        return res.status(401).json({ 
+          error: "Google Analytics authentication failed",
+          message: "Please reconnect Google Analytics.",
+          requiresConnection: true
+        });
+      }
+
+      // Parse date range from query
+      const dateRange = (req.query.dateRange as string) || "30d";
+      const days = parseInt(dateRange.replace("d", ""), 10) || 30;
+
+      // Use the access token directly with fetch for GA4 Data API
+      const propertyId = config.propertyId;
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      const endDate = new Date();
+      
+      const formatDate = (d: Date) => d.toISOString().split("T")[0];
+
+      // Fetch main metrics
+      const metricsResponse = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: formatDate(startDate), endDate: formatDate(endDate) }],
+            metrics: [
+              { name: "screenPageViews" },
+              { name: "totalUsers" },
+              { name: "bounceRate" },
+              { name: "averageSessionDuration" },
+            ],
+          }),
+        }
+      );
+
+      if (!metricsResponse.ok) {
+        const errorText = await metricsResponse.text();
+        console.error("[GA] Metrics API error:", errorText);
+        return res.status(metricsResponse.status).json({ 
+          error: "GA API error",
+          message: `Failed to fetch analytics: ${errorText}`
+        });
+      }
+
+      const metricsData = await metricsResponse.json();
+      const metricValues = metricsData.rows?.[0]?.metricValues || [];
+      
+      const pageViews = parseInt(metricValues[0]?.value || "0", 10);
+      const uniqueVisitors = parseInt(metricValues[1]?.value || "0", 10);
+      const bounceRate = parseFloat(metricValues[2]?.value || "0") * 100;
+      const avgSessionSeconds = parseFloat(metricValues[3]?.value || "0");
+      const avgSessionMinutes = Math.floor(avgSessionSeconds / 60);
+      const avgSessionSecs = Math.floor(avgSessionSeconds % 60);
+      const avgSessionDuration = `${avgSessionMinutes}:${avgSessionSecs.toString().padStart(2, "0")}`;
+
+      // Fetch top pages
+      const pagesResponse = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: formatDate(startDate), endDate: formatDate(endDate) }],
+            dimensions: [{ name: "pagePath" }],
+            metrics: [{ name: "screenPageViews" }],
+            limit: 10,
+            orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+          }),
+        }
+      );
+
+      let topPages: { page: string; views: number }[] = [];
+      if (pagesResponse.ok) {
+        const pagesData = await pagesResponse.json();
+        topPages = (pagesData.rows || []).map((row: any) => ({
+          page: row.dimensionValues?.[0]?.value || "/",
+          views: parseInt(row.metricValues?.[0]?.value || "0", 10),
+        }));
+      }
+
+      // Fetch traffic sources
+      const sourcesResponse = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: formatDate(startDate), endDate: formatDate(endDate) }],
+            dimensions: [{ name: "sessionSource" }],
+            metrics: [{ name: "sessions" }],
+            limit: 5,
+            orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+          }),
+        }
+      );
+
+      let trafficSources: { source: string; value: number }[] = [];
+      if (sourcesResponse.ok) {
+        const sourcesData = await sourcesResponse.json();
+        trafficSources = (sourcesData.rows || []).map((row: any) => ({
+          source: row.dimensionValues?.[0]?.value || "Unknown",
+          value: parseInt(row.metricValues?.[0]?.value || "0", 10),
+        }));
+      }
+
+      // Fetch daily chart data
+      const chartResponse = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: formatDate(startDate), endDate: formatDate(endDate) }],
+            dimensions: [{ name: "date" }],
+            metrics: [
+              { name: "screenPageViews" },
+              { name: "totalUsers" },
+            ],
+            orderBys: [{ dimension: { dimensionName: "date" }, desc: false }],
+          }),
+        }
+      );
+
+      let chartData: { date: string; views: number; visitors: number }[] = [];
+      if (chartResponse.ok) {
+        const chartRawData = await chartResponse.json();
+        chartData = (chartRawData.rows || []).map((row: any) => {
+          const dateStr = row.dimensionValues?.[0]?.value || "";
+          const formattedDate = dateStr.length === 8 
+            ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+            : dateStr;
+          return {
+            date: formattedDate,
+            views: parseInt(row.metricValues?.[0]?.value || "0", 10),
+            visitors: parseInt(row.metricValues?.[1]?.value || "0", 10),
+          };
+        });
+      }
+
+      // Update last sync time
+      await storage.upsertIntegration({
+        name: "ga",
+        status: "connected",
+        lastSync: new Date().toISOString(),
+        config: JSON.stringify(config),
+      });
+
+      res.json({
+        pageViews,
+        uniqueVisitors,
+        bounceRate: Math.round(bounceRate * 10) / 10,
+        avgSessionDuration,
+        topPages,
+        trafficSources,
+        chartData,
       });
     } catch (error) {
+      console.error("[GA] Analytics error:", error);
       res.status(500).json({ error: "Failed to fetch analytics" });
     }
   });
@@ -825,6 +1077,150 @@ export async function registerRoutes(
     }
   });
 
+  // GA OAuth - Step 1: Get authorization URL
+  app.get("/api/integrations/ga/auth-url", async (req, res) => {
+    try {
+      const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
+      if (!clientId) {
+        return res.status(400).json({ 
+          error: "Google OAuth not configured",
+          message: "GOOGLE_SEARCH_CONSOLE_CLIENT_ID is not set in environment variables."
+        });
+      }
+
+      const state = crypto.randomBytes(32).toString("hex");
+      oauthStates.set(state, { timestamp: Date.now() });
+
+      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+      for (const [key, value] of oauthStates.entries()) {
+        if (value.timestamp < tenMinutesAgo) {
+          oauthStates.delete(key);
+        }
+      }
+
+      const protocol = req.get("x-forwarded-proto") || req.protocol;
+      const redirectUri = `${protocol}://${req.get("host")}/api/integrations/ga/callback`;
+      
+      const authUrl = new URL(GOOGLE_AUTH_URL);
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", GA_SCOPES.join(" "));
+      authUrl.searchParams.set("access_type", "offline");
+      authUrl.searchParams.set("prompt", "consent");
+      authUrl.searchParams.set("state", state);
+
+      res.json({ authUrl: authUrl.toString() });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate auth URL" });
+    }
+  });
+
+  // GA OAuth - Step 2: Handle callback
+  app.get("/api/integrations/ga/callback", async (req, res) => {
+    try {
+      const { code, state, error: oauthError, propertyId } = req.query;
+
+      if (oauthError) {
+        return res.redirect(`/integrations?error=${encodeURIComponent(oauthError as string)}`);
+      }
+
+      if (!code || !state) {
+        return res.redirect("/integrations?error=Missing+code+or+state");
+      }
+
+      if (!oauthStates.has(state as string)) {
+        return res.redirect("/integrations?error=Invalid+state+parameter");
+      }
+      oauthStates.delete(state as string);
+
+      const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET;
+      
+      if (!clientId || !clientSecret) {
+        return res.redirect("/integrations?error=OAuth+credentials+not+configured");
+      }
+
+      const protocol = req.get("x-forwarded-proto") || req.protocol;
+      const redirectUri = `${protocol}://${req.get("host")}/api/integrations/ga/callback`;
+
+      const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code: code as string,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.text();
+        console.error("GA Token exchange failed:", errorData);
+        return res.redirect("/integrations?error=Token+exchange+failed");
+      }
+
+      const tokens = await tokenResponse.json();
+
+      // Store tokens - user will need to provide property ID later
+      await storage.upsertIntegration({
+        name: "ga",
+        status: "connected",
+        lastSync: new Date().toISOString(),
+        config: JSON.stringify({
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          expiresAt: Date.now() + (tokens.expires_in * 1000),
+          propertyId: null, // User will need to set this
+        }),
+      });
+
+      res.redirect("/integrations?success=Google+Analytics+connected&needsPropertyId=true");
+    } catch (error) {
+      console.error("GA OAuth callback error:", error);
+      res.redirect("/integrations?error=OAuth+callback+failed");
+    }
+  });
+
+  // GA - Set property ID
+  app.post("/api/integrations/ga/property", async (req, res) => {
+    try {
+      const { propertyId } = req.body;
+      
+      if (!propertyId) {
+        return res.status(400).json({ error: "Property ID is required" });
+      }
+
+      const cleanPropertyId = String(propertyId).replace(/\D/g, "");
+      if (cleanPropertyId.length < 6) {
+        return res.status(400).json({ error: "Property ID must be a numeric value with at least 6 digits" });
+      }
+
+      const gaIntegration = await storage.getIntegration("ga");
+      if (!gaIntegration || gaIntegration.status !== "connected") {
+        return res.status(400).json({ error: "Google Analytics not connected. Please connect first." });
+      }
+
+      const config = (gaIntegration.config || {}) as any;
+      
+      await storage.upsertIntegration({
+        name: "ga",
+        status: "connected",
+        lastSync: new Date().toISOString(),
+        config: JSON.stringify({
+          ...config,
+          propertyId: cleanPropertyId,
+        }),
+      });
+
+      res.json({ success: true, message: "Property ID saved" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save property ID" });
+    }
+  });
+
   app.post("/api/integrations/:name/connect", async (req, res) => {
     try {
       const { name } = req.params;
@@ -862,22 +1258,35 @@ export async function registerRoutes(
           message: "Please complete the OAuth flow to connect Google Search Console."
         });
       } else if (name === "ga") {
-        // GA tracking is already set up via VITE_GA_MEASUREMENT_ID
-        // For data API, we'd need a service account
-        await storage.upsertIntegration({
-          name: "ga",
-          status: process.env.VITE_GA_MEASUREMENT_ID ? "configured" : "disconnected",
-          lastSync: null,
-          config: JSON.stringify({
-            measurementId: process.env.VITE_GA_MEASUREMENT_ID || null,
-            note: "Tracking is active. For historical data, a service account is needed."
-          }),
-        });
+        // GA Data API requires OAuth
+        const clientId = process.env.GOOGLE_SEARCH_CONSOLE_CLIENT_ID;
+        if (!clientId) {
+          return res.status(400).json({ 
+            error: "Google OAuth not configured",
+            message: "GOOGLE_SEARCH_CONSOLE_CLIENT_ID is not set. Please add it to your secrets."
+          });
+        }
         
-        res.json({ 
-          success: true, 
-          message: "Google Analytics tracking is active.",
-          note: "To view historical analytics data, you'll need to set up a GA4 service account."
+        // Generate auth URL and return it
+        const state = crypto.randomBytes(32).toString("hex");
+        oauthStates.set(state, { timestamp: Date.now() });
+        
+        const protocol = req.get("x-forwarded-proto") || req.protocol;
+        const redirectUri = `${protocol}://${req.get("host")}/api/integrations/ga/callback`;
+        
+        const authUrl = new URL(GOOGLE_AUTH_URL);
+        authUrl.searchParams.set("client_id", clientId);
+        authUrl.searchParams.set("redirect_uri", redirectUri);
+        authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("scope", GA_SCOPES.join(" "));
+        authUrl.searchParams.set("access_type", "offline");
+        authUrl.searchParams.set("prompt", "consent");
+        authUrl.searchParams.set("state", state);
+        
+        return res.json({ 
+          requiresOAuth: true,
+          authUrl: authUrl.toString(),
+          message: "Please complete the OAuth flow to connect Google Analytics."
         });
       } else {
         res.status(404).json({ error: "Unknown integration" });
