@@ -8,7 +8,7 @@ interface IntegrationCardProps {
   name: string;
   description: string;
   icon: React.ReactNode;
-  status: "connected" | "disconnected" | "error";
+  status: "connected" | "configured" | "disconnected" | "error";
   lastSync?: string;
   onConnect?: () => void;
   onDisconnect?: () => void;
@@ -32,6 +32,12 @@ export function IntegrationCard({
       label: "Connected",
       icon: CheckCircle,
       className: "text-green-500",
+      badgeVariant: "outline" as const,
+    },
+    configured: {
+      label: "Configured",
+      icon: CheckCircle,
+      className: "text-blue-500",
       badgeVariant: "outline" as const,
     },
     disconnected: {
@@ -85,7 +91,7 @@ export function IntegrationCard({
                 <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
               </Button>
             )}
-            {status === "connected" && onDisconnect && (
+            {(status === "connected" || status === "configured") && onDisconnect && (
               <Button
                 variant="outline"
                 size="sm"

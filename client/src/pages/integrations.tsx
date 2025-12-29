@@ -43,9 +43,9 @@ export default function Integrations() {
     queryKey: ["/api/integrations"],
   });
 
-  const getIntegrationStatus = (name: string): "connected" | "disconnected" | "error" => {
+  const getIntegrationStatus = (name: string): "connected" | "configured" | "disconnected" | "error" => {
     const integration = integrations.find((i) => i.name === name);
-    return (integration?.status as "connected" | "disconnected" | "error") || "disconnected";
+    return (integration?.status as "connected" | "configured" | "disconnected" | "error") || "disconnected";
   };
 
   const getLastSync = (name: string): string | undefined => {
