@@ -340,21 +340,13 @@ export async function registerRoutes(
 
   app.get("/api/performance/chart", async (req, res) => {
     try {
-      const gscIntegration = await storage.getIntegration("gsc");
+      // Use auto-refresh token function
+      const accessToken = await getValidGSCToken();
       
-      if (!gscIntegration || gscIntegration.status !== "connected") {
+      if (!accessToken) {
         return res.status(400).json({ 
           error: "Google Search Console not connected",
           message: "Please connect Google Search Console in the Integrations page to view performance data.",
-          requiresConnection: true
-        });
-      }
-
-      const config = (gscIntegration.config || {}) as { accessToken?: string; refreshToken?: string; expiresAt?: number };
-      if (!config.accessToken) {
-        return res.status(400).json({ 
-          error: "GSC tokens missing",
-          message: "Please reconnect Google Search Console.",
           requiresConnection: true
         });
       }
@@ -372,7 +364,7 @@ export async function registerRoutes(
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${config.accessToken}`,
+            "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -387,16 +379,6 @@ export async function registerRoutes(
       if (!gscResponse.ok) {
         const errorText = await gscResponse.text();
         console.error("GSC API error:", errorText);
-        
-        // If token expired, try to refresh
-        if (gscResponse.status === 401 && config.refreshToken) {
-          // Token refresh would go here - for now return error
-          return res.status(401).json({ 
-            error: "GSC token expired",
-            message: "Please reconnect Google Search Console.",
-            requiresConnection: true
-          });
-        }
         
         return res.status(gscResponse.status).json({ 
           error: "GSC API error",
@@ -424,21 +406,13 @@ export async function registerRoutes(
 
   app.get("/api/performance/top-pages", async (req, res) => {
     try {
-      const gscIntegration = await storage.getIntegration("gsc");
+      // Use auto-refresh token function
+      const accessToken = await getValidGSCToken();
       
-      if (!gscIntegration || gscIntegration.status !== "connected") {
+      if (!accessToken) {
         return res.status(400).json({ 
           error: "Google Search Console not connected",
           message: "Please connect Google Search Console in the Integrations page to view top pages.",
-          requiresConnection: true
-        });
-      }
-
-      const config = (gscIntegration.config || {}) as { accessToken?: string; refreshToken?: string; expiresAt?: number };
-      if (!config.accessToken) {
-        return res.status(400).json({ 
-          error: "GSC tokens missing",
-          message: "Please reconnect Google Search Console.",
           requiresConnection: true
         });
       }
@@ -455,7 +429,7 @@ export async function registerRoutes(
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${config.accessToken}`,
+            "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
