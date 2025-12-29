@@ -64,6 +64,7 @@ export default function CreateWithAI() {
   const [recommendedKeywords, setRecommendedKeywords] = useState("");
   const [selectedStyleId, setSelectedStyleId] = useState<string>("default");
   const [wordCount, setWordCount] = useState("1500");
+  const [contentProvider, setContentProvider] = useState<"anthropic" | "openai">("anthropic");
   
   const [generatedContent, setGeneratedContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -190,6 +191,7 @@ export default function CreateWithAI() {
           wordCount: parseInt(wordCount) || 1500,
           recommendedKeywords: keywordsArray,
           styleId: selectedStyleId !== "default" ? selectedStyleId : undefined,
+          provider: contentProvider,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -664,6 +666,22 @@ export default function CreateWithAI() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Enter your desired word count (100-10,000)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="content-provider">AI Provider</Label>
+                <Select value={contentProvider} onValueChange={(value: "anthropic" | "openai") => setContentProvider(value)}>
+                  <SelectTrigger id="content-provider" data-testid="select-content-provider">
+                    <SelectValue placeholder="Select AI provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="anthropic">Claude (Anthropic)</SelectItem>
+                    <SelectItem value="openai">GPT-4o (OpenAI)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choose the AI model for content generation
                 </p>
               </div>
 

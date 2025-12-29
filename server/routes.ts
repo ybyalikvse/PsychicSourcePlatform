@@ -1015,7 +1015,7 @@ export async function registerRoutes(
   // Content Generation with OpenAI
   app.post("/api/content/generate", async (req, res) => {
     try {
-      const { targetKeyword, wordCount, recommendedKeywords, styleId } = req.body;
+      const { targetKeyword, wordCount, recommendedKeywords, styleId, provider = "anthropic" } = req.body;
       
       if (!targetKeyword) {
         return res.status(400).json({ error: "Target keyword is required" });
@@ -1081,11 +1081,6 @@ STRUCTURE:
 
 Write the complete ${targetWordCount}-word article now. Output clean HTML only:`;
 
-      const anthropic = new Anthropic({
-        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-      });
-
       // Set up SSE for streaming
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -1093,23 +1088,55 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
 
       // Calculate max tokens based on word count (roughly 1.5 tokens per word + buffer for HTML tags)
       const maxTokens = Math.min(16000, Math.max(4096, Math.ceil(targetWordCount * 2)));
-
-      const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-5",
-        max_tokens: maxTokens,
-        system: systemPrompt,
-        messages: [
-          { role: "user", content: userPrompt }
-        ],
-      });
-
       let fullContent = "";
-      for await (const event of stream) {
-        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-          const content = event.delta.text;
+
+      if (provider === "openai") {
+        // Use OpenAI for content generation
+        const openai = new OpenAI({
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        });
+
+        const stream = await openai.chat.completions.create({
+          model: "gpt-4o",
+          max_tokens: maxTokens,
+          stream: true,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+        });
+
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content;
           if (content) {
             fullContent += content;
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          }
+        }
+      } else {
+        // Use Anthropic Claude for content generation (default)
+        const anthropic = new Anthropic({
+          apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        });
+
+        const stream = anthropic.messages.stream({
+          model: "claude-sonnet-4-5",
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [
+            { role: "user", content: userPrompt }
+          ],
+        });
+
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            const content = event.delta.text;
+            if (content) {
+              fullContent += content;
+              res.write(`data: ${JSON.stringify({ content })}\n\n`);
+            }
           }
         }
       }
