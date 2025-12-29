@@ -2307,6 +2307,10 @@ ${c.content || "No content available"}
 
       console.log("[Optimize Refresh] Competitors formatted length:", competitorsFormatted.length);
       console.log("[Optimize Refresh] Custom prompt exists:", !!customPrompt);
+      if (customPrompt) {
+        console.log("[Optimize Refresh] Custom prompt length:", customPrompt.length);
+        console.log("[Optimize Refresh] Custom prompt preview:", customPrompt.substring(0, 200) + "...");
+      }
 
       let analysisPrompt: string;
       
@@ -2318,8 +2322,21 @@ ${c.content || "No content available"}
       );
       
       console.log("[Optimize Refresh] Custom prompt has placeholders:", hasPlaceholders);
+      if (customPrompt && !hasPlaceholders) {
+        console.log("[Optimize Refresh] WARNING: Custom prompt exists but has NO placeholders! The following placeholders are available:");
+        console.log("  {targetKeyword} - The target keyword for the analysis");
+        console.log("  {url} - The URL being analyzed");
+        console.log("  {pageTitle} - The page title");
+        console.log("  {pageMetaDescription} - The page meta description");
+        console.log("  {pageWordCount} - The page word count");
+        console.log("  {pageHeadings} - The page headings (H1, H2, H3)");
+        console.log("  {pageContent} - The full page content");
+        console.log("  {keywords} - All ranking keywords from Google Search Console");
+        console.log("  {competitors} - Full competitor content analysis");
+        console.log("  {keywordsInStrikingDistance} - Keywords ranking 10-100 that need improvement");
+      }
       
-      if (customPrompt && customPrompt.trim() && hasPlaceholders) {
+      if (customPrompt && customPrompt.trim()) {
         analysisPrompt = customPrompt
           .replace(/\{targetKeyword\}/g, targetKeyword)
           .replace(/\{url\}/g, analysis.url)
@@ -2331,9 +2348,13 @@ ${c.content || "No content available"}
           .replace(/\{keywords\}/g, keywordsFormatted)
           .replace(/\{competitors\}/g, competitorsFormatted)
           .replace(/\{keywordsInStrikingDistance\}/g, strikingDistanceFormatted);
-        console.log("[Optimize Refresh] Using custom prompt with placeholders");
+        console.log("[Optimize Refresh] Using custom prompt");
+        console.log("[Optimize Refresh] Final prompt length after substitution:", analysisPrompt.length);
+        if (analysisPrompt.length < 5000 && competitorsFormatted.length > 10000) {
+          console.log("[Optimize Refresh] WARNING: Final prompt is very short but competitor data is large. Your custom prompt may be missing placeholder variables!");
+        }
       } else {
-        console.log("[Optimize Refresh] Using default prompt (custom prompt missing or has no placeholders)");
+        console.log("[Optimize Refresh] Using default prompt (no custom prompt set)");
         analysisPrompt = `You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
 
 TARGET KEYWORD: "${targetKeyword}"
