@@ -2363,12 +2363,21 @@ Return your analysis as a JSON array of recommendations with this exact structur
 Be extremely specific and actionable. Reference specific competitor content when making suggestions. Prioritize recommendations that will have the biggest impact on rankings for "${targetKeyword}".`;
       }
 
+      console.log("[Optimize Refresh] Sending prompt to Gemini for analysis ID:", req.params.id);
+      console.log("[Optimize Refresh] Target keyword:", targetKeyword);
+      console.log("[Optimize Refresh] Keywords count:", keywordsTyped.length);
+      console.log("[Optimize Refresh] Competitors count:", competitorsTyped.length);
+      console.log("[Optimize Refresh] Page content word count:", pageContentTyped.wordCount);
+      
       const response = await genAI.models.generateContent({
         model: "gemini-2.5-flash",
         contents: analysisPrompt,
       });
 
       const responseText = response.text || "";
+      console.log("[Optimize Refresh] Raw AI response length:", responseText.length);
+      console.log("[Optimize Refresh] Raw AI response preview:", responseText.substring(0, 500));
+      
       let recommendations: Array<{
         type: "title" | "meta" | "content" | "headings" | "keywords";
         priority: "high" | "medium" | "low";
@@ -2381,9 +2390,13 @@ Be extremely specific and actionable. Reference specific competitor content when
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           recommendations = JSON.parse(jsonMatch[0]);
+          console.log("[Optimize Refresh] Parsed", recommendations.length, "recommendations");
+        } else {
+          console.error("[Optimize Refresh] No JSON array found in response");
         }
       } catch (parseError) {
         console.error("[Optimize Refresh] Failed to parse AI response:", parseError);
+        console.error("[Optimize Refresh] Response text:", responseText.substring(0, 1000));
       }
 
       // Update the analysis with new recommendations
