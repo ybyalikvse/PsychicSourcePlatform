@@ -1131,7 +1131,7 @@ export default function CreateWithAI() {
       </div>
 
       <Dialog open={metaDialogOpen} onOpenChange={setMetaDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Meta Tag Suggestions</DialogTitle>
             <DialogDescription>
@@ -1145,7 +1145,7 @@ export default function CreateWithAI() {
               <p className="text-sm text-muted-foreground">Generating suggestions...</p>
             </div>
           ) : metaSuggestions ? (
-            <div className="space-y-6 py-4">
+            <div className="space-y-6 py-4 overflow-y-auto flex-1">
               <div className="space-y-3">
                 <Label>Meta Titles</Label>
                 <div className="space-y-2">
