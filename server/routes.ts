@@ -474,16 +474,35 @@ export async function registerRoutes(
       // The VITE_GA_MEASUREMENT_ID is only for frontend tracking, not for reading data
       const gaIntegration = await storage.getIntegration("ga");
       
-      if (!gaIntegration || gaIntegration.status !== "connected") {
+      // If GA is configured with just a measurement ID, tracking is active but data API is not
+      // Only status === "connected" with full API credentials can read data
+      if (!gaIntegration) {
         return res.status(400).json({ 
-          error: "Google Analytics Data API not connected",
-          message: "To view analytics data, you need to set up a Google Analytics Data API connection with a service account. The current GA Measurement ID is only for tracking, not for reading historical data.",
-          requiresConnection: true,
-          hint: "You'll need to create a service account in Google Cloud Console and grant it access to your GA4 property."
+          error: "Google Analytics not configured",
+          message: "Please configure Google Analytics in the Integrations page.",
+          requiresConnection: true
         });
       }
 
-      // TODO: Implement actual GA4 Data API call
+      // "configured" status means tracking is active, but no Data API access
+      if (gaIntegration.status === "configured") {
+        return res.status(400).json({ 
+          error: "Analytics Tracking Active - Data API Not Connected",
+          message: "Your GA Measurement ID is working for tracking page views. To view historical analytics data in this dashboard, you would need to set up a GA4 Data API service account (advanced setup).",
+          trackingActive: true,
+          requiresServiceAccount: true
+        });
+      }
+
+      if (gaIntegration.status !== "connected") {
+        return res.status(400).json({ 
+          error: "Google Analytics Data API not connected",
+          message: "To view analytics data, please connect Google Analytics in the Integrations page.",
+          requiresConnection: true
+        });
+      }
+
+      // TODO: Implement actual GA4 Data API call when service account is available
       return res.status(501).json({ 
         error: "GA Data API integration pending",
         message: "Google Analytics Data API integration requires a service account to be configured."

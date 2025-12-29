@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Link2, RefreshCw, Database } from "lucide-react";
+import { AlertCircle, Link2, RefreshCw, Database, Info, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 
 interface DataStateAction {
@@ -8,14 +8,15 @@ interface DataStateAction {
   href?: string;
   onClick?: () => void;
   variant?: "default" | "outline" | "ghost";
+  external?: boolean;
 }
 
 interface DataStateProps {
-  status: "error" | "empty" | "disconnected" | "loading";
+  status: "error" | "empty" | "disconnected" | "loading" | "info";
   title: string;
   message: string;
   actions?: DataStateAction[];
-  icon?: "error" | "connect" | "empty" | "loading";
+  icon?: "error" | "connect" | "empty" | "loading" | "info";
   className?: string;
 }
 
@@ -27,13 +28,14 @@ export function DataState({
   icon,
   className = "",
 }: DataStateProps) {
-  const iconType = icon || (status === "disconnected" ? "connect" : status === "empty" ? "empty" : "error");
+  const iconType = icon || (status === "disconnected" ? "connect" : status === "empty" ? "empty" : status === "info" ? "info" : "error");
 
   const IconComponent = {
     error: AlertCircle,
     connect: Link2,
     empty: Database,
     loading: RefreshCw,
+    info: Info,
   }[iconType];
 
   const iconColorClass = {
@@ -41,6 +43,7 @@ export function DataState({
     connect: "text-primary",
     empty: "text-muted-foreground",
     loading: "text-muted-foreground animate-spin",
+    info: "text-blue-500",
   }[iconType];
 
   return (
@@ -54,7 +57,14 @@ export function DataState({
         {actions.length > 0 && (
           <div className="flex flex-wrap gap-2 justify-center">
             {actions.map((action, index) =>
-              action.href ? (
+              action.external && action.href ? (
+                <a key={index} href={action.href} target="_blank" rel="noopener noreferrer">
+                  <Button variant={action.variant || "default"} data-testid={`button-action-${index}`}>
+                    {action.label}
+                    <ExternalLink className="ml-1 h-3 w-3" />
+                  </Button>
+                </a>
+              ) : action.href ? (
                 <Link key={index} href={action.href}>
                   <Button variant={action.variant || "default"} data-testid={`button-action-${index}`}>
                     {action.label}
@@ -94,6 +104,9 @@ export function InlineDataState({
       )}
       {status === "empty" && (
         <Database className="h-8 w-8 text-muted-foreground mb-3" />
+      )}
+      {status === "info" && (
+        <Info className="h-8 w-8 text-blue-500 mb-3" />
       )}
       <h4 className="font-medium mb-1">{title}</h4>
       <p className="text-sm text-muted-foreground max-w-sm mb-4">{message}</p>

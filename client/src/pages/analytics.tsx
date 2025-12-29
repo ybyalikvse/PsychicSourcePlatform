@@ -63,11 +63,12 @@ export default function Analytics() {
           </p>
         </div>
         <DataState
-          status="disconnected"
-          title="Google Analytics Data API Not Connected"
-          message="To view historical analytics data, you need to set up a Google Analytics 4 service account. The current GA Measurement ID is only used for tracking page views on this site."
+          status="info"
+          title="Analytics Tracking Active"
+          message="Your Google Analytics Measurement ID is configured and tracking page views on your website. To view historical analytics data in this dashboard, you would need to set up a GA4 Data API service account (advanced setup). For now, you can view your analytics directly in Google Analytics."
           actions={[
-            { label: "Learn More", href: "/integrations" },
+            { label: "View in Google Analytics", href: "https://analytics.google.com", external: true },
+            { label: "Go to Integrations", href: "/integrations" },
           ]}
         />
       </div>
