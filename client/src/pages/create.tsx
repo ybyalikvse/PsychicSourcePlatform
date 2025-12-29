@@ -111,6 +111,7 @@ export default function CreateWithAI() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageProvider, setImageProvider] = useState<"gemini" | "openai">("gemini");
+  const [imageAspectRatio, setImageAspectRatio] = useState<string>("16:9");
   
   const [blogImageCount, setBlogImageCount] = useState(3);
   const [blogImages, setBlogImages] = useState<Array<{ image: string; prompt: string; styleId: string; isGenerating: boolean }>>(
@@ -340,6 +341,7 @@ export default function CreateWithAI() {
         styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
         imageType: "featured",
         provider: imageProvider,
+        aspectRatio: imageAspectRatio,
       });
 
       const data = await response.json();
@@ -441,6 +443,7 @@ export default function CreateWithAI() {
           styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
           imageType: "featured",
           provider: imageProvider,
+          aspectRatio: imageAspectRatio,
         });
         const data = await response.json();
         if (data.imageData) {
@@ -469,6 +472,7 @@ export default function CreateWithAI() {
           styleId: newBlogImages[idx].styleId !== "default" ? newBlogImages[idx].styleId : undefined,
           imageType: "inline",
           provider: imageProvider,
+          aspectRatio: imageAspectRatio,
         });
         const data = await response.json();
         if (data.imageData) {
@@ -506,6 +510,7 @@ export default function CreateWithAI() {
         styleId: img.styleId !== "default" ? img.styleId : undefined,
         imageType: "inline",
         provider: imageProvider,
+        aspectRatio: imageAspectRatio,
       });
 
       const data = await response.json();
@@ -734,7 +739,7 @@ export default function CreateWithAI() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="image-provider">AI Provider</Label>
                   <Select value={imageProvider} onValueChange={(value: "gemini" | "openai") => setImageProvider(value)}>
@@ -760,6 +765,21 @@ export default function CreateWithAI() {
                           {style.name}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="image-aspect-ratio">Aspect Ratio</Label>
+                  <Select value={imageAspectRatio} onValueChange={setImageAspectRatio}>
+                    <SelectTrigger id="image-aspect-ratio" data-testid="select-image-aspect-ratio">
+                      <SelectValue placeholder="Select ratio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
+                      <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                      <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                      <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
+                      <SelectItem value="3:2">3:2 (Photo)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -1262,12 +1262,12 @@ Respond in JSON format:
 
       // Get image style if provided
       let stylePrompt = "";
-      let aspectRatio = "16:9";
+      // Use aspectRatio from request body (passed from UI), default to 16:9
+      let aspectRatio = req.body.aspectRatio || "16:9";
       if (styleId) {
         const style = await storage.getImageStyle(styleId);
         if (style) {
           stylePrompt = style.stylePrompt || "";
-          aspectRatio = style.aspectRatio || "16:9";
           if (style.additionalInstructions) {
             stylePrompt += " " + style.additionalInstructions;
           }
@@ -1374,7 +1374,6 @@ IMPORTANT - All image suggestions MUST follow this visual style:
 Style: ${style.name}
 Style Description: ${style.stylePrompt || ""}
 ${style.additionalInstructions ? `Additional Requirements: ${style.additionalInstructions}` : ""}
-Aspect Ratio: ${style.aspectRatio || "16:9"}
 
 Incorporate these style elements into every image prompt you generate.
 `;
