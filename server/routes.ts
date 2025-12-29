@@ -2431,7 +2431,7 @@ Be extremely specific and actionable. Reference specific competitor content when
 
       const responseText = response.text || "";
       console.log("[Optimize Refresh] Raw AI response length:", responseText.length);
-      console.log("[Optimize Refresh] Raw AI response preview:", responseText.substring(0, 500));
+      console.log("[Optimize Refresh] Raw AI response preview:", responseText.substring(0, 1000));
       
       let recommendations: Array<{
         type: "title" | "meta" | "content" | "headings" | "keywords";
@@ -2442,16 +2442,121 @@ Be extremely specific and actionable. Reference specific competitor content when
       }> = [];
 
       try {
-        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          recommendations = JSON.parse(jsonMatch[0]);
-          console.log("[Optimize Refresh] Parsed", recommendations.length, "recommendations");
+        // Try to find JSON in response (could be array or object)
+        const jsonArrayMatch = responseText.match(/\[[\s\S]*\]/);
+        const jsonObjectMatch = responseText.match(/\{[\s\S]*\}/);
+        
+        if (jsonArrayMatch) {
+          // Old format: array of recommendations
+          recommendations = JSON.parse(jsonArrayMatch[0]);
+          console.log("[Optimize Refresh] Parsed array format:", recommendations.length, "recommendations");
+        } else if (jsonObjectMatch) {
+          // New format: object with sections like contentGaps, depthImprovements, etc.
+          const parsed = JSON.parse(jsonObjectMatch[0]);
+          console.log("[Optimize Refresh] Parsed object format with keys:", Object.keys(parsed).join(", "));
+          
+          // Convert the new object format to the array format for storage
+          // Handle contentGaps
+          if (parsed.contentGaps && Array.isArray(parsed.contentGaps)) {
+            for (const gap of parsed.contentGaps) {
+              recommendations.push({
+                type: "content",
+                priority: gap.priority || "medium",
+                current: `Missing topic: ${gap.topic}`,
+                suggested: gap.recommendation || gap.topic,
+                reason: gap.foundInCompetitors ? `Found in competitors: ${gap.foundInCompetitors.join(", ")}` : "Content gap identified"
+              });
+            }
+          }
+          
+          // Handle depthImprovements
+          if (parsed.depthImprovements && Array.isArray(parsed.depthImprovements)) {
+            for (const depth of parsed.depthImprovements) {
+              recommendations.push({
+                type: "content",
+                priority: depth.priority || "medium",
+                current: depth.currentState || depth.area,
+                suggested: depth.recommendation || "",
+                reason: depth.competitorExample || "Add more depth"
+              });
+            }
+          }
+          
+          // Handle uniqueAngles
+          if (parsed.uniqueAngles && Array.isArray(parsed.uniqueAngles)) {
+            for (const angle of parsed.uniqueAngles) {
+              recommendations.push({
+                type: "content",
+                priority: "medium",
+                current: "No unique angle",
+                suggested: `${angle.angle}: ${angle.implementation || ""}`,
+                reason: angle.benefit || "Differentiate from competitors"
+              });
+            }
+          }
+          
+          // Handle structureImprovements
+          if (parsed.structureImprovements && Array.isArray(parsed.structureImprovements)) {
+            for (const structure of parsed.structureImprovements) {
+              recommendations.push({
+                type: "headings",
+                priority: "medium",
+                current: structure.currentIssue || "",
+                suggested: structure.recommendation || "",
+                reason: structure.example || "Improve heading structure"
+              });
+            }
+          }
+          
+          // Handle strikingDistanceKeywords
+          if (parsed.strikingDistanceKeywords) {
+            if (parsed.strikingDistanceKeywords.integrate && Array.isArray(parsed.strikingDistanceKeywords.integrate)) {
+              for (const kw of parsed.strikingDistanceKeywords.integrate) {
+                recommendations.push({
+                  type: "keywords",
+                  priority: kw.estimatedImpact || "medium",
+                  current: `Position ${kw.currentPosition}: "${kw.keyword}"`,
+                  suggested: `Add to ${kw.targetSection}: ${kw.implementation || kw.keyword}`,
+                  reason: `Striking distance keyword - ${kw.estimatedImpact || "medium"} impact`
+                });
+              }
+            }
+          }
+          
+          // Handle keywordOpportunities
+          if (parsed.keywordOpportunities && Array.isArray(parsed.keywordOpportunities)) {
+            for (const kw of parsed.keywordOpportunities) {
+              recommendations.push({
+                type: "keywords",
+                priority: "medium",
+                current: kw.currentUsage || `Keyword: ${kw.keyword}`,
+                suggested: kw.recommendation || "",
+                reason: kw.competitorInsight || "Keyword opportunity"
+              });
+            }
+          }
+          
+          // Handle quickWins
+          if (parsed.quickWins && Array.isArray(parsed.quickWins)) {
+            for (const win of parsed.quickWins) {
+              recommendations.push({
+                type: "content",
+                priority: win.effort === "low" ? "high" : (win.effort === "medium" ? "medium" : "low"),
+                current: "Quick win opportunity",
+                suggested: win.action || "",
+                reason: `Expected impact: ${win.impact || "Unknown"}`
+              });
+            }
+          }
+          
+          console.log("[Optimize Refresh] Converted to", recommendations.length, "recommendations");
         } else {
-          console.error("[Optimize Refresh] No JSON array found in response");
+          console.error("[Optimize Refresh] No JSON found in response");
+          console.error("[Optimize Refresh] Full response:", responseText);
         }
       } catch (parseError) {
         console.error("[Optimize Refresh] Failed to parse AI response:", parseError);
-        console.error("[Optimize Refresh] Response text:", responseText.substring(0, 1000));
+        console.error("[Optimize Refresh] Response text:", responseText.substring(0, 2000));
       }
 
       // Update the analysis with new recommendations

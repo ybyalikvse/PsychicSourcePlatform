@@ -1,0 +1,116 @@
+You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
+
+TARGET KEYWORD: "{targetKeyword}"
+
+=== OUR PAGE CONTENT ===
+URL: {url}
+Title: {pageTitle}
+Meta Description: {pageMetaDescription}
+Word Count: {pageWordCount}
+Headings Structure: {pageHeadings}
+
+FULL CONTENT:
+{pageContent}
+
+=== RANKING KEYWORDS (from Google Search Console) ===
+{keywords}
+
+=== STRIKING DISTANCE KEYWORDS (Positions 10-100) ===
+{keywordsInStrikingDistance}
+NOTE: These are keywords where we rank on page 2-10. Identify which ones are:
+- Semantically relevant to our target keyword
+- Worth targeting with minor content additions
+- Natural fits for existing sections or new subsections
+
+=== COMPETITOR CONTENT ANALYSIS ===
+{competitors}
+
+=== YOUR ANALYSIS TASK ===
+Compare our content against all competitor content and identify:
+
+1. **Content Gaps**: What topics, subtopics, or information do competitors cover that we're missing?
+
+2. **Content Depth**: Are competitors going deeper on certain topics? What details should we add?
+
+3. **Unique Angles**: What unique perspectives or information could we add that competitors don't have?
+
+4. **Structure Improvements**: How can we improve our heading structure based on what works for competitors?
+
+5. **Striking Distance Keyword Integration**: 
+   - Which striking distance keywords (positions 10-100) are semantically relevant to this content?
+   - Where can these keywords be naturally incorporated (which sections/headings)?
+   - What new subsections or FAQ items should we add to target these keywords?
+   - Which striking distance keywords should be IGNORED because they're not a good fit?
+
+6. **Primary Keyword Opportunities**: Based on competitors and our ranking data, what related keywords should we incorporate?
+
+7. **Quick Wins**: What are the top 3-5 easiest changes we can make for maximum ranking impact?
+
+Return your analysis as a JSON object with the following structure:
+{
+  "contentGaps": [
+    {
+      "topic": "string",
+      "foundInCompetitors": ["competitor URLs"],
+      "recommendation": "specific action to take",
+      "priority": "high|medium|low"
+    }
+  ],
+  "depthImprovements": [
+    {
+      "area": "string",
+      "currentState": "what we have now",
+      "competitorExample": "what competitors do better",
+      "recommendation": "specific improvement",
+      "priority": "high|medium|low"
+    }
+  ],
+  "uniqueAngles": [
+    {
+      "angle": "string",
+      "implementation": "how to add this",
+      "benefit": "why this helps"
+    }
+  ],
+  "structureImprovements": [
+    {
+      "currentIssue": "string",
+      "recommendation": "string",
+      "example": "specific heading structure to use"
+    }
+  ],
+  "strikingDistanceKeywords": {
+    "integrate": [
+      {
+        "keyword": "string",
+        "currentPosition": "number",
+        "targetSection": "where to add it",
+        "implementation": "how to naturally incorporate",
+        "estimatedImpact": "high|medium|low"
+      }
+    ],
+    "ignore": [
+      {
+        "keyword": "string",
+        "reason": "why it doesn't fit"
+      }
+    ]
+  },
+  "keywordOpportunities": [
+    {
+      "keyword": "string",
+      "currentUsage": "how we use it now",
+      "recommendation": "how to improve usage",
+      "competitorInsight": "what competitors do"
+    }
+  ],
+  "quickWins": [
+    {
+      "action": "string",
+      "impact": "expected improvement",
+      "effort": "low|medium|high"
+    }
+  ]
+}
+
+Be extremely specific and actionable. Reference specific competitor content when making suggestions. For striking distance keywords, only recommend integration where it makes semantic sense and won't compromise content quality.
