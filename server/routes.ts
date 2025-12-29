@@ -2224,12 +2224,21 @@ Be extremely specific and actionable. Reference specific competitor content when
   // Refresh recommendations for an existing analysis (re-runs AI without re-scraping)
   app.post("/api/optimize/analyses/:id/refresh", async (req, res) => {
     try {
+      console.log("[Optimize Refresh] Starting refresh for ID:", req.params.id);
       const analysis = await storage.getOptimizationAnalysis(req.params.id);
       if (!analysis) {
+        console.log("[Optimize Refresh] Analysis not found:", req.params.id);
         return res.status(404).json({ error: "Analysis not found" });
       }
 
       const { targetKeyword, pageContent, keywords, competitors } = analysis;
+      
+      // Validate we have the required data
+      if (!pageContent) {
+        console.error("[Optimize Refresh] No pageContent found for analysis:", req.params.id);
+        return res.status(400).json({ error: "Analysis is missing page content data" });
+      }
+      
       const pageContentTyped = pageContent as {
         title: string;
         metaDescription: string;
@@ -2237,6 +2246,9 @@ Be extremely specific and actionable. Reference specific competitor content when
         content: string;
         headings: { h1: string[]; h2: string[]; h3: string[] };
       };
+      
+      console.log("[Optimize Refresh] Page content title:", pageContentTyped.title);
+      console.log("[Optimize Refresh] Page content length:", pageContentTyped.content?.length || 0);
       const keywordsTyped = (keywords || []) as Array<{
         keyword: string;
         position: number;
@@ -2368,11 +2380,19 @@ Be extremely specific and actionable. Reference specific competitor content when
       console.log("[Optimize Refresh] Keywords count:", keywordsTyped.length);
       console.log("[Optimize Refresh] Competitors count:", competitorsTyped.length);
       console.log("[Optimize Refresh] Page content word count:", pageContentTyped.wordCount);
+      console.log("[Optimize Refresh] Prompt length:", analysisPrompt.length);
       
-      const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: analysisPrompt,
-      });
+      let response;
+      try {
+        response = await genAI.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: analysisPrompt,
+        });
+        console.log("[Optimize Refresh] Got response from Gemini");
+      } catch (geminiError) {
+        console.error("[Optimize Refresh] Gemini API error:", geminiError);
+        return res.status(500).json({ error: "AI analysis failed: " + (geminiError instanceof Error ? geminiError.message : "Unknown error") });
+      }
 
       const responseText = response.text || "";
       console.log("[Optimize Refresh] Raw AI response length:", responseText.length);
