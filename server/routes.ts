@@ -1835,6 +1835,14 @@ Example response:
         reason: string;
       }> = [];
 
+      // Fetch custom optimization prompt from SEO settings
+      const seoSettings = await storage.getSeoSettings();
+      const customPrompt = seoSettings?.optimizationPrompt;
+
+      // Identify keywords in "striking distance" (positions 10-100) - these are ranking opportunities
+      const keywordsInStrikingDistance = keywords.filter(k => k.position >= 10 && k.position <= 100);
+      console.log(`[Optimize] Found ${keywordsInStrikingDistance.length} keywords in striking distance (positions 10-100)`);
+
       try {
         const { GoogleGenAI } = await import("@google/genai");
         const genAI = new GoogleGenAI({
@@ -1847,8 +1855,50 @@ Example response:
 
         console.log(`[Optimize] Gemini API initialized, page content: ${pageContent.wordCount} words, competitors: ${competitors.length}`);
 
-        // Build comprehensive prompt with FULL content from all sources
-        const analysisPrompt = `You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
+        // Build data for prompt placeholders
+        const keywordsFormatted = keywords.length > 0 
+          ? keywords.slice(0, 30).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks}, Impressions: ${k.impressions})`).join("\n")
+          : "No ranking data available";
+        
+        const strikingDistanceFormatted = keywordsInStrikingDistance.length > 0
+          ? keywordsInStrikingDistance.map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Impressions: ${k.impressions}) - Consider adding as H2/H3 heading or section`).join("\n")
+          : "No keywords in striking distance found";
+        
+        const competitorsFormatted = competitors.length > 0 
+          ? competitors.map((c, i) => `
+--- COMPETITOR #${i + 1}: ${c.url} ---
+Title: ${c.title}
+Meta Description: ${c.metaDescription}
+Word Count: ${c.wordCount}
+H1 Headings: ${c.headings.h1.join(", ") || "None"}
+H2 Headings: ${c.headings.h2.join(", ") || "None"}
+H3 Headings: ${c.headings.h3.join(", ") || "None"}
+
+FULL CONTENT:
+${c.content}
+`).join("\n\n")
+          : "No competitor data available";
+
+        let analysisPrompt: string;
+        
+        if (customPrompt && customPrompt.trim()) {
+          // Use custom prompt with placeholder replacement
+          console.log(`[Optimize] Using custom optimization prompt (${customPrompt.length} chars)`);
+          analysisPrompt = customPrompt
+            .replace(/\{targetKeyword\}/g, targetKeyword)
+            .replace(/\{url\}/g, url)
+            .replace(/\{pageTitle\}/g, pageContent.title)
+            .replace(/\{pageMetaDescription\}/g, pageContent.metaDescription)
+            .replace(/\{pageWordCount\}/g, String(pageContent.wordCount))
+            .replace(/\{pageHeadings\}/g, `H1: ${pageContent.headings.h1.join(", ") || "None"}\nH2: ${pageContent.headings.h2.join(", ") || "None"}\nH3: ${pageContent.headings.h3.join(", ") || "None"}`)
+            .replace(/\{pageContent\}/g, pageContent.content)
+            .replace(/\{keywords\}/g, keywordsFormatted)
+            .replace(/\{competitors\}/g, competitorsFormatted)
+            .replace(/\{keywordsInStrikingDistance\}/g, strikingDistanceFormatted);
+        } else {
+          // Use default comprehensive prompt with striking distance keywords section
+          console.log(`[Optimize] Using default optimization prompt`);
+          analysisPrompt = `You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
 
 TARGET KEYWORD: "${targetKeyword}"
 
@@ -1865,25 +1915,19 @@ FULL CONTENT:
 ${pageContent.content}
 
 === RANKING KEYWORDS (from Google Search Console) ===
-${keywords.length > 0 
-  ? keywords.slice(0, 30).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks}, Impressions: ${k.impressions})`).join("\n")
-  : "No ranking data available"}
+${keywordsFormatted}
+
+=== KEYWORDS IN STRIKING DISTANCE (Positions 10-100) ===
+These are ranking opportunities - keywords where we're close to page 1 or already ranking but could improve:
+${strikingDistanceFormatted}
+
+**IMPORTANT**: For keywords in striking distance, especially those with high impressions, consider:
+- Adding them as H2 or H3 headings
+- Creating dedicated content sections targeting these queries
+- Naturally incorporating them into existing content
 
 === COMPETITOR CONTENT ANALYSIS ===
-${competitors.length > 0 
-  ? competitors.map((c, i) => `
---- COMPETITOR #${i + 1}: ${c.url} ---
-Title: ${c.title}
-Meta Description: ${c.metaDescription}
-Word Count: ${c.wordCount}
-H1 Headings: ${c.headings.h1.join(", ") || "None"}
-H2 Headings: ${c.headings.h2.join(", ") || "None"}
-H3 Headings: ${c.headings.h3.join(", ") || "None"}
-
-FULL CONTENT:
-${c.content}
-`).join("\n\n")
-  : "No competitor data available"}
+${competitorsFormatted}
 
 === YOUR ANALYSIS TASK ===
 Compare our content against all competitor content and identify:
@@ -1894,6 +1938,7 @@ Compare our content against all competitor content and identify:
 4. **Structure Improvements**: How can we improve our heading structure based on what works for competitors?
 5. **Title & Meta Optimization**: How can we make our title and meta description more compelling while incorporating the target keyword?
 6. **Keyword Opportunities**: Based on competitors and our ranking data, what related keywords should we incorporate?
+7. **Striking Distance Opportunities**: Which keywords in positions 10-100 should we prioritize adding as headings or sections to boost their rankings?
 
 Return your analysis as a JSON object with this exact structure:
 {
@@ -1909,6 +1954,7 @@ Return your analysis as a JSON object with this exact structure:
 }
 
 Be extremely specific and actionable. Reference specific competitor content when making suggestions. Prioritize recommendations that will have the biggest impact on rankings for "${targetKeyword}".`;
+        }
 
         console.log(`[Optimize] Sending ${analysisPrompt.length} chars to Gemini for analysis`);
 
