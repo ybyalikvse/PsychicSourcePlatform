@@ -49,6 +49,7 @@ interface SeoSettingsFormData {
   metaTitleMaxLength: number;
   metaDescriptionGuidelines: string;
   metaDescriptionMaxLength: number;
+  optimizationPrompt: string;
 }
 
 export default function Settings() {
@@ -96,6 +97,7 @@ export default function Settings() {
     metaTitleMaxLength: 60,
     metaDescriptionGuidelines: "",
     metaDescriptionMaxLength: 160,
+    optimizationPrompt: "",
   });
 
   useEffect(() => {
@@ -105,6 +107,7 @@ export default function Settings() {
         metaTitleMaxLength: seoSettings.metaTitleMaxLength || 60,
         metaDescriptionGuidelines: seoSettings.metaDescriptionGuidelines || "",
         metaDescriptionMaxLength: seoSettings.metaDescriptionMaxLength || 160,
+        optimizationPrompt: seoSettings.optimizationPrompt || "",
       });
     }
   }, [seoSettings]);
@@ -602,6 +605,29 @@ export default function Settings() {
                 />
                 <span className="text-sm text-muted-foreground">characters</span>
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h4 className="text-sm font-medium">Article Optimization AI Prompt</h4>
+            <p className="text-xs text-muted-foreground">
+              Customize the AI prompt used to generate optimization recommendations. Use placeholders like {"{targetKeyword}"}, {"{url}"}, {"{pageContent}"}, {"{keywords}"}, and {"{competitors}"} which will be replaced with actual data.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="optimization-prompt">Custom Optimization Prompt</Label>
+              <Textarea
+                id="optimization-prompt"
+                value={seoForm.optimizationPrompt}
+                onChange={(e) => setSeoForm({ ...seoForm, optimizationPrompt: e.target.value })}
+                placeholder="Leave empty to use the default prompt. Enter a custom prompt to override..."
+                className="min-h-[300px] font-mono text-sm"
+                data-testid="input-optimization-prompt"
+              />
+              <p className="text-xs text-muted-foreground">
+                Available placeholders: {"{targetKeyword}"}, {"{url}"}, {"{pageTitle}"}, {"{pageMetaDescription}"}, {"{pageWordCount}"}, {"{pageHeadings}"}, {"{pageContent}"}, {"{keywords}"}, {"{competitors}"}, {"{keywordsInStrikingDistance}"}
+              </p>
             </div>
           </div>
 

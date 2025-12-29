@@ -152,6 +152,7 @@ export const seoSettings = pgTable("seo_settings", {
   metaTitleMaxLength: integer("meta_title_max_length").default(60),
   metaDescriptionGuidelines: text("meta_description_guidelines"),
   metaDescriptionMaxLength: integer("meta_description_max_length").default(160),
+  optimizationPrompt: text("optimization_prompt"),
   updatedAt: text("updated_at").notNull().default(sql`now()`),
 });
 
