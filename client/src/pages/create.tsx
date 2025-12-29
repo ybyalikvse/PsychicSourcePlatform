@@ -870,7 +870,7 @@ export default function CreateWithAI() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="blog-image-count">Number of Images</Label>
                   <Select value={String(blogImageCount)} onValueChange={(v) => handleBlogImageCountChange(parseInt(v))}>
@@ -893,6 +893,21 @@ export default function CreateWithAI() {
                     <SelectContent>
                       <SelectItem value="gemini">Gemini (Nano Banana)</SelectItem>
                       <SelectItem value="openai">OpenAI (GPT Image)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="blog-image-aspect-ratio">Aspect Ratio</Label>
+                  <Select value={imageAspectRatio} onValueChange={setImageAspectRatio}>
+                    <SelectTrigger id="blog-image-aspect-ratio" data-testid="select-blog-image-aspect-ratio">
+                      <SelectValue placeholder="Select ratio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
+                      <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                      <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                      <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
+                      <SelectItem value="3:2">3:2 (Photo)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
