@@ -2306,11 +2306,20 @@ ${c.content || "No content available"}
         : "No competitor data available";
 
       console.log("[Optimize Refresh] Competitors formatted length:", competitorsFormatted.length);
-      console.log("[Optimize Refresh] Using custom prompt:", !!customPrompt);
+      console.log("[Optimize Refresh] Custom prompt exists:", !!customPrompt);
 
       let analysisPrompt: string;
       
-      if (customPrompt && customPrompt.trim()) {
+      const hasPlaceholders = customPrompt && (
+        customPrompt.includes('{targetKeyword}') ||
+        customPrompt.includes('{pageContent}') ||
+        customPrompt.includes('{keywords}') ||
+        customPrompt.includes('{competitors}')
+      );
+      
+      console.log("[Optimize Refresh] Custom prompt has placeholders:", hasPlaceholders);
+      
+      if (customPrompt && customPrompt.trim() && hasPlaceholders) {
         analysisPrompt = customPrompt
           .replace(/\{targetKeyword\}/g, targetKeyword)
           .replace(/\{url\}/g, analysis.url)
@@ -2322,7 +2331,9 @@ ${c.content || "No content available"}
           .replace(/\{keywords\}/g, keywordsFormatted)
           .replace(/\{competitors\}/g, competitorsFormatted)
           .replace(/\{keywordsInStrikingDistance\}/g, strikingDistanceFormatted);
+        console.log("[Optimize Refresh] Using custom prompt with placeholders");
       } else {
+        console.log("[Optimize Refresh] Using default prompt (custom prompt missing or has no placeholders)");
         analysisPrompt = `You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
 
 TARGET KEYWORD: "${targetKeyword}"
