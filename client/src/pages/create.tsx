@@ -1263,19 +1263,10 @@ export default function CreateWithAI() {
                   <div className="flex items-center gap-2 pt-2">
                     <Button 
                       size="sm"
-                      onClick={() => handleGenerateSuggestion(suggestion)}
-                      data-testid={`button-generate-suggestion-${i}`}
-                    >
-                      <ImageIcon className="h-4 w-4 mr-2" />
-                      Generate with {imageProvider === "openai" ? "OpenAI" : "Gemini"}
-                    </Button>
-                    <Button 
-                      size="sm"
-                      variant="outline"
                       onClick={() => handleSelectSuggestion(suggestion)}
                       data-testid={`button-use-prompt-${i}`}
                     >
-                      Use Prompt Only
+                      Use This Prompt
                     </Button>
                   </div>
                 </div>
