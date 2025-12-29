@@ -519,6 +519,14 @@ export class DatabaseStorage implements IStorage {
     await db.delete(optimizationAnalyses).where(eq(optimizationAnalyses.id, id));
     return true;
   }
+
+  async updateOptimizationAnalysisRecommendations(id: string, recommendations: unknown[]): Promise<OptimizationAnalysis | undefined> {
+    const [analysis] = await db.update(optimizationAnalyses)
+      .set({ recommendations })
+      .where(eq(optimizationAnalyses.id, id))
+      .returning();
+    return analysis;
+  }
 }
 
 // Use database storage for persistence

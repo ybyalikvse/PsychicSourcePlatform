@@ -52,6 +52,7 @@ import {
   Trash2,
   Eye,
   Save,
+  RefreshCw,
 } from "lucide-react";
 
 const DATE_RANGE_OPTIONS = [
@@ -213,6 +214,33 @@ export default function Optimize() {
     onError: (error: Error) => {
       toast({
         title: "Save Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const refreshRecommendationsMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/optimize/analyses/${id}/refresh`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (analysisResult && data.recommendations) {
+        setAnalysisResult({
+          ...analysisResult,
+          recommendations: data.recommendations,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
+      toast({
+        title: "Recommendations Refreshed",
+        description: "AI analysis has been re-run with new recommendations.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Refresh Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -516,11 +544,34 @@ export default function Optimize() {
 
           <TabsContent value="recommendations" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Optimization Recommendations</CardTitle>
-                <CardDescription>
-                  AI-powered suggestions to improve your ranking for "{form.getValues("targetKeyword")}"
-                </CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle>Optimization Recommendations</CardTitle>
+                  <CardDescription>
+                    AI-powered suggestions to improve your ranking for "{form.getValues("targetKeyword")}"
+                  </CardDescription>
+                </div>
+                {analysisResult?.id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refreshRecommendationsMutation.mutate(analysisResult.id!)}
+                    disabled={refreshRecommendationsMutation.isPending}
+                    data-testid="button-refresh-recommendations"
+                  >
+                    {refreshRecommendationsMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Refreshing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                      </>
+                    )}
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">

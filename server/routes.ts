@@ -2221,5 +2221,184 @@ Be extremely specific and actionable. Reference specific competitor content when
     }
   });
 
+  // Refresh recommendations for an existing analysis (re-runs AI without re-scraping)
+  app.post("/api/optimize/analyses/:id/refresh", async (req, res) => {
+    try {
+      const analysis = await storage.getOptimizationAnalysis(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      const { targetKeyword, pageContent, keywords, competitors } = analysis;
+      const pageContentTyped = pageContent as {
+        title: string;
+        metaDescription: string;
+        wordCount: number;
+        content: string;
+        headings: { h1: string[]; h2: string[]; h3: string[] };
+      };
+      const keywordsTyped = (keywords || []) as Array<{
+        keyword: string;
+        position: number;
+        clicks: number;
+        impressions: number;
+      }>;
+      const competitorsTyped = (competitors || []) as Array<{
+        url: string;
+        title: string;
+        metaDescription: string;
+        headings: { h1: string[]; h2: string[]; h3: string[] };
+        wordCount: number;
+        content: string;
+      }>;
+
+      // Fetch custom optimization prompt from SEO settings
+      const seoSettings = await storage.getSeoSettings();
+      const customPrompt = seoSettings?.optimizationPrompt;
+
+      // Identify keywords in "striking distance" (positions 10-100)
+      const keywordsInStrikingDistance = keywordsTyped.filter(k => k.position >= 10 && k.position <= 100);
+
+      // Re-run AI analysis
+      const { GoogleGenAI } = await import("@google/genai");
+      const genAI = new GoogleGenAI({
+        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        httpOptions: {
+          apiVersion: "",
+          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        },
+      });
+
+      // Build data for prompt placeholders
+      const keywordsFormatted = keywordsTyped.length > 0 
+        ? keywordsTyped.slice(0, 30).map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Clicks: ${k.clicks}, Impressions: ${k.impressions})`).join("\n")
+        : "No ranking data available";
+      
+      const strikingDistanceFormatted = keywordsInStrikingDistance.length > 0
+        ? keywordsInStrikingDistance.map(k => `- "${k.keyword}" (Position: ${k.position.toFixed(1)}, Impressions: ${k.impressions}) - Consider adding as H2/H3 heading or section`).join("\n")
+        : "No keywords in striking distance found";
+      
+      const competitorsFormatted = competitorsTyped.length > 0 
+        ? competitorsTyped.map((c, i) => `
+--- COMPETITOR #${i + 1}: ${c.url} ---
+Title: ${c.title}
+Meta Description: ${c.metaDescription}
+Word Count: ${c.wordCount}
+H1 Headings: ${c.headings.h1.join(", ") || "None"}
+H2 Headings: ${c.headings.h2.join(", ") || "None"}
+H3 Headings: ${c.headings.h3.join(", ") || "None"}
+
+FULL CONTENT:
+${c.content}
+`).join("\n\n")
+        : "No competitor data available";
+
+      let analysisPrompt: string;
+      
+      if (customPrompt && customPrompt.trim()) {
+        analysisPrompt = customPrompt
+          .replace(/\{targetKeyword\}/g, targetKeyword)
+          .replace(/\{url\}/g, analysis.url)
+          .replace(/\{pageTitle\}/g, pageContentTyped.title)
+          .replace(/\{pageMetaDescription\}/g, pageContentTyped.metaDescription)
+          .replace(/\{pageWordCount\}/g, String(pageContentTyped.wordCount))
+          .replace(/\{pageHeadings\}/g, `H1: ${pageContentTyped.headings.h1.join(", ") || "None"}\nH2: ${pageContentTyped.headings.h2.join(", ") || "None"}\nH3: ${pageContentTyped.headings.h3.join(", ") || "None"}`)
+          .replace(/\{pageContent\}/g, pageContentTyped.content)
+          .replace(/\{keywords\}/g, keywordsFormatted)
+          .replace(/\{competitors\}/g, competitorsFormatted)
+          .replace(/\{keywordsInStrikingDistance\}/g, strikingDistanceFormatted);
+      } else {
+        analysisPrompt = `You are an expert SEO content strategist. Your task is to deeply analyze our content versus top-ranking competitor content and provide specific, actionable recommendations to outrank them.
+
+TARGET KEYWORD: "${targetKeyword}"
+
+=== OUR PAGE CONTENT ===
+URL: ${analysis.url}
+Title: ${pageContentTyped.title}
+Meta Description: ${pageContentTyped.metaDescription}
+Word Count: ${pageContentTyped.wordCount}
+H1 Headings: ${pageContentTyped.headings.h1.join(", ") || "None"}
+H2 Headings: ${pageContentTyped.headings.h2.join(", ") || "None"}
+H3 Headings: ${pageContentTyped.headings.h3.join(", ") || "None"}
+
+FULL CONTENT:
+${pageContentTyped.content}
+
+=== RANKING KEYWORDS (from Google Search Console) ===
+${keywordsFormatted}
+
+=== KEYWORDS IN STRIKING DISTANCE (Positions 10-100) ===
+These are ranking opportunities - keywords where we're close to page 1 or already ranking but could improve:
+${strikingDistanceFormatted}
+
+**IMPORTANT**: For keywords in striking distance, especially those with high impressions, consider:
+- Adding them as H2 or H3 headings
+- Creating dedicated content sections targeting these queries
+- Naturally incorporating them into existing content
+
+=== COMPETITOR CONTENT ANALYSIS ===
+${competitorsFormatted}
+
+=== YOUR TASK ===
+Compare our content against all competitor content and identify:
+
+1. **Content Gaps**: What topics, subtopics, or information do competitors cover that we're missing?
+2. **Content Depth**: Are competitors going deeper on certain topics? What details should we add?
+3. **Unique Angles**: What unique perspectives or information could we add that competitors don't have?
+4. **Structure Improvements**: How can we improve our heading structure based on what works for competitors?
+5. **Striking Distance Opportunities**: Which keywords in striking distance should we prioritize and how?
+6. **Keyword Opportunities**: Based on competitors and our ranking data, what related keywords should we incorporate?
+
+Return your analysis as a JSON array of recommendations with this exact structure:
+[
+  {
+    "type": "title" | "meta" | "content" | "headings" | "keywords",
+    "priority": "high" | "medium" | "low",
+    "current": "What currently exists (quote specific text if relevant)",
+    "suggested": "Your specific suggestion for improvement",
+    "reason": "Explain which competitor(s) do this better and why this change will help rankings"
+  }
+]
+
+Be extremely specific and actionable. Reference specific competitor content when making suggestions. Prioritize recommendations that will have the biggest impact on rankings for "${targetKeyword}".`;
+      }
+
+      const response = await genAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: analysisPrompt,
+      });
+
+      const responseText = response.text || "";
+      let recommendations: Array<{
+        type: "title" | "meta" | "content" | "headings" | "keywords";
+        priority: "high" | "medium" | "low";
+        current: string;
+        suggested: string;
+        reason: string;
+      }> = [];
+
+      try {
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          recommendations = JSON.parse(jsonMatch[0]);
+        }
+      } catch (parseError) {
+        console.error("[Optimize Refresh] Failed to parse AI response:", parseError);
+      }
+
+      // Update the analysis with new recommendations
+      const updatedAnalysis = await storage.updateOptimizationAnalysisRecommendations(req.params.id, recommendations);
+      
+      res.json({
+        success: true,
+        recommendations,
+        analysis: updatedAnalysis,
+      });
+    } catch (error) {
+      console.error("Failed to refresh recommendations:", error);
+      res.status(500).json({ error: "Failed to refresh recommendations" });
+    }
+  });
+
   return httpServer;
 }
