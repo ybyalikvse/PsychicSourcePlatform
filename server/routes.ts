@@ -2431,7 +2431,6 @@ Be extremely specific and actionable. Reference specific competitor content when
 
       const responseText = response.text || "";
       console.log("[Optimize Refresh] Raw AI response length:", responseText.length);
-      console.log("[Optimize Refresh] Raw AI response preview:", responseText.substring(0, 1000));
       
       let recommendations: Array<{
         type: "title" | "meta" | "content" | "headings" | "keywords";
@@ -2442,15 +2441,28 @@ Be extremely specific and actionable. Reference specific competitor content when
       }> = [];
 
       try {
-        // Try to find JSON in response (could be array or object)
-        const jsonArrayMatch = responseText.match(/\[[\s\S]*\]/);
-        const jsonObjectMatch = responseText.match(/\{[\s\S]*\}/);
+        // Strip markdown code blocks if present
+        let cleanedResponse = responseText;
+        if (cleanedResponse.includes("```json")) {
+          cleanedResponse = cleanedResponse.replace(/```json\s*/g, "").replace(/```\s*/g, "");
+        } else if (cleanedResponse.includes("```")) {
+          cleanedResponse = cleanedResponse.replace(/```\s*/g, "");
+        }
         
-        if (jsonArrayMatch) {
+        // Try to find JSON in response (could be array or object)
+        const jsonArrayMatch = cleanedResponse.match(/\[[\s\S]*\]/);
+        const jsonObjectMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+        
+        // Determine if the response is an object format (new) or array format (old)
+        const trimmedResponse = cleanedResponse.trim();
+        const isObjectFormat = trimmedResponse.startsWith("{");
+        const isArrayFormat = trimmedResponse.startsWith("[");
+        
+        if (isArrayFormat && jsonArrayMatch) {
           // Old format: array of recommendations
           recommendations = JSON.parse(jsonArrayMatch[0]);
           console.log("[Optimize Refresh] Parsed array format:", recommendations.length, "recommendations");
-        } else if (jsonObjectMatch) {
+        } else if (isObjectFormat && jsonObjectMatch) {
           // New format: object with sections like contentGaps, depthImprovements, etc.
           const parsed = JSON.parse(jsonObjectMatch[0]);
           console.log("[Optimize Refresh] Parsed object format with keys:", Object.keys(parsed).join(", "));
