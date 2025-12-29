@@ -1267,7 +1267,7 @@ export default function CreateWithAI() {
                       data-testid={`button-generate-suggestion-${i}`}
                     >
                       <ImageIcon className="h-4 w-4 mr-2" />
-                      Generate This
+                      Generate with {imageProvider === "openai" ? "OpenAI" : "Gemini"}
                     </Button>
                     <Button 
                       size="sm"
