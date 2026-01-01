@@ -10,6 +10,7 @@ import {
   Sparkles,
   Wand2,
   Target,
+  Layers,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,6 +41,11 @@ const mainNavItems = [
     title: "Create with AI",
     url: "/create",
     icon: Wand2,
+  },
+  {
+    title: "Bulk Create",
+    url: "/bulk-create",
+    icon: Layers,
   },
 ];
 

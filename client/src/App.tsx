@@ -12,6 +12,7 @@ import { useAnalytics } from "@/hooks/use-analytics";
 import Dashboard from "@/pages/dashboard";
 import Content from "@/pages/content";
 import Create from "@/pages/create";
+import BulkCreate from "@/pages/bulk-create";
 import Performance from "@/pages/performance";
 import Analytics from "@/pages/analytics";
 import Integrations from "@/pages/integrations";
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/content" component={Content} />
       <Route path="/create" component={Create} />
       <Route path="/edit/:id" component={Create} />
+      <Route path="/bulk-create" component={BulkCreate} />
       <Route path="/performance" component={Performance} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/integrations" component={Integrations} />
