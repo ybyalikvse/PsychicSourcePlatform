@@ -47,6 +47,11 @@ const mainNavItems = [
     url: "/bulk-create",
     icon: Layers,
   },
+  {
+    title: "Optimize",
+    url: "/optimize",
+    icon: Target,
+  },
 ];
 
 const seoNavItems = [
@@ -59,11 +64,6 @@ const seoNavItems = [
     title: "Analytics",
     url: "/analytics",
     icon: BarChart3,
-  },
-  {
-    title: "Optimize",
-    url: "/optimize",
-    icon: Target,
   },
 ];
 
