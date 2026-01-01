@@ -3067,11 +3067,12 @@ Be extremely specific and actionable. Reference specific competitor content when
 3. Use ONLY these HTML tags: h1, h2, h3, h4, p, ul, ol, li, strong, em, a, blockquote, img (with alt text)
 4. Keep the same structure and flow of the original article content
 5. Preserve the author's voice and tone
-6. Implement the recommendations while keeping existing valuable information
-7. Ensure the content is natural and readable - avoid keyword stuffing
-8. Do NOT include any <html>, <head>, <body>, <div>, <span>, <script>, <style>, or <link> tags
-9. Do NOT add any meta commentary, explanations, or notes - just return the clean article HTML
-10. Target keyword to optimize for: "${targetKeyword || 'general optimization'}"
+6. Implement ONLY recommendations that involve changing the actual text/content of the article
+7. SKIP any recommendations about: strategy, processes, features, comments, external tools, site structure, or things that cannot be done by editing text
+8. Ensure the content is natural and readable - avoid keyword stuffing
+9. Do NOT include any <html>, <head>, <body>, <div>, <span>, <script>, <style>, or <link> tags
+10. Do NOT add any meta commentary, explanations, or notes - just return the clean article HTML
+11. Target keyword to optimize for: "${targetKeyword || 'general optimization'}"
 
 === RECOMMENDATIONS TO IMPLEMENT ===
 ${recommendationsFormatted}
