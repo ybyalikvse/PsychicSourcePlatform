@@ -765,6 +765,30 @@ export default function BulkCreate() {
 
                         <Separator />
 
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <Label className="text-sm font-medium">Article Content</Label>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => copyToClipboard(result.content)}
+                              data-testid={`button-copy-content-inline-${index}`}
+                            >
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy
+                            </Button>
+                          </div>
+                          <ScrollArea className="h-[300px] w-full rounded-md border p-4">
+                            <div 
+                              className="prose prose-sm dark:prose-invert max-w-none"
+                              dangerouslySetInnerHTML={{ __html: result.content }}
+                              data-testid={`content-preview-${index}`}
+                            />
+                          </ScrollArea>
+                        </div>
+
+                        <Separator />
+
                         <div className="flex items-center gap-2 flex-wrap">
                           <Button
                             onClick={() => {
