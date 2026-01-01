@@ -3027,5 +3027,87 @@ Be extremely specific and actionable. Reference specific competitor content when
     }
   });
 
+  // Implement selected recommendations - AI rewrites content with recommendations
+  app.post("/api/optimize/implement", async (req, res) => {
+    try {
+      const { content, recommendations, targetKeyword } = req.body;
+      
+      if (!content || !recommendations || !Array.isArray(recommendations) || recommendations.length === 0) {
+        return res.status(400).json({ error: "Content and recommendations are required" });
+      }
+
+      console.log("[Optimize Implement] Starting content rewrite");
+      console.log("[Optimize Implement] Content length:", content.length);
+      console.log("[Optimize Implement] Recommendations count:", recommendations.length);
+      console.log("[Optimize Implement] Target keyword:", targetKeyword);
+
+      // Use Gemini for content rewriting
+      const { GoogleGenAI } = await import("@google/genai");
+      const genAI = new GoogleGenAI({
+        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        httpOptions: {
+          apiVersion: "",
+          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        },
+      });
+
+      // Format recommendations for the prompt
+      const recommendationsFormatted = recommendations.map((rec: any, i: number) => 
+        `${i + 1}. [${rec.type.toUpperCase()}] ${rec.priority} priority
+   Reason: ${rec.reason}
+   ${rec.current ? `Current: ${rec.current}` : ""}
+   Suggested: ${rec.suggested}`
+      ).join("\n\n");
+
+      const rewritePrompt = `You are an expert SEO content editor. Your task is to rewrite the provided article content to implement the selected recommendations.
+
+=== IMPORTANT INSTRUCTIONS ===
+1. Keep the EXACT same structure and flow of the original content as much as possible
+2. Preserve the author's voice and tone
+3. Keep all existing information - only ADD or MODIFY based on recommendations
+4. Return the content as valid HTML with proper semantic tags (h1, h2, h3, p, ul, ol, li, strong, em, etc.)
+5. Do NOT add any meta commentary, explanations, or notes - just return the rewritten HTML content
+6. Ensure the content remains natural and readable - avoid keyword stuffing
+7. Target keyword to optimize for: "${targetKeyword || 'general optimization'}"
+
+=== RECOMMENDATIONS TO IMPLEMENT ===
+${recommendationsFormatted}
+
+=== ORIGINAL CONTENT (HTML) ===
+${content}
+
+=== YOUR TASK ===
+Rewrite the content above implementing all the recommendations. Return ONLY the rewritten HTML content, nothing else. Do not wrap in markdown code blocks.`;
+
+      console.log("[Optimize Implement] Sending prompt to Gemini");
+      
+      const response = await genAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: rewritePrompt,
+      });
+
+      let rewrittenContent = response.text || "";
+      
+      // Clean up the response - remove markdown code blocks if present
+      if (rewrittenContent.includes("```html")) {
+        rewrittenContent = rewrittenContent.replace(/```html\s*/g, "").replace(/```\s*/g, "");
+      } else if (rewrittenContent.includes("```")) {
+        rewrittenContent = rewrittenContent.replace(/```\s*/g, "");
+      }
+      
+      rewrittenContent = rewrittenContent.trim();
+
+      console.log("[Optimize Implement] Rewritten content length:", rewrittenContent.length);
+
+      res.json({
+        success: true,
+        content: rewrittenContent,
+      });
+    } catch (error) {
+      console.error("Failed to implement recommendations:", error);
+      res.status(500).json({ error: "Failed to implement recommendations: " + (error instanceof Error ? error.message : "Unknown error") });
+    }
+  });
+
   return httpServer;
 }

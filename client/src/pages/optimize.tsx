@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { TiptapEditor } from "@/components/tiptap-editor";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -53,6 +54,7 @@ import {
   Eye,
   Save,
   RefreshCw,
+  Wand2,
 } from "lucide-react";
 
 const DATE_RANGE_OPTIONS = [
@@ -142,6 +144,9 @@ export default function Optimize() {
   const [showHistory, setShowHistory] = useState(false);
   const [hasContentChanges, setHasContentChanges] = useState(false);
   const [originalContent, setOriginalContent] = useState<string>("");
+  const [selectedRecommendations, setSelectedRecommendations] = useState<number[]>([]);
+  const [rewrittenContent, setRewrittenContent] = useState<string | null>(null);
+  const [showRewriteEditor, setShowRewriteEditor] = useState(false);
 
   // Fetch saved analyses
   const { data: savedAnalyses = [], isLoading: loadingAnalyses } = useQuery<SavedAnalysis[]>({
@@ -167,6 +172,9 @@ export default function Optimize() {
       setOriginalContent(data.pageContent?.htmlContent || "");
       setHasContentChanges(false);
       setAnalysisStep("");
+      setSelectedRecommendations([]);
+      setRewrittenContent(null);
+      setShowRewriteEditor(false);
       queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
       toast({
         title: "Analysis Complete",
@@ -232,6 +240,7 @@ export default function Optimize() {
           recommendations: data.recommendations,
         });
       }
+      setSelectedRecommendations([]);
       queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
       toast({
         title: "Recommendations Refreshed",
@@ -246,6 +255,62 @@ export default function Optimize() {
       });
     },
   });
+
+  const implementMutation = useMutation({
+    mutationFn: async ({ content, recommendations }: { content: string; recommendations: Recommendation[] }) => {
+      const response = await apiRequest("POST", `/api/optimize/implement`, {
+        content,
+        recommendations,
+        targetKeyword: form.getValues("targetKeyword"),
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setRewrittenContent(data.content);
+      setShowRewriteEditor(true);
+      toast({
+        title: "Content Rewritten",
+        description: "Your content has been updated with the selected recommendations.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Implementation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleImplementRecommendations = () => {
+    if (!analysisResult || selectedRecommendations.length === 0) return;
+    
+    const content = analysisResult.pageContent.htmlContent || analysisResult.pageContent.content;
+    const recsToImplement = selectedRecommendations
+      .map(i => analysisResult.recommendations[i])
+      .filter(rec => rec !== undefined);
+    
+    if (recsToImplement.length === 0) return;
+    
+    implementMutation.mutate({ content, recommendations: recsToImplement });
+  };
+
+  const toggleRecommendation = (index: number) => {
+    setSelectedRecommendations(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
+  };
+
+  const selectAllRecommendations = () => {
+    if (!analysisResult) return;
+    if (selectedRecommendations.length === analysisResult.recommendations.length) {
+      setSelectedRecommendations([]);
+    } else {
+      setSelectedRecommendations(analysisResult.recommendations.map((_, i) => i));
+    }
+  };
 
   const loadSavedAnalysis = (analysis: SavedAnalysis) => {
     const pageContent = analysis.pageContent || {
@@ -264,6 +329,9 @@ export default function Optimize() {
     });
     setOriginalContent(pageContent.htmlContent || "");
     setHasContentChanges(false);
+    setSelectedRecommendations([]);
+    setRewrittenContent(null);
+    setShowRewriteEditor(false);
     form.setValue("url", analysis.url);
     form.setValue("targetKeyword", analysis.targetKeyword);
     form.setValue("dateRange", analysis.dateRange || "28");
@@ -551,27 +619,49 @@ export default function Optimize() {
                     AI-powered suggestions to improve your ranking for "{form.getValues("targetKeyword")}"
                   </CardDescription>
                 </div>
-                {analysisResult?.id && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => refreshRecommendationsMutation.mutate(analysisResult.id!)}
-                    disabled={refreshRecommendationsMutation.isPending}
-                    data-testid="button-refresh-recommendations"
-                  >
-                    {refreshRecommendationsMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Refreshing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Refresh
-                      </>
-                    )}
-                  </Button>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {analysisResult?.id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refreshRecommendationsMutation.mutate(analysisResult.id!)}
+                      disabled={refreshRecommendationsMutation.isPending}
+                      data-testid="button-refresh-recommendations"
+                    >
+                      {refreshRecommendationsMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Refresh
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {analysisResult.recommendations.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleImplementRecommendations}
+                      disabled={selectedRecommendations.length === 0 || implementMutation.isPending}
+                      data-testid="button-implement-recommendations"
+                    >
+                      {implementMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Rewriting...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="h-4 w-4 mr-2" />
+                          Implement ({selectedRecommendations.length})
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -581,44 +671,128 @@ export default function Optimize() {
                       <p>Your content is well-optimized! No major improvements needed.</p>
                     </div>
                   ) : (
-                    analysisResult.recommendations.map((rec, index) => (
-                      <div
-                        key={index}
-                        className="border rounded-lg p-4 space-y-3"
-                        data-testid={`recommendation-${index}`}
-                      >
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-2">
-                            {getTypeIcon(rec.type)}
-                            <span className="font-medium capitalize">{rec.type}</span>
-                          </div>
-                          <Badge className={getPriorityColor(rec.priority)}>
-                            {rec.priority} priority
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{rec.reason}</p>
-                        {rec.current && (
-                          <div className="bg-red-50 dark:bg-red-900/20 rounded-md p-3">
-                            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">
-                              Current:
-                            </p>
-                            <p className="text-sm">{rec.current}</p>
-                          </div>
-                        )}
-                        {rec.suggested && (
-                          <div className="bg-green-50 dark:bg-green-900/20 rounded-md p-3">
-                            <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
-                              Suggested:
-                            </p>
-                            <p className="text-sm">{rec.suggested}</p>
-                          </div>
-                        )}
+                    <>
+                      <div className="flex items-center gap-2 pb-2 border-b">
+                        <Checkbox
+                          id="select-all"
+                          checked={selectedRecommendations.length === analysisResult.recommendations.length}
+                          onCheckedChange={selectAllRecommendations}
+                          data-testid="checkbox-select-all"
+                        />
+                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                          Select All ({analysisResult.recommendations.length} recommendations)
+                        </label>
                       </div>
-                    ))
+                      {analysisResult.recommendations.map((rec, index) => (
+                        <div
+                          key={index}
+                          className={`border rounded-lg p-4 space-y-3 transition-colors ${
+                            selectedRecommendations.includes(index) ? 'border-primary bg-primary/5' : ''
+                          }`}
+                          data-testid={`recommendation-${index}`}
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id={`rec-${index}`}
+                                checked={selectedRecommendations.includes(index)}
+                                onCheckedChange={() => toggleRecommendation(index)}
+                                data-testid={`checkbox-recommendation-${index}`}
+                              />
+                              <div className="flex items-center gap-2">
+                                {getTypeIcon(rec.type)}
+                                <span className="font-medium capitalize">{rec.type}</span>
+                              </div>
+                            </div>
+                            <Badge className={getPriorityColor(rec.priority)}>
+                              {rec.priority} priority
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground ml-7">{rec.reason}</p>
+                          {rec.current && (
+                            <div className="bg-red-50 dark:bg-red-900/20 rounded-md p-3 ml-7">
+                              <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">
+                                Current:
+                              </p>
+                              <p className="text-sm">{rec.current}</p>
+                            </div>
+                          )}
+                          {rec.suggested && (
+                            <div className="bg-green-50 dark:bg-green-900/20 rounded-md p-3 ml-7">
+                              <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
+                                Suggested:
+                              </p>
+                              <p className="text-sm">{rec.suggested}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </>
                   )}
                 </div>
               </CardContent>
             </Card>
+
+            {showRewriteEditor && rewrittenContent && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>Rewritten Content</CardTitle>
+                    <CardDescription>
+                      Your content has been updated with the selected recommendations. Review and edit as needed.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowRewriteEditor(false);
+                        setRewrittenContent(null);
+                      }}
+                      data-testid="button-discard-rewrite"
+                    >
+                      Discard
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (analysisResult && rewrittenContent) {
+                          setAnalysisResult({
+                            ...analysisResult,
+                            pageContent: {
+                              ...analysisResult.pageContent,
+                              htmlContent: rewrittenContent,
+                            },
+                          });
+                          setHasContentChanges(true);
+                          setShowRewriteEditor(false);
+                          setRewrittenContent(null);
+                          setSelectedRecommendations([]);
+                          toast({
+                            title: "Content Applied",
+                            description: "Rewritten content has been applied. Go to 'Your Content' tab to save it.",
+                          });
+                        }
+                      }}
+                      data-testid="button-apply-rewrite"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Apply Changes
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg" style={{ height: "500px" }}>
+                    <TiptapEditor
+                      content={rewrittenContent}
+                      editable={true}
+                      onChange={(html) => setRewrittenContent(html)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="keywords" className="space-y-4">
