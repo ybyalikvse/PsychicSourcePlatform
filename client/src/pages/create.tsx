@@ -178,10 +178,68 @@ export default function CreateWithAI() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const keywordsArray = recommendedKeywords
-        .split(",")
-        .map(k => k.trim())
-        .filter(Boolean);
+      // Parse keywords from various formats:
+      // - Comma separated: "keyword1, keyword2, keyword3"
+      // - Bullet separated: "keyword1 • keyword2 • keyword3"
+      // - Newline separated with structured data (section titles, descriptions, "Relevant terms")
+      const parseKeywordsInput = (input: string): { keywords: string[], sections: string[] } => {
+        const lines = input.split("\n").map(l => l.trim()).filter(Boolean);
+        const keywords: string[] = [];
+        const sections: string[] = [];
+        let currentSection = "";
+        let inRelevantTerms = false;
+        
+        for (const line of lines) {
+          // Skip "Ask AI" markers and single numbers
+          if (line === "Ask AI" || /^\d+$/.test(line)) continue;
+          
+          // Check if this is a section title (ends with specific patterns or is before a number)
+          if (line.includes("Angel Number") || line.includes("Topic") || 
+              (line.length > 30 && !line.includes("•") && !line.includes(","))) {
+            // This might be a section title or description
+            if (line.length < 80 && !line.includes("addresses") && !line.includes("explores") && !line.includes("discusses")) {
+              currentSection = line;
+              sections.push(line);
+            }
+            inRelevantTerms = false;
+            continue;
+          }
+          
+          // Check if entering "Relevant terms" section
+          if (line === "Relevant terms") {
+            inRelevantTerms = true;
+            continue;
+          }
+          
+          // If line contains bullets, split by bullet
+          if (line.includes("•")) {
+            const bulletKeywords = line.split("•").map(k => k.trim()).filter(Boolean);
+            keywords.push(...bulletKeywords);
+            continue;
+          }
+          
+          // If line contains commas, split by comma
+          if (line.includes(",")) {
+            const commaKeywords = line.split(",").map(k => k.trim()).filter(Boolean);
+            keywords.push(...commaKeywords);
+            continue;
+          }
+          
+          // Single word/phrase per line (common in pasted lists)
+          if (line.length < 50 && inRelevantTerms) {
+            keywords.push(line);
+          }
+        }
+        
+        // Remove duplicates while preserving order
+        const uniqueKeywords = Array.from(new Set(keywords));
+        const uniqueSections = Array.from(new Set(sections));
+        
+        return { keywords: uniqueKeywords, sections: uniqueSections };
+      };
+      
+      const parsed = parseKeywordsInput(recommendedKeywords);
+      const keywordsArray = parsed.keywords;
 
       const response = await fetch("/api/content/generate", {
         method: "POST",
@@ -190,6 +248,7 @@ export default function CreateWithAI() {
           targetKeyword: targetKeyword.trim(),
           wordCount: parseInt(wordCount) || 1500,
           recommendedKeywords: keywordsArray,
+          suggestedSections: parsed.sections,
           styleId: selectedStyleId !== "default" ? selectedStyleId : undefined,
           provider: contentProvider,
         }),

@@ -1417,7 +1417,7 @@ export async function registerRoutes(
   // Content Generation with OpenAI
   app.post("/api/content/generate", async (req, res) => {
     try {
-      const { targetKeyword, wordCount, recommendedKeywords, styleId, provider = "anthropic" } = req.body;
+      const { targetKeyword, wordCount, recommendedKeywords, suggestedSections, styleId, provider = "anthropic" } = req.body;
       
       if (!targetKeyword) {
         return res.status(400).json({ error: "Target keyword is required" });
@@ -1439,9 +1439,21 @@ ${style.exampleText}` : ""}`;
         }
       }
 
-      const keywordsList = recommendedKeywords?.length 
-        ? `Include these related keywords/phrases naturally: ${recommendedKeywords.join(", ")}`
-        : "";
+      // Build keywords and sections instructions
+      let keywordsList = "";
+      if (recommendedKeywords?.length) {
+        keywordsList = `Include these related keywords/phrases naturally throughout the content: ${recommendedKeywords.join(", ")}`;
+      }
+      
+      let sectionsGuidance = "";
+      if (suggestedSections?.length) {
+        sectionsGuidance = `
+
+SUGGESTED CONTENT SECTIONS (use these as a guide for article structure):
+${suggestedSections.map((s: string, i: number) => `${i + 1}. ${s}`).join("\n")}
+
+Create dedicated sections for each of these topics, using them as H2 headings where appropriate.`;
+      }
 
       const targetWordCount = wordCount || 1500;
       
@@ -1469,6 +1481,7 @@ REQUIREMENTS:
 - Primary keyword: "${targetKeyword}" - use naturally throughout (8-12 times)
 ${keywordsList ? `- ${keywordsList}` : ""}
 - Word count: EXACTLY ${targetWordCount} words (count carefully!)
+${sectionsGuidance}
 
 STRUCTURE:
 <h1>[Compelling title with keyword]</h1>
