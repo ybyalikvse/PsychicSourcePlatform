@@ -17,14 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -44,8 +36,10 @@ import {
   ChevronUp,
   Pause,
   RotateCcw,
-  Save
+  Save,
+  Pencil
 } from "lucide-react";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { WritingStyle, SeoSettings } from "@shared/schema";
@@ -54,10 +48,11 @@ interface ArticleQueueItem {
   id: string;
   targetKeyword: string;
   recommendedKeywords: string;
-  status: "pending" | "generating" | "generating-meta" | "completed" | "error";
+  status: "pending" | "generating" | "generating-meta" | "saving" | "completed" | "error";
   content?: string;
   metaTitles?: string[];
   metaDescriptions?: string[];
+  savedArticleId?: string;
   error?: string;
   progress?: number;
 }
@@ -70,6 +65,7 @@ interface BulkResult {
   metaDescriptions: string[];
   selectedTitle: string;
   selectedDescription: string;
+  savedArticleId?: string;
 }
 
 function parseKeywordsInput(input: string): { keywords: string[]; sections: string[] } {
@@ -106,6 +102,7 @@ function parseKeywordsInput(input: string): { keywords: string[]; sections: stri
 }
 
 export default function BulkCreate() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   
   const [selectedStyleId, setSelectedStyleId] = useState<string>("default");
@@ -122,8 +119,6 @@ export default function BulkCreate() {
   
   const [results, setResults] = useState<BulkResult[]>([]);
   const [showResults, setShowResults] = useState(false);
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [savingArticle, setSavingArticle] = useState<BulkResult | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -290,10 +285,48 @@ export default function BulkCreate() {
         setArticleQueue(prev => prev.map(a => 
           a.id === itemId ? { 
             ...a, 
+            status: "saving", 
+            content: fullContent,
+            metaTitles,
+            metaDescriptions,
+            progress: 98 
+          } : a
+        ));
+
+        // Auto-save article as draft
+        const slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+        const wordCountNum = fullContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+        
+        const saveResponse = await fetch("/api/articles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            content: fullContent,
+            targetKeyword: itemKeyword,
+            metaTitle: metaTitles[0] || "",
+            metaDescription: metaDescriptions[0] || "",
+            slug,
+            status: "draft",
+            wordCount: wordCountNum,
+          }),
+          signal: abortControllerRef.current?.signal,
+        });
+
+        if (!saveResponse.ok) {
+          throw new Error("Failed to save article");
+        }
+
+        const savedArticle = await saveResponse.json();
+
+        setArticleQueue(prev => prev.map(a => 
+          a.id === itemId ? { 
+            ...a, 
             status: "completed", 
             content: fullContent,
             metaTitles,
             metaDescriptions,
+            savedArticleId: savedArticle.id,
             progress: 100 
           } : a
         ));
@@ -306,6 +339,7 @@ export default function BulkCreate() {
           metaDescriptions,
           selectedTitle: metaTitles[0] || "",
           selectedDescription: metaDescriptions[0] || "",
+          savedArticleId: savedArticle.id,
         };
         
         generatedResults.push(newResult);
@@ -330,9 +364,13 @@ export default function BulkCreate() {
     setIsProcessing(false);
     setShowResults(true);
     
+    // Invalidate articles query so they appear in content list
+    queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+    
     toast({ 
       title: "Bulk generation complete", 
-      description: `Generated ${completedCount} article${completedCount !== 1 ? 's' : ''} with meta suggestions` 
+      description: `Generated and saved ${completedCount} article${completedCount !== 1 ? 's' : ''} as drafts` 
     });
   }, [articleQueue, wordCount, selectedStyleId, contentProvider, toast]);
 
@@ -348,36 +386,23 @@ export default function BulkCreate() {
     toast({ title: "Copied to clipboard" });
   }, [toast]);
 
-  const handleSaveArticle = async (result: BulkResult) => {
+  const handleUpdateMeta = async (result: BulkResult) => {
+    if (!result.savedArticleId) return;
+    
     setIsSaving(true);
     
     try {
-      const titleMatch = result.content.match(/<h1[^>]*>(.*?)<\/h1>/i);
-      const title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '') : result.targetKeyword;
-      const slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-      const wordCountNum = result.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
-      
-      await apiRequest("POST", "/api/articles", {
-        title,
-        content: result.content,
-        targetKeyword: result.targetKeyword,
+      await apiRequest("PATCH", `/api/articles/${result.savedArticleId}`, {
         metaTitle: result.selectedTitle,
         metaDescription: result.selectedDescription,
-        slug,
-        status: "draft",
-        wordCount: wordCountNum,
       });
       
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles", result.savedArticleId] });
       
-      toast({ title: "Article saved as draft" });
-      setSaveDialogOpen(false);
-      setSavingArticle(null);
-      
-      setResults(prev => prev.filter(r => r.id !== result.id));
+      toast({ title: "Meta data updated" });
     } catch (error) {
-      toast({ title: "Failed to save article", variant: "destructive" });
+      toast({ title: "Failed to update meta data", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -614,6 +639,12 @@ export default function BulkCreate() {
                                 Meta Tags...
                               </Badge>
                             )}
+                            {item.status === "saving" && (
+                              <Badge variant="default" className="bg-amber-600">
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Saving...
+                              </Badge>
+                            )}
                             {item.status === "completed" && (
                               <Badge variant="default" className="bg-green-600">
                                 <Check className="h-3 w-3 mr-1" />
@@ -790,16 +821,27 @@ export default function BulkCreate() {
                         <Separator />
 
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Button
-                            onClick={() => {
-                              setSavingArticle(result);
-                              setSaveDialogOpen(true);
-                            }}
-                            data-testid={`button-save-article-${index}`}
-                          >
-                            <Save className="h-4 w-4 mr-2" />
-                            Save as Draft
-                          </Button>
+                          {result.savedArticleId && (
+                            <>
+                              <Button
+                                onClick={() => setLocation(`/edit/${result.savedArticleId}`)}
+                                data-testid={`button-edit-article-${index}`}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit Article
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                onClick={() => handleUpdateMeta(result)}
+                                disabled={isSaving}
+                                data-testid={`button-update-meta-${index}`}
+                              >
+                                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                <Save className="h-4 w-4 mr-2" />
+                                Update Meta
+                              </Button>
+                            </>
+                          )}
                           <Button
                             variant="outline"
                             onClick={() => copyToClipboard(result.content)}
@@ -819,47 +861,6 @@ export default function BulkCreate() {
         </div>
       </div>
 
-      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Save Article as Draft</DialogTitle>
-            <DialogDescription>
-              This will save the article with your selected meta title and description.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {savingArticle && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm text-muted-foreground">Target Keyword</Label>
-                <p className="font-medium">{savingArticle.targetKeyword}</p>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Selected Meta Title</Label>
-                <p className="text-sm">{savingArticle.selectedTitle}</p>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Selected Meta Description</Label>
-                <p className="text-sm">{savingArticle.selectedDescription}</p>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => savingArticle && handleSaveArticle(savingArticle)}
-              disabled={isSaving}
-              data-testid="button-confirm-save"
-            >
-              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Save Draft
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

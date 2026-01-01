@@ -124,6 +124,9 @@ export default function CreateWithAI() {
   const [suggestionTarget, setSuggestionTarget] = useState<"featured" | number>("featured");
   const [isInsertingImage, setIsInsertingImage] = useState(false);
 
+  const [currentArticleId, setCurrentArticleId] = useState<string | null>(articleId || null);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  
   const saveArticleMutation = useMutation({
     mutationFn: async (data: {
       title: string;
@@ -131,37 +134,62 @@ export default function CreateWithAI() {
       targetKeyword: string;
       metaTitle: string;
       metaDescription: string;
+      isAutoSave?: boolean;
     }) => {
       const slug = data.title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
       const wordCountNum = data.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
       
-      if (isEditMode && articleId) {
-        return await apiRequest("PATCH", `/api/articles/${articleId}`, {
-          ...data,
+      const activeId = currentArticleId || articleId;
+      
+      if (activeId) {
+        const response = await apiRequest("PATCH", `/api/articles/${activeId}`, {
+          title: data.title,
+          content: data.content,
+          targetKeyword: data.targetKeyword,
+          metaTitle: data.metaTitle,
+          metaDescription: data.metaDescription,
           slug,
           status: articleStatus,
           wordCount: wordCountNum,
         });
+        const saved = await response.json();
+        return { ...saved, isAutoSave: data.isAutoSave };
       } else {
-        return await apiRequest("POST", "/api/articles", {
-          ...data,
+        const response = await apiRequest("POST", "/api/articles", {
+          title: data.title,
+          content: data.content,
+          targetKeyword: data.targetKeyword,
+          metaTitle: data.metaTitle,
+          metaDescription: data.metaDescription,
           slug,
           status: "draft",
           wordCount: wordCountNum,
         });
+        const saved = await response.json();
+        return { ...saved, isAutoSave: data.isAutoSave };
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      if (isEditMode && articleId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/articles", articleId] });
+      
+      if (data.id && !currentArticleId) {
+        setCurrentArticleId(data.id);
+        window.history.replaceState(null, '', `/edit/${data.id}`);
       }
-      toast({ title: isEditMode ? "Article updated" : "Article saved as draft" });
-      setLocation("/content");
+      
+      if (currentArticleId || articleId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/articles", currentArticleId || articleId] });
+      }
+      
+      if (data.isAutoSave) {
+        toast({ title: "Article auto-saved as draft" });
+      } else {
+        toast({ title: currentArticleId || articleId ? "Article updated" : "Article saved" });
+      }
     },
     onError: () => {
-      toast({ title: isEditMode ? "Failed to update article" : "Failed to save article", variant: "destructive" });
+      toast({ title: "Failed to save article", variant: "destructive" });
     },
   });
 
@@ -296,7 +324,25 @@ export default function CreateWithAI() {
       const cleanedContent = cleanGeneratedContent(fullContent);
       setGeneratedContent(cleanedContent);
       
-      toast({ title: "Content generated successfully" });
+      // Auto-save the article as draft
+      const title = extractTitleFromContent(cleanedContent) || targetKeyword.trim();
+      setIsAutoSaving(true);
+      try {
+        await saveArticleMutation.mutateAsync({
+          title,
+          content: cleanedContent,
+          targetKeyword: targetKeyword.trim(),
+          metaTitle: "",
+          metaDescription: "",
+          isAutoSave: true,
+        });
+      } catch (saveError) {
+        console.error("Auto-save error:", saveError);
+      } finally {
+        setIsAutoSaving(false);
+      }
+      
+      toast({ title: "Content generated and saved as draft" });
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         console.error("Generation error:", error);
@@ -306,7 +352,12 @@ export default function CreateWithAI() {
       setIsGenerating(false);
       abortControllerRef.current = null;
     }
-  }, [targetKeyword, recommendedKeywords, selectedStyleId, wordCount, toast]);
+  }, [targetKeyword, recommendedKeywords, selectedStyleId, wordCount, toast, saveArticleMutation]);
+  
+  const extractTitleFromContent = (content: string): string => {
+    const h1Match = content.match(/<h1[^>]*>(.*?)<\/h1>/i);
+    return h1Match ? h1Match[1].replace(/<[^>]*>/g, "") : "";
+  };
 
   const cleanGeneratedContent = (content: string): string => {
     let cleaned = content;
