@@ -3059,25 +3059,28 @@ Be extremely specific and actionable. Reference specific competitor content when
    Suggested: ${rec.suggested}`
       ).join("\n\n");
 
-      const rewritePrompt = `You are an expert SEO content editor. Your task is to rewrite the provided article content to implement the selected recommendations.
+      const rewritePrompt = `You are an expert SEO content editor. Your task is to extract and rewrite ONLY the main article content from the provided HTML, implementing the selected recommendations.
 
-=== IMPORTANT INSTRUCTIONS ===
-1. Keep the EXACT same structure and flow of the original content as much as possible
-2. Preserve the author's voice and tone
-3. Keep all existing information - only ADD or MODIFY based on recommendations
-4. Return the content as valid HTML with proper semantic tags (h1, h2, h3, p, ul, ol, li, strong, em, etc.)
-5. Do NOT add any meta commentary, explanations, or notes - just return the rewritten HTML content
-6. Ensure the content remains natural and readable - avoid keyword stuffing
-7. Target keyword to optimize for: "${targetKeyword || 'general optimization'}"
+=== CRITICAL INSTRUCTIONS ===
+1. EXTRACT ONLY THE MAIN ARTICLE CONTENT - ignore navigation, headers, footers, sidebars, scripts, CSS, and any non-article elements
+2. Output CLEAN, SEMANTIC HTML ONLY - no CSS, no style attributes, no class names, no inline styles
+3. Use ONLY these HTML tags: h1, h2, h3, h4, p, ul, ol, li, strong, em, a, blockquote, img (with alt text)
+4. Keep the same structure and flow of the original article content
+5. Preserve the author's voice and tone
+6. Implement the recommendations while keeping existing valuable information
+7. Ensure the content is natural and readable - avoid keyword stuffing
+8. Do NOT include any <html>, <head>, <body>, <div>, <span>, <script>, <style>, or <link> tags
+9. Do NOT add any meta commentary, explanations, or notes - just return the clean article HTML
+10. Target keyword to optimize for: "${targetKeyword || 'general optimization'}"
 
 === RECOMMENDATIONS TO IMPLEMENT ===
 ${recommendationsFormatted}
 
-=== ORIGINAL CONTENT (HTML) ===
+=== ORIGINAL PAGE HTML (extract article content only) ===
 ${content}
 
 === YOUR TASK ===
-Rewrite the content above implementing all the recommendations. Return ONLY the rewritten HTML content, nothing else. Do not wrap in markdown code blocks.`;
+Extract the main article content from above, implement the recommendations, and return ONLY clean semantic HTML. No CSS, no styling, no wrapper divs - just the article content as if written fresh. Do not wrap in markdown code blocks.`;
 
       console.log("[Optimize Implement] Sending prompt to Gemini");
       
