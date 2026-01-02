@@ -755,6 +755,7 @@ export default function Optimize() {
                       Discard
                     </Button>
                     <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => {
                         if (analysisResult && rewrittenContent) {
@@ -771,14 +772,49 @@ export default function Optimize() {
                           setSelectedRecommendations([]);
                           toast({
                             title: "Content Applied",
-                            description: "Rewritten content has been applied. Go to 'Your Content' tab to save it.",
+                            description: "Rewritten content has been applied to the editor. Use 'Save Draft' to persist changes.",
                           });
                         }
                       }}
                       data-testid="button-apply-rewrite"
                     >
                       <CheckCircle2 className="h-4 w-4 mr-2" />
-                      Apply Changes
+                      Apply to Editor
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (analysisResult?.id && rewrittenContent) {
+                          saveContentMutation.mutate(
+                            { id: analysisResult.id, htmlContent: rewrittenContent },
+                            {
+                              onSuccess: () => {
+                                setAnalysisResult({
+                                  ...analysisResult,
+                                  pageContent: {
+                                    ...analysisResult.pageContent,
+                                    htmlContent: rewrittenContent,
+                                  },
+                                });
+                                setOriginalContent(rewrittenContent);
+                                setShowRewriteEditor(false);
+                                setRewrittenContent(null);
+                                setSelectedRecommendations([]);
+                                setHasContentChanges(false);
+                              },
+                            }
+                          );
+                        }
+                      }}
+                      disabled={saveContentMutation.isPending || !analysisResult?.id}
+                      data-testid="button-save-rewrite"
+                    >
+                      {saveContentMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Draft
                     </Button>
                   </div>
                 </CardHeader>
