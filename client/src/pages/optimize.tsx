@@ -7,7 +7,10 @@ import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import type { ImageStyle } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -55,6 +58,8 @@ import {
   Save,
   RefreshCw,
   Wand2,
+  ImageIcon,
+  Plus,
 } from "lucide-react";
 
 const DATE_RANGE_OPTIONS = [
@@ -147,10 +152,23 @@ export default function Optimize() {
   const [selectedRecommendations, setSelectedRecommendations] = useState<number[]>([]);
   const [rewrittenContent, setRewrittenContent] = useState<string | null>(null);
   const [showRewriteEditor, setShowRewriteEditor] = useState(false);
+  
+  // Image generation states
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [imageProvider, setImageProvider] = useState<"gemini" | "openai">("gemini");
+  const [selectedImageStyleId, setSelectedImageStyleId] = useState<string>("default");
+  const [imageAspectRatio, setImageAspectRatio] = useState("16:9");
 
   // Fetch saved analyses
   const { data: savedAnalyses = [], isLoading: loadingAnalyses } = useQuery<SavedAnalysis[]>({
     queryKey: ["/api/optimize/analyses"],
+  });
+
+  // Fetch image styles
+  const { data: imageStyles = [] } = useQuery<ImageStyle[]>({
+    queryKey: ["/api/image-styles"],
   });
 
   const form = useForm<OptimizeFormData>({
@@ -310,6 +328,60 @@ export default function Optimize() {
     } else {
       setSelectedRecommendations(analysisResult.recommendations.map((_, i) => i));
     }
+  };
+
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) {
+      toast({
+        title: "Prompt Required",
+        description: "Please enter an image prompt.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingImage(true);
+    try {
+      const response = await apiRequest("POST", "/api/images/generate", {
+        prompt: imagePrompt.trim(),
+        styleId: selectedImageStyleId !== "default" ? selectedImageStyleId : undefined,
+        imageType: "inline",
+        provider: imageProvider,
+        aspectRatio: imageAspectRatio,
+      });
+      const data = await response.json();
+      setGeneratedImageUrl(data.imageUrl);
+      const providerName = imageProvider === "openai" ? "OpenAI" : "Gemini";
+      toast({
+        title: "Image Generated",
+        description: `Successfully generated image using ${providerName}.`,
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate image";
+      toast({
+        title: "Generation Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  const handleInsertImageIntoContent = () => {
+    if (!generatedImageUrl || !rewrittenContent) return;
+    
+    const imageHtml = `<figure class="my-4"><img src="${generatedImageUrl}" alt="${imagePrompt}" class="w-full rounded-lg" /><figcaption class="text-center text-sm text-gray-500 mt-2">${imagePrompt}</figcaption></figure>`;
+    
+    // Insert at the end of the content (user can move it in editor)
+    const updatedContent = rewrittenContent + imageHtml;
+    setRewrittenContent(updatedContent);
+    setGeneratedImageUrl(null);
+    setImagePrompt("");
+    toast({
+      title: "Image Inserted",
+      description: "The image has been added to your content. You can move it to the desired location in the editor.",
+    });
   };
 
   const loadSavedAnalysis = (analysis: SavedAnalysis) => {
@@ -734,6 +806,7 @@ export default function Optimize() {
             </Card>
 
             {showRewriteEditor && rewrittenContent && (
+              <>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between gap-4">
                   <div>
@@ -828,6 +901,133 @@ export default function Optimize() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ImageIcon className="h-5 w-5" />
+                    Generate Image
+                  </CardTitle>
+                  <CardDescription>
+                    Generate and insert images into your optimized content
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="opt-image-provider">AI Provider</Label>
+                      <Select value={imageProvider} onValueChange={(value: "gemini" | "openai") => setImageProvider(value)}>
+                        <SelectTrigger id="opt-image-provider" data-testid="select-opt-image-provider">
+                          <SelectValue placeholder="Select provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="gemini">Gemini</SelectItem>
+                          <SelectItem value="openai">OpenAI</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="opt-image-style">Image Style</Label>
+                      <Select value={selectedImageStyleId} onValueChange={setSelectedImageStyleId}>
+                        <SelectTrigger id="opt-image-style" data-testid="select-opt-image-style">
+                          <SelectValue placeholder="Select a style" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          {imageStyles.map((style) => (
+                            <SelectItem key={style.id} value={style.id}>
+                              {style.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="opt-image-aspect-ratio">Aspect Ratio</Label>
+                      <Select value={imageAspectRatio} onValueChange={setImageAspectRatio}>
+                        <SelectTrigger id="opt-image-aspect-ratio" data-testid="select-opt-image-aspect-ratio">
+                          <SelectValue placeholder="Select ratio" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
+                          <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                          <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                          <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
+                          <SelectItem value="3:2">3:2 (Photo)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="opt-image-prompt">Image Prompt</Label>
+                    <Textarea
+                      id="opt-image-prompt"
+                      value={imagePrompt}
+                      onChange={(e) => setImagePrompt(e.target.value)}
+                      placeholder="Describe the image you want to generate..."
+                      className="min-h-[80px]"
+                      data-testid="input-opt-image-prompt"
+                    />
+                  </div>
+
+                  <Button 
+                    className="w-full"
+                    onClick={handleGenerateImage}
+                    disabled={isGeneratingImage || !imagePrompt.trim()}
+                    data-testid="button-opt-generate-image"
+                  >
+                    {isGeneratingImage ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="h-4 w-4 mr-2" />
+                        Generate Image
+                      </>
+                    )}
+                  </Button>
+
+                  {generatedImageUrl && (
+                    <div className="space-y-3">
+                      <Label className="text-xs text-muted-foreground">Generated Image</Label>
+                      <div className="rounded-md overflow-hidden border">
+                        <img 
+                          src={generatedImageUrl} 
+                          alt={imagePrompt} 
+                          className="w-full h-auto"
+                          data-testid="img-opt-generated"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={handleGenerateImage}
+                          disabled={isGeneratingImage}
+                          data-testid="button-opt-regenerate-image"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Regenerate
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={handleInsertImageIntoContent}
+                          data-testid="button-opt-insert-image"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Insert into Content
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              </>
             )}
           </TabsContent>
 
