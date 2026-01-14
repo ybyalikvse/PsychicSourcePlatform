@@ -184,6 +184,27 @@ export const insertImageStyleSchema = createInsertSchema(imageStyles).omit({
 export type InsertImageStyle = z.infer<typeof insertImageStyleSchema>;
 export type ImageStyle = typeof imageStyles.$inferSelect;
 
+// Target audiences table
+export const targetAudiences = pgTable("target_audiences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  demographics: text("demographics"), // e.g., "women 35-55, interested in spirituality"
+  painPoints: text("pain_points"), // What problems do they have?
+  goals: text("goals"), // What are they trying to achieve?
+  tone: text("tone"), // How should we speak to them?
+  isDefault: boolean("is_default").default(false),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertTargetAudienceSchema = createInsertSchema(targetAudiences).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTargetAudience = z.infer<typeof insertTargetAudienceSchema>;
+export type TargetAudience = typeof targetAudiences.$inferSelect;
+
 // Saved optimization analyses
 export const optimizationAnalyses = pgTable("optimization_analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -8,9 +8,10 @@ import {
   type WritingStyle, type InsertWritingStyle,
   type SeoSettings, type InsertSeoSettings,
   type ImageStyle, type InsertImageStyle,
+  type TargetAudience, type InsertTargetAudience,
   type OptimizationAnalysis, type InsertOptimizationAnalysis,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
-  writingStyles, seoSettings, imageStyles, optimizationAnalyses,
+  writingStyles, seoSettings, imageStyles, targetAudiences, optimizationAnalyses,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -67,6 +68,13 @@ export interface IStorage {
   createImageStyle(style: InsertImageStyle): Promise<ImageStyle>;
   updateImageStyle(id: string, style: Partial<InsertImageStyle>): Promise<ImageStyle | undefined>;
   deleteImageStyle(id: string): Promise<boolean>;
+
+  // Target Audiences
+  getTargetAudiences(): Promise<TargetAudience[]>;
+  getTargetAudience(id: string): Promise<TargetAudience | undefined>;
+  createTargetAudience(audience: InsertTargetAudience): Promise<TargetAudience>;
+  updateTargetAudience(id: string, audience: Partial<InsertTargetAudience>): Promise<TargetAudience | undefined>;
+  deleteTargetAudience(id: string): Promise<boolean>;
 
   // Optimization Analyses
   getOptimizationAnalyses(): Promise<OptimizationAnalysis[]>;
@@ -273,6 +281,11 @@ export class MemStorage implements IStorage {
   async createImageStyle(_style: InsertImageStyle): Promise<ImageStyle> { throw new Error("Not implemented"); }
   async updateImageStyle(_id: string, _style: Partial<InsertImageStyle>): Promise<ImageStyle | undefined> { return undefined; }
   async deleteImageStyle(_id: string): Promise<boolean> { return false; }
+  async getTargetAudiences(): Promise<TargetAudience[]> { return []; }
+  async getTargetAudience(_id: string): Promise<TargetAudience | undefined> { return undefined; }
+  async createTargetAudience(_audience: InsertTargetAudience): Promise<TargetAudience> { throw new Error("Not implemented"); }
+  async updateTargetAudience(_id: string, _audience: Partial<InsertTargetAudience>): Promise<TargetAudience | undefined> { return undefined; }
+  async deleteTargetAudience(_id: string): Promise<boolean> { return false; }
   async getOptimizationAnalyses(): Promise<OptimizationAnalysis[]> { return []; }
   async getOptimizationAnalysis(_id: string): Promise<OptimizationAnalysis | undefined> { return undefined; }
   async createOptimizationAnalysis(_analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis> { throw new Error("Not implemented"); }
@@ -481,6 +494,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteImageStyle(id: string): Promise<boolean> {
     await db.delete(imageStyles).where(eq(imageStyles.id, id));
+    return true;
+  }
+
+  // Target Audiences
+  async getTargetAudiences(): Promise<TargetAudience[]> {
+    return db.select().from(targetAudiences).orderBy(targetAudiences.name);
+  }
+
+  async getTargetAudience(id: string): Promise<TargetAudience | undefined> {
+    const [audience] = await db.select().from(targetAudiences).where(eq(targetAudiences.id, id));
+    return audience;
+  }
+
+  async createTargetAudience(insertAudience: InsertTargetAudience): Promise<TargetAudience> {
+    const [audience] = await db.insert(targetAudiences).values(insertAudience).returning();
+    return audience;
+  }
+
+  async updateTargetAudience(id: string, updates: Partial<InsertTargetAudience>): Promise<TargetAudience | undefined> {
+    const [audience] = await db.update(targetAudiences)
+      .set(updates)
+      .where(eq(targetAudiences.id, id))
+      .returning();
+    return audience;
+  }
+
+  async deleteTargetAudience(id: string): Promise<boolean> {
+    await db.delete(targetAudiences).where(eq(targetAudiences.id, id));
     return true;
   }
 
