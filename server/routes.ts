@@ -1417,7 +1417,7 @@ export async function registerRoutes(
   // Content Generation with OpenAI
   app.post("/api/content/generate", async (req, res) => {
     try {
-      const { targetKeyword, wordCount, recommendedKeywords, suggestedSections, styleId, provider = "anthropic" } = req.body;
+      const { targetKeyword, wordCount, recommendedKeywords, suggestedSections, styleId, audienceId, provider = "anthropic" } = req.body;
       
       if (!targetKeyword) {
         return res.status(400).json({ error: "Target keyword is required" });
@@ -1436,6 +1436,25 @@ ${style.exampleText ? `
 
 Here is an example of the desired writing style to emulate:
 ${style.exampleText}` : ""}`;
+        }
+      }
+
+      // Get target audience if provided
+      let audienceInstructions = "";
+      if (audienceId) {
+        const audience = await storage.getTargetAudience(audienceId);
+        if (audience) {
+          audienceInstructions = `
+
+TARGET AUDIENCE - Tailor your content specifically for this audience:
+Audience: ${audience.name}
+${audience.description ? `Description: ${audience.description}` : ""}
+${audience.demographics ? `Demographics: ${audience.demographics}` : ""}
+${audience.painPoints ? `Pain Points to Address: ${audience.painPoints}` : ""}
+${audience.goals ? `Goals They Want to Achieve: ${audience.goals}` : ""}
+${audience.tone ? `Preferred Tone: ${audience.tone}` : ""}
+
+Write content that resonates with this audience, addressing their specific needs and using language that connects with them.`;
         }
       }
 
@@ -1473,7 +1492,7 @@ ABSOLUTE RULES - VIOLATION OF THESE WILL RESULT IN REJECTION:
    - Plan your article structure to hit this target precisely
    - If I ask for 1500 words, write 1500 words - not 800, not 2500
    - Count words carefully as you write
-${styleInstructions}`;
+${styleInstructions}${audienceInstructions}`;
 
       const userPrompt = `Write a comprehensive SEO-optimized article about "${targetKeyword}".
 

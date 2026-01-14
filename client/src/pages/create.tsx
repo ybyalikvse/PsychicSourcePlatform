@@ -44,7 +44,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { TiptapEditor } from "@/components/tiptap-editor";
-import type { WritingStyle, SeoSettings, ImageStyle, Article } from "@shared/schema";
+import type { WritingStyle, SeoSettings, ImageStyle, Article, TargetAudience } from "@shared/schema";
 
 interface MetaSuggestions {
   titles: string[];
@@ -106,6 +106,12 @@ export default function CreateWithAI() {
   const { data: seoSettings } = useQuery<SeoSettings>({
     queryKey: ["/api/seo-settings"],
   });
+
+  const { data: targetAudiences = [] } = useQuery<TargetAudience[]>({
+    queryKey: ["/api/target-audiences"],
+  });
+
+  const [selectedAudienceId, setSelectedAudienceId] = useState<string>("default");
 
   const [selectedImageStyleId, setSelectedImageStyleId] = useState<string>("default");
   const [featuredImage, setFeaturedImage] = useState<string>("");
@@ -278,6 +284,7 @@ export default function CreateWithAI() {
           recommendedKeywords: keywordsArray,
           suggestedSections: parsed.sections,
           styleId: selectedStyleId !== "default" ? selectedStyleId : undefined,
+          audienceId: selectedAudienceId !== "default" ? selectedAudienceId : undefined,
           provider: contentProvider,
         }),
         signal: abortControllerRef.current.signal,
@@ -752,6 +759,34 @@ export default function CreateWithAI() {
                 {writingStyles.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     No custom styles defined.{" "}
+                    <button 
+                      className="text-primary underline"
+                      onClick={() => setLocation("/settings")}
+                    >
+                      Create one in Settings
+                    </button>
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="target-audience">Target Audience</Label>
+                <Select value={selectedAudienceId} onValueChange={setSelectedAudienceId}>
+                  <SelectTrigger data-testid="select-target-audience">
+                    <SelectValue placeholder="Select an audience..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">General Audience</SelectItem>
+                    {targetAudiences.map((audience) => (
+                      <SelectItem key={audience.id} value={audience.id}>
+                        {audience.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {targetAudiences.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No audiences defined.{" "}
                     <button 
                       className="text-primary underline"
                       onClick={() => setLocation("/settings")}
