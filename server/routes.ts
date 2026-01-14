@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema } from "@shared/schema";
+import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
@@ -1690,6 +1690,67 @@ Respond in JSON format:
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete image style" });
+    }
+  });
+
+  // ============ TARGET AUDIENCES ============
+  app.get("/api/target-audiences", async (req, res) => {
+    try {
+      const audiences = await storage.getTargetAudiences();
+      res.json(audiences);
+    } catch (error) {
+      console.error("Error fetching target audiences:", error);
+      res.status(500).json({ error: "Failed to fetch target audiences" });
+    }
+  });
+
+  app.get("/api/target-audiences/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const audience = await storage.getTargetAudience(id);
+      if (!audience) {
+        return res.status(404).json({ error: "Target audience not found" });
+      }
+      res.json(audience);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch target audience" });
+    }
+  });
+
+  app.post("/api/target-audiences", async (req, res) => {
+    try {
+      const parsed = insertTargetAudienceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid target audience data", details: parsed.error });
+      }
+      const audience = await storage.createTargetAudience(parsed.data);
+      res.status(201).json(audience);
+    } catch (error) {
+      console.error("Error creating target audience:", error);
+      res.status(500).json({ error: "Failed to create target audience" });
+    }
+  });
+
+  app.patch("/api/target-audiences/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const audience = await storage.updateTargetAudience(id, req.body);
+      if (!audience) {
+        return res.status(404).json({ error: "Target audience not found" });
+      }
+      res.json(audience);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update target audience" });
+    }
+  });
+
+  app.delete("/api/target-audiences/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteTargetAudience(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete target audience" });
     }
   });
 
