@@ -22,12 +22,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2, Image } from "lucide-react";
+import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2, Image, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle } from "@shared/schema";
+import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience } from "@shared/schema";
 
 interface WritingStyleFormData {
   name: string;
@@ -49,6 +49,15 @@ interface SeoSettingsFormData {
   metaDescriptionGuidelines: string;
   metaDescriptionMaxLength: number;
   optimizationPrompt: string;
+}
+
+interface TargetAudienceFormData {
+  name: string;
+  description: string;
+  demographics: string;
+  painPoints: string;
+  goals: string;
+  tone: string;
 }
 
 export default function Settings() {
@@ -78,12 +87,27 @@ export default function Settings() {
     additionalInstructions: "",
   });
 
+  const [audienceDialogOpen, setAudienceDialogOpen] = useState(false);
+  const [editingAudience, setEditingAudience] = useState<TargetAudience | null>(null);
+  const [audienceForm, setAudienceForm] = useState<TargetAudienceFormData>({
+    name: "",
+    description: "",
+    demographics: "",
+    painPoints: "",
+    goals: "",
+    tone: "",
+  });
+
   const { data: writingStyles = [], isLoading: stylesLoading } = useQuery<WritingStyle[]>({
     queryKey: ["/api/writing-styles"],
   });
 
   const { data: imageStyles = [], isLoading: imageStylesLoading } = useQuery<ImageStyle[]>({
     queryKey: ["/api/image-styles"],
+  });
+
+  const { data: targetAudiences = [], isLoading: audiencesLoading } = useQuery<TargetAudience[]>({
+    queryKey: ["/api/target-audiences"],
   });
 
   const { data: seoSettings, isLoading: seoLoading } = useQuery<SeoSettingsType>({
@@ -192,6 +216,47 @@ export default function Settings() {
     },
   });
 
+  const createAudienceMutation = useMutation({
+    mutationFn: (data: TargetAudienceFormData) => 
+      apiRequest("POST", "/api/target-audiences", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/target-audiences"] });
+      setAudienceDialogOpen(false);
+      resetAudienceForm();
+      toast({ title: "Target audience created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create target audience", variant: "destructive" });
+    },
+  });
+
+  const updateAudienceMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<TargetAudienceFormData> }) => 
+      apiRequest("PATCH", `/api/target-audiences/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/target-audiences"] });
+      setAudienceDialogOpen(false);
+      setEditingAudience(null);
+      resetAudienceForm();
+      toast({ title: "Target audience updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update target audience", variant: "destructive" });
+    },
+  });
+
+  const deleteAudienceMutation = useMutation({
+    mutationFn: (id: string) => 
+      apiRequest("DELETE", `/api/target-audiences/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/target-audiences"] });
+      toast({ title: "Target audience deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete target audience", variant: "destructive" });
+    },
+  });
+
   const saveSeoMutation = useMutation({
     mutationFn: (data: SeoSettingsFormData) => 
       apiRequest("PUT", "/api/seo-settings", data),
@@ -210,6 +275,10 @@ export default function Settings() {
 
   const resetImageStyleForm = () => {
     setImageStyleForm({ name: "", description: "", stylePrompt: "", additionalInstructions: "" });
+  };
+
+  const resetAudienceForm = () => {
+    setAudienceForm({ name: "", description: "", demographics: "", painPoints: "", goals: "", tone: "" });
   };
 
   const handleEditStyle = (style: WritingStyle) => {
@@ -247,6 +316,27 @@ export default function Settings() {
       updateImageStyleMutation.mutate({ id: editingImageStyle.id, data: imageStyleForm });
     } else {
       createImageStyleMutation.mutate(imageStyleForm);
+    }
+  };
+
+  const handleEditAudience = (audience: TargetAudience) => {
+    setEditingAudience(audience);
+    setAudienceForm({
+      name: audience.name,
+      description: audience.description || "",
+      demographics: audience.demographics || "",
+      painPoints: audience.painPoints || "",
+      goals: audience.goals || "",
+      tone: audience.tone || "",
+    });
+    setAudienceDialogOpen(true);
+  };
+
+  const handleSaveAudience = () => {
+    if (editingAudience) {
+      updateAudienceMutation.mutate({ id: editingAudience.id, data: audienceForm });
+    } else {
+      createAudienceMutation.mutate(audienceForm);
     }
   };
 
@@ -509,6 +599,160 @@ export default function Settings() {
                   data-testid="button-save-image-style"
                 >
                   {createImageStyleMutation.isPending || updateImageStyleMutation.isPending ? "Saving..." : "Save Style"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Target Audiences</CardTitle>
+          </div>
+          <CardDescription>
+            Define target audiences to personalize content and messaging for different reader segments
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {audiencesLoading ? (
+            <div className="text-sm text-muted-foreground">Loading audiences...</div>
+          ) : targetAudiences.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No target audiences defined yet. Create one to personalize your content.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {targetAudiences.map((audience) => (
+                <div 
+                  key={audience.id}
+                  className="flex items-center justify-between p-3 rounded-md border bg-muted/30"
+                  data-testid={`audience-item-${audience.id}`}
+                >
+                  <div>
+                    <div className="font-medium">{audience.name}</div>
+                    <div className="text-sm text-muted-foreground line-clamp-1 max-w-md">
+                      {audience.description || audience.demographics || "No description"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => handleEditAudience(audience)}
+                      data-testid={`button-edit-audience-${audience.id}`}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => deleteAudienceMutation.mutate(audience.id)}
+                      data-testid={`button-delete-audience-${audience.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <Dialog open={audienceDialogOpen} onOpenChange={(open) => {
+            setAudienceDialogOpen(open);
+            if (!open) {
+              setEditingAudience(null);
+              resetAudienceForm();
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="button-add-audience">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Target Audience
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[550px]">
+              <DialogHeader>
+                <DialogTitle>{editingAudience ? "Edit" : "Add"} Target Audience</DialogTitle>
+                <DialogDescription>
+                  Define a target audience to personalize content tone and messaging
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+                <div className="space-y-2">
+                  <Label htmlFor="audience-name">Audience Name</Label>
+                  <Input
+                    id="audience-name"
+                    value={audienceForm.name}
+                    onChange={(e) => setAudienceForm({ ...audienceForm, name: e.target.value })}
+                    placeholder="e.g., Spiritual Seekers"
+                    data-testid="input-audience-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="audience-description">Description</Label>
+                  <Textarea
+                    id="audience-description"
+                    value={audienceForm.description}
+                    onChange={(e) => setAudienceForm({ ...audienceForm, description: e.target.value })}
+                    placeholder="Brief description of this audience segment..."
+                    className="min-h-[60px]"
+                    data-testid="input-audience-description"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="audience-demographics">Demographics</Label>
+                  <Textarea
+                    id="audience-demographics"
+                    value={audienceForm.demographics}
+                    onChange={(e) => setAudienceForm({ ...audienceForm, demographics: e.target.value })}
+                    placeholder="e.g., Women 35-55, interested in spirituality and self-improvement..."
+                    className="min-h-[60px]"
+                    data-testid="input-audience-demographics"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="audience-pain-points">Pain Points</Label>
+                  <Textarea
+                    id="audience-pain-points"
+                    value={audienceForm.painPoints}
+                    onChange={(e) => setAudienceForm({ ...audienceForm, painPoints: e.target.value })}
+                    placeholder="What challenges or problems does this audience face?"
+                    className="min-h-[60px]"
+                    data-testid="input-audience-pain-points"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="audience-goals">Goals</Label>
+                  <Textarea
+                    id="audience-goals"
+                    value={audienceForm.goals}
+                    onChange={(e) => setAudienceForm({ ...audienceForm, goals: e.target.value })}
+                    placeholder="What is this audience trying to achieve?"
+                    className="min-h-[60px]"
+                    data-testid="input-audience-goals"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="audience-tone">Preferred Tone</Label>
+                  <Input
+                    id="audience-tone"
+                    value={audienceForm.tone}
+                    onChange={(e) => setAudienceForm({ ...audienceForm, tone: e.target.value })}
+                    placeholder="e.g., warm, empathetic, encouraging..."
+                    data-testid="input-audience-tone"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button 
+                  onClick={handleSaveAudience}
+                  disabled={!audienceForm.name || createAudienceMutation.isPending || updateAudienceMutation.isPending}
+                  data-testid="button-save-audience"
+                >
+                  {createAudienceMutation.isPending || updateAudienceMutation.isPending ? "Saving..." : "Save Audience"}
                 </Button>
               </DialogFooter>
             </DialogContent>
