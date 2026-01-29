@@ -3278,7 +3278,7 @@ Be extremely specific and actionable. Reference specific competitor content when
   // Implement selected recommendations - AI rewrites content with recommendations
   app.post("/api/optimize/implement", async (req, res) => {
     try {
-      const { content, recommendations, targetKeyword } = req.body;
+      const { content, recommendations, targetKeyword, promptId } = req.body;
       
       if (!content || !recommendations || !Array.isArray(recommendations) || recommendations.length === 0) {
         return res.status(400).json({ error: "Content and recommendations are required" });
@@ -3288,6 +3288,7 @@ Be extremely specific and actionable. Reference specific competitor content when
       console.log("[Optimize Implement] Content length:", content.length);
       console.log("[Optimize Implement] Recommendations count:", recommendations.length);
       console.log("[Optimize Implement] Target keyword:", targetKeyword);
+      console.log("[Optimize Implement] Prompt ID:", promptId);
 
       // Use Gemini for content rewriting
       const { GoogleGenAI } = await import("@google/genai");
@@ -3307,7 +3308,47 @@ Be extremely specific and actionable. Reference specific competitor content when
    Suggested: ${rec.suggested}`
       ).join("\n\n");
 
-      const rewritePrompt = `You are an expert SEO content editor. Your task is to extract and rewrite ONLY the main article content from the provided HTML, implementing the selected recommendations with MINIMAL changes.
+      // Fetch the selected optimization prompt or use default
+      let customPromptText = "";
+      if (promptId) {
+        const optimizationPrompt = await storage.getOptimizationPrompt(promptId);
+        if (optimizationPrompt) {
+          console.log("[Optimize Implement] Using custom prompt:", optimizationPrompt.name);
+          customPromptText = optimizationPrompt.prompt;
+          
+          // Fetch internal links for placeholder replacement
+          const linkColumns = await storage.getLinkTableColumns();
+          const siteUrls = await storage.getSiteUrls();
+          
+          // Format internal links data for placeholders
+          const internalLinksData: Record<string, string[]> = {};
+          for (const col of linkColumns) {
+            internalLinksData[col.name] = siteUrls.map((row: any) => {
+              const data = row.data as Record<string, string> | null;
+              return data?.[col.id] || "";
+            }).filter((v: string) => v);
+          }
+          
+          // Replace placeholders in custom prompt
+          customPromptText = customPromptText
+            .replace(/\{targetKeyword\}/g, targetKeyword || "")
+            .replace(/\{recommendations\}/g, recommendationsFormatted)
+            .replace(/\{pageContent\}/g, content);
+          
+          // Replace internal links placeholders
+          for (const [colName, values] of Object.entries(internalLinksData)) {
+            const placeholder = `{{${colName}}}`;
+            customPromptText = customPromptText.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), values.join("\n"));
+          }
+        }
+      }
+
+      // Use custom prompt if available, otherwise use default
+      let rewritePrompt: string;
+      if (customPromptText) {
+        rewritePrompt = customPromptText;
+      } else {
+        rewritePrompt = `You are an expert SEO content editor. Your task is to extract and rewrite ONLY the main article content from the provided HTML, implementing the selected recommendations with MINIMAL changes.
 
 === CRITICAL INSTRUCTIONS ===
 1. EXTRACT ONLY THE MAIN ARTICLE CONTENT - ignore navigation, headers, footers, sidebars, scripts, CSS, and any non-article elements
@@ -3339,6 +3380,7 @@ ${content}
 
 === YOUR TASK ===
 Extract the main article content from above, implement the recommendations with MINIMAL word count increase, and return ONLY clean semantic HTML. Make surgical edits - replace and tweak rather than expand. Do not wrap in markdown code blocks.`;
+      }
 
       console.log("[Optimize Implement] Sending prompt to Gemini");
       

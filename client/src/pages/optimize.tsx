@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import type { ImageStyle } from "@shared/schema";
+import type { ImageStyle, OptimizationPrompt } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -171,6 +171,22 @@ export default function Optimize() {
     queryKey: ["/api/image-styles"],
   });
 
+  // Fetch optimization prompts
+  const { data: optimizationPrompts = [] } = useQuery<OptimizationPrompt[]>({
+    queryKey: ["/api/optimization-prompts"],
+  });
+
+  // State for selected optimization prompt
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+
+  // Get the default prompt or first one
+  const getSelectedPrompt = () => {
+    if (selectedPromptId) {
+      return optimizationPrompts.find(p => p.id.toString() === selectedPromptId);
+    }
+    return optimizationPrompts.find(p => p.isDefault) || optimizationPrompts[0];
+  };
+
   const form = useForm<OptimizeFormData>({
     resolver: zodResolver(optimizeFormSchema),
     defaultValues: {
@@ -275,11 +291,12 @@ export default function Optimize() {
   });
 
   const implementMutation = useMutation({
-    mutationFn: async ({ content, recommendations }: { content: string; recommendations: Recommendation[] }) => {
+    mutationFn: async ({ content, recommendations, promptId }: { content: string; recommendations: Recommendation[]; promptId?: number }) => {
       const response = await apiRequest("POST", `/api/optimize/implement`, {
         content,
         recommendations,
         targetKeyword: form.getValues("targetKeyword"),
+        promptId,
       });
       return response.json();
     },
@@ -310,7 +327,12 @@ export default function Optimize() {
     
     if (recsToImplement.length === 0) return;
     
-    implementMutation.mutate({ content, recommendations: recsToImplement });
+    const selectedPrompt = getSelectedPrompt();
+    implementMutation.mutate({ 
+      content, 
+      recommendations: recsToImplement,
+      promptId: selectedPrompt?.id ? Number(selectedPrompt.id) : undefined,
+    });
   };
 
   const toggleRecommendation = (index: number) => {
@@ -714,24 +736,43 @@ export default function Optimize() {
                     </Button>
                   )}
                   {analysisResult.recommendations.length > 0 && (
-                    <Button
-                      size="sm"
-                      onClick={handleImplementRecommendations}
-                      disabled={selectedRecommendations.length === 0 || implementMutation.isPending}
-                      data-testid="button-implement-recommendations"
-                    >
-                      {implementMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Rewriting...
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 className="h-4 w-4 mr-2" />
-                          Implement ({selectedRecommendations.length})
-                        </>
+                    <div className="flex items-center gap-2">
+                      {optimizationPrompts.length > 0 && (
+                        <Select
+                          value={selectedPromptId || (getSelectedPrompt()?.id?.toString() || "")}
+                          onValueChange={setSelectedPromptId}
+                        >
+                          <SelectTrigger className="w-[180px] h-8" data-testid="select-optimization-prompt">
+                            <SelectValue placeholder="Select prompt..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {optimizationPrompts.map((prompt) => (
+                              <SelectItem key={prompt.id} value={prompt.id.toString()}>
+                                {prompt.name} {prompt.isDefault && "(default)"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       )}
-                    </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleImplementRecommendations}
+                        disabled={selectedRecommendations.length === 0 || implementMutation.isPending}
+                        data-testid="button-implement-recommendations"
+                      >
+                        {implementMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Rewriting...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="h-4 w-4 mr-2" />
+                            Implement ({selectedRecommendations.length})
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardHeader>
