@@ -1786,6 +1786,13 @@ Respond in JSON format:
   app.post("/api/link-table-columns", async (req, res) => {
     try {
       const validated = insertLinkTableColumnSchema.parse(req.body);
+      const existingColumns = await storage.getLinkTableColumns();
+      const nameExists = existingColumns.some(
+        col => col.name.toLowerCase() === validated.name.toLowerCase()
+      );
+      if (nameExists) {
+        return res.status(400).json({ error: "Column name already exists" });
+      }
       const column = await storage.createLinkTableColumn(validated);
       res.status(201).json(column);
     } catch (error) {
@@ -1807,6 +1814,15 @@ Respond in JSON format:
   app.delete("/api/link-table-columns/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const rows = await storage.getSiteUrls();
+      for (const row of rows) {
+        const data = row.data as Record<string, string> | null;
+        if (data && id in data) {
+          const newData = { ...data };
+          delete newData[id];
+          await storage.updateSiteUrl(row.id, { data: newData });
+        }
+      }
       await storage.deleteLinkTableColumn(id);
       res.status(204).send();
     } catch (error) {
