@@ -179,6 +179,17 @@ export default function Optimize() {
   // State for selected optimization prompt
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
+  // Debug state - shows what gets sent to AI
+  const [debugInfo, setDebugInfo] = useState<{
+    promptName: string;
+    promptText: string;
+    targetKeyword: string;
+    recommendationsCount: number;
+    recommendations: string;
+    contentLength: number;
+    timestamp: string;
+  } | null>(null);
+
   // Get the default prompt or first one
   const getSelectedPrompt = () => {
     if (selectedPromptId) {
@@ -327,17 +338,20 @@ export default function Optimize() {
     
     const selectedPrompt = getSelectedPrompt();
     
-    // DEBUG LOGGING - Remove later
-    console.log("=== IMPLEMENT REQUEST DEBUG ===");
-    console.log("Selected Prompt:", selectedPrompt);
-    console.log("Prompt ID being sent:", selectedPrompt?.id ? Number(selectedPrompt.id) : undefined);
-    console.log("Prompt Name:", selectedPrompt?.name);
-    console.log("Prompt Text:", selectedPrompt?.prompt);
-    console.log("Number of recommendations selected:", recsToImplement.length);
-    console.log("Recommendations:", recsToImplement);
-    console.log("Target Keyword:", form.getValues("targetKeyword"));
-    console.log("Content length:", content.length);
-    console.log("=== END DEBUG ===");
+    // Set debug info for UI display
+    setDebugInfo({
+      promptName: selectedPrompt?.name || "(Default prompt)",
+      promptText: selectedPrompt?.prompt || "(Using default optimization prompt)",
+      targetKeyword: form.getValues("targetKeyword"),
+      recommendationsCount: recsToImplement.length,
+      recommendations: recsToImplement.length > 0 
+        ? recsToImplement.map((rec, i) => 
+            `${i + 1}. [${rec.type.toUpperCase()}] ${rec.priority} priority\n   Reason: ${rec.reason}\n   ${rec.current ? `Current: ${rec.current}` : ""}\n   Suggested: ${rec.suggested}`
+          ).join("\n\n")
+        : "(No recommendations selected)",
+      contentLength: content.length,
+      timestamp: new Date().toLocaleTimeString(),
+    });
     
     implementMutation.mutate({ 
       content, 
@@ -859,6 +873,43 @@ export default function Optimize() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* DEBUG PANEL - Remove later */}
+            {debugInfo && (
+              <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+                <CardHeader>
+                  <CardTitle className="text-yellow-700 dark:text-yellow-300 flex items-center gap-2">
+                    <Code className="h-5 w-5" />
+                    Debug: AI Request Details
+                  </CardTitle>
+                  <CardDescription className="text-yellow-600 dark:text-yellow-400">
+                    Last request at {debugInfo.timestamp}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Selected Prompt:</Label>
+                    <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.promptName}</p>
+                  </div>
+                  <div>
+                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Target Keyword:</Label>
+                    <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.targetKeyword || "(none)"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Content Length:</Label>
+                    <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.contentLength.toLocaleString()} characters</p>
+                  </div>
+                  <div>
+                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Recommendations ({debugInfo.recommendationsCount}):</Label>
+                    <pre className="text-xs font-mono bg-white dark:bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-40 overflow-y-auto">{debugInfo.recommendations}</pre>
+                  </div>
+                  <div>
+                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Full Prompt Text:</Label>
+                    <pre className="text-xs font-mono bg-white dark:bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">{debugInfo.promptText}</pre>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {showRewriteEditor && rewrittenContent && (
               <>
