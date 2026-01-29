@@ -129,6 +129,76 @@ export default function InternalLinks() {
     }
   };
 
+  const handleCellPaste = async (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text');
+    if (!text) return;
+
+    const hasMultipleCells = text.includes('\t') || text.split(/\r?\n/).filter(l => l.trim()).length > 1;
+    if (!hasMultipleCells || !editingCell) return;
+
+    e.preventDefault();
+    cancelEdit();
+
+    const lines = text.trim().split(/\r?\n/);
+    const startRowIndex = rows.findIndex(r => r.id === editingCell.rowId);
+    const startColIndex = columns.findIndex(c => c.id === editingCell.columnId);
+    
+    if (startRowIndex === -1 || startColIndex === -1) return;
+
+    const updates: { rowId: string; colId: string; value: string }[] = [];
+    const newRowsData: Record<string, string>[] = [];
+
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+      const cells = lines[lineIdx].split('\t');
+      const targetRowIdx = startRowIndex + lineIdx;
+      
+      if (targetRowIdx < rows.length) {
+        for (let cellIdx = 0; cellIdx < cells.length; cellIdx++) {
+          const targetColIdx = startColIndex + cellIdx;
+          if (targetColIdx < columns.length) {
+            updates.push({
+              rowId: rows[targetRowIdx].id,
+              colId: columns[targetColIdx].id,
+              value: cells[cellIdx]?.trim() || ""
+            });
+          }
+        }
+      } else {
+        const rowData: Record<string, string> = {};
+        for (let cellIdx = 0; cellIdx < cells.length; cellIdx++) {
+          const targetColIdx = startColIndex + cellIdx;
+          if (targetColIdx < columns.length) {
+            rowData[columns[targetColIdx].id] = cells[cellIdx]?.trim() || "";
+          }
+        }
+        if (Object.values(rowData).some(v => v)) {
+          newRowsData.push(rowData);
+        }
+      }
+    }
+
+    const rowUpdates: Record<string, Record<string, string>> = {};
+    for (const upd of updates) {
+      if (!rowUpdates[upd.rowId]) {
+        const row = rows.find(r => r.id === upd.rowId);
+        rowUpdates[upd.rowId] = { ...(row?.data as Record<string, string> || {}) };
+      }
+      rowUpdates[upd.rowId][upd.colId] = upd.value;
+    }
+
+    for (const [rowId, data] of Object.entries(rowUpdates)) {
+      await apiRequest("PATCH", `/api/site-urls/${rowId}`, { data });
+    }
+
+    for (const rowData of newRowsData) {
+      await apiRequest("POST", "/api/site-urls", { name: "", data: rowData });
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
+    const totalCells = updates.length + newRowsData.reduce((sum, r) => sum + Object.keys(r).length, 0);
+    toast({ title: `Pasted ${totalCells} cell${totalCells !== 1 ? 's' : ''}` });
+  };
+
   const addNewRow = () => {
     createRowMutation.mutate({ name: "", data: {} });
   };
@@ -340,6 +410,7 @@ export default function InternalLinks() {
                                     onChange={(e) => setCellValue(e.target.value)}
                                     onBlur={saveCell}
                                     onKeyDown={handleKeyDown}
+                                    onPaste={handleCellPaste}
                                     className="border-0 rounded-none h-10 focus-visible:ring-1 focus-visible:ring-inset"
                                     autoFocus
                                     data-testid={`input-cell-${row.id}-${col.id}`}
