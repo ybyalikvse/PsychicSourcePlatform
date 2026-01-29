@@ -22,12 +22,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2, Image, Users, Link } from "lucide-react";
+import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2, Image, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience, SiteUrl } from "@shared/schema";
+import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience } from "@shared/schema";
 
 interface WritingStyleFormData {
   name: string;
@@ -58,13 +58,6 @@ interface TargetAudienceFormData {
   painPoints: string;
   goals: string;
   tone: string;
-}
-
-interface SiteUrlFormData {
-  url: string;
-  title: string;
-  category: string;
-  description: string;
 }
 
 export default function Settings() {
@@ -105,15 +98,6 @@ export default function Settings() {
     tone: "",
   });
 
-  const [siteUrlDialogOpen, setSiteUrlDialogOpen] = useState(false);
-  const [editingSiteUrl, setEditingSiteUrl] = useState<SiteUrl | null>(null);
-  const [siteUrlForm, setSiteUrlForm] = useState<SiteUrlFormData>({
-    url: "",
-    title: "",
-    category: "",
-    description: "",
-  });
-
   const { data: writingStyles = [], isLoading: stylesLoading } = useQuery<WritingStyle[]>({
     queryKey: ["/api/writing-styles"],
   });
@@ -124,10 +108,6 @@ export default function Settings() {
 
   const { data: targetAudiences = [], isLoading: audiencesLoading } = useQuery<TargetAudience[]>({
     queryKey: ["/api/target-audiences"],
-  });
-
-  const { data: siteUrls = [], isLoading: siteUrlsLoading } = useQuery<SiteUrl[]>({
-    queryKey: ["/api/site-urls"],
   });
 
   const { data: seoSettings, isLoading: seoLoading } = useQuery<SeoSettingsType>({
@@ -277,47 +257,6 @@ export default function Settings() {
     },
   });
 
-  const createSiteUrlMutation = useMutation({
-    mutationFn: (data: SiteUrlFormData) => 
-      apiRequest("POST", "/api/site-urls", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
-      setSiteUrlDialogOpen(false);
-      resetSiteUrlForm();
-      toast({ title: "Site URL added" });
-    },
-    onError: () => {
-      toast({ title: "Failed to add site URL", variant: "destructive" });
-    },
-  });
-
-  const updateSiteUrlMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<SiteUrlFormData> }) => 
-      apiRequest("PATCH", `/api/site-urls/${id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
-      setSiteUrlDialogOpen(false);
-      setEditingSiteUrl(null);
-      resetSiteUrlForm();
-      toast({ title: "Site URL updated" });
-    },
-    onError: () => {
-      toast({ title: "Failed to update site URL", variant: "destructive" });
-    },
-  });
-
-  const deleteSiteUrlMutation = useMutation({
-    mutationFn: (id: string) => 
-      apiRequest("DELETE", `/api/site-urls/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
-      toast({ title: "Site URL deleted" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete site URL", variant: "destructive" });
-    },
-  });
-
   const saveSeoMutation = useMutation({
     mutationFn: (data: SeoSettingsFormData) => 
       apiRequest("PUT", "/api/seo-settings", data),
@@ -340,10 +279,6 @@ export default function Settings() {
 
   const resetAudienceForm = () => {
     setAudienceForm({ name: "", description: "", demographics: "", painPoints: "", goals: "", tone: "" });
-  };
-
-  const resetSiteUrlForm = () => {
-    setSiteUrlForm({ url: "", title: "", category: "", description: "" });
   };
 
   const handleEditStyle = (style: WritingStyle) => {
@@ -402,25 +337,6 @@ export default function Settings() {
       updateAudienceMutation.mutate({ id: editingAudience.id, data: audienceForm });
     } else {
       createAudienceMutation.mutate(audienceForm);
-    }
-  };
-
-  const handleEditSiteUrl = (siteUrl: SiteUrl) => {
-    setEditingSiteUrl(siteUrl);
-    setSiteUrlForm({
-      url: siteUrl.url,
-      title: siteUrl.title,
-      category: siteUrl.category || "",
-      description: siteUrl.description || "",
-    });
-    setSiteUrlDialogOpen(true);
-  };
-
-  const handleSaveSiteUrl = () => {
-    if (editingSiteUrl) {
-      updateSiteUrlMutation.mutate({ id: editingSiteUrl.id, data: siteUrlForm });
-    } else {
-      createSiteUrlMutation.mutate(siteUrlForm);
     }
   };
 
@@ -841,147 +757,6 @@ export default function Settings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Link className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-lg">Site URLs</CardTitle>
-          </div>
-          <CardDescription>
-            Manage site pages for internal linking in generated content
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {siteUrlsLoading ? (
-            <div className="text-sm text-muted-foreground">Loading URLs...</div>
-          ) : siteUrls.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              No site URLs added yet. Add URLs from your sitemap to enable internal linking.
-            </div>
-          ) : (
-            <div className="border rounded-md overflow-hidden">
-              <div className="bg-muted/50 border-b px-4 py-2 grid grid-cols-12 gap-2 text-sm font-medium">
-                <div className="col-span-4">Title</div>
-                <div className="col-span-4">URL</div>
-                <div className="col-span-2">Category</div>
-                <div className="col-span-2 text-right">Actions</div>
-              </div>
-              <div className="divide-y max-h-[300px] overflow-y-auto">
-                {siteUrls.map((url) => (
-                  <div 
-                    key={url.id}
-                    className="px-4 py-2 grid grid-cols-12 gap-2 items-center text-sm hover-elevate"
-                    data-testid={`site-url-row-${url.id}`}
-                  >
-                    <div className="col-span-4 font-medium truncate" title={url.title}>{url.title}</div>
-                    <div className="col-span-4 text-muted-foreground truncate" title={url.url}>{url.url}</div>
-                    <div className="col-span-2 text-muted-foreground truncate">{url.category || "-"}</div>
-                    <div className="col-span-2 flex justify-end gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => handleEditSiteUrl(url)}
-                        data-testid={`button-edit-site-url-${url.id}`}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => deleteSiteUrlMutation.mutate(url.id)}
-                        data-testid={`button-delete-site-url-${url.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          <div className="flex items-center justify-between pt-2">
-            <div className="text-sm text-muted-foreground">
-              {siteUrls.length} URL{siteUrls.length !== 1 ? "s" : ""} added
-            </div>
-            <Dialog open={siteUrlDialogOpen} onOpenChange={(open) => {
-              setSiteUrlDialogOpen(open);
-              if (!open) {
-                setEditingSiteUrl(null);
-                resetSiteUrlForm();
-              }
-            }}>
-              <DialogTrigger asChild>
-                <Button variant="outline" data-testid="button-add-site-url">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add URL
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                  <DialogTitle>{editingSiteUrl ? "Edit" : "Add"} Site URL</DialogTitle>
-                  <DialogDescription>
-                    Add a page from your site to use for internal linking
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="site-url-url">URL *</Label>
-                    <Input
-                      id="site-url-url"
-                      value={siteUrlForm.url}
-                      onChange={(e) => setSiteUrlForm({ ...siteUrlForm, url: e.target.value })}
-                      placeholder="https://www.example.com/page"
-                      data-testid="input-site-url-url"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="site-url-title">Title / Anchor Text *</Label>
-                    <Input
-                      id="site-url-title"
-                      value={siteUrlForm.title}
-                      onChange={(e) => setSiteUrlForm({ ...siteUrlForm, title: e.target.value })}
-                      placeholder="e.g., Psychic Reading Guide"
-                      data-testid="input-site-url-title"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="site-url-category">Category (optional)</Label>
-                    <Input
-                      id="site-url-category"
-                      value={siteUrlForm.category}
-                      onChange={(e) => setSiteUrlForm({ ...siteUrlForm, category: e.target.value })}
-                      placeholder="e.g., Guides, Services, Blog"
-                      data-testid="input-site-url-category"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="site-url-description">Description (optional)</Label>
-                    <Textarea
-                      id="site-url-description"
-                      value={siteUrlForm.description}
-                      onChange={(e) => setSiteUrlForm({ ...siteUrlForm, description: e.target.value })}
-                      placeholder="Brief description of this page's content..."
-                      className="min-h-[60px]"
-                      data-testid="input-site-url-description"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button 
-                    onClick={handleSaveSiteUrl}
-                    disabled={!siteUrlForm.url || !siteUrlForm.title || createSiteUrlMutation.isPending || updateSiteUrlMutation.isPending}
-                    data-testid="button-save-site-url"
-                  >
-                    {createSiteUrlMutation.isPending || updateSiteUrlMutation.isPending ? "Saving..." : "Save URL"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
         </CardContent>
       </Card>
 

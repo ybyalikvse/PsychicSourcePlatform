@@ -11,6 +11,7 @@ import {
   Wand2,
   Target,
   Layers,
+  Link as LinkIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,6 +52,11 @@ const mainNavItems = [
     title: "Optimize",
     url: "/optimize",
     icon: Target,
+  },
+  {
+    title: "Internal Links",
+    url: "/internal-links",
+    icon: LinkIcon,
   },
 ];
 
