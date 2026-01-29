@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertSiteUrlSchema } from "@shared/schema";
+import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertLinkTableColumnSchema, insertSiteUrlSchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
@@ -1773,7 +1773,48 @@ Respond in JSON format:
     }
   });
 
-  // ============ SITE URLS (for internal linking) ============
+  // ============ LINK TABLE COLUMNS (dynamic columns) ============
+  app.get("/api/link-table-columns", async (req, res) => {
+    try {
+      const columns = await storage.getLinkTableColumns();
+      res.json(columns);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch columns" });
+    }
+  });
+
+  app.post("/api/link-table-columns", async (req, res) => {
+    try {
+      const validated = insertLinkTableColumnSchema.parse(req.body);
+      const column = await storage.createLinkTableColumn(validated);
+      res.status(201).json(column);
+    } catch (error) {
+      console.error("Error creating column:", error);
+      res.status(500).json({ error: "Failed to create column" });
+    }
+  });
+
+  app.patch("/api/link-table-columns/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const column = await storage.updateLinkTableColumn(id, req.body);
+      res.json(column);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update column" });
+    }
+  });
+
+  app.delete("/api/link-table-columns/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteLinkTableColumn(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete column" });
+    }
+  });
+
+  // ============ SITE URLS (rows for internal linking) ============
   app.get("/api/site-urls", async (req, res) => {
     try {
       const urls = await storage.getSiteUrls();

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, json, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -205,13 +205,27 @@ export const insertTargetAudienceSchema = createInsertSchema(targetAudiences).om
 export type InsertTargetAudience = z.infer<typeof insertTargetAudienceSchema>;
 export type TargetAudience = typeof targetAudiences.$inferSelect;
 
-// Site URLs for internal linking
+// Dynamic columns for the internal links table
+export const linkTableColumns = pgTable("link_table_columns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  order: integer("order").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertLinkTableColumnSchema = createInsertSchema(linkTableColumns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertLinkTableColumn = z.infer<typeof insertLinkTableColumnSchema>;
+export type LinkTableColumn = typeof linkTableColumns.$inferSelect;
+
+// Site URLs/rows for internal linking (dynamic data storage)
 export const siteUrls = pgTable("site_urls", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  url: text("url").notNull(),
-  title: text("title").notNull(), // Anchor text / page title
-  category: text("category"), // Optional category for organization
-  description: text("description"), // Brief description of the page
+  name: text("name").notNull().default(""), // Row identifier/name
+  data: json("data").$type<Record<string, string>>().default({}), // Dynamic column values
   createdAt: text("created_at").notNull().default(sql`now()`),
 });
 

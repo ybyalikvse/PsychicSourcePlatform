@@ -9,10 +9,11 @@ import {
   type SeoSettings, type InsertSeoSettings,
   type ImageStyle, type InsertImageStyle,
   type TargetAudience, type InsertTargetAudience,
+  type LinkTableColumn, type InsertLinkTableColumn,
   type SiteUrl, type InsertSiteUrl,
   type OptimizationAnalysis, type InsertOptimizationAnalysis,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
-  writingStyles, seoSettings, imageStyles, targetAudiences, siteUrls, optimizationAnalyses,
+  writingStyles, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -77,7 +78,13 @@ export interface IStorage {
   updateTargetAudience(id: string, audience: Partial<InsertTargetAudience>): Promise<TargetAudience | undefined>;
   deleteTargetAudience(id: string): Promise<boolean>;
 
-  // Site URLs
+  // Link Table Columns (dynamic columns)
+  getLinkTableColumns(): Promise<LinkTableColumn[]>;
+  createLinkTableColumn(column: InsertLinkTableColumn): Promise<LinkTableColumn>;
+  updateLinkTableColumn(id: string, column: Partial<InsertLinkTableColumn>): Promise<LinkTableColumn | undefined>;
+  deleteLinkTableColumn(id: string): Promise<boolean>;
+
+  // Site URLs (rows)
   getSiteUrls(): Promise<SiteUrl[]>;
   getSiteUrl(id: string): Promise<SiteUrl | undefined>;
   createSiteUrl(siteUrl: InsertSiteUrl): Promise<SiteUrl>;
@@ -294,6 +301,10 @@ export class MemStorage implements IStorage {
   async createTargetAudience(_audience: InsertTargetAudience): Promise<TargetAudience> { throw new Error("Not implemented"); }
   async updateTargetAudience(_id: string, _audience: Partial<InsertTargetAudience>): Promise<TargetAudience | undefined> { return undefined; }
   async deleteTargetAudience(_id: string): Promise<boolean> { return false; }
+  async getLinkTableColumns(): Promise<LinkTableColumn[]> { return []; }
+  async createLinkTableColumn(_column: InsertLinkTableColumn): Promise<LinkTableColumn> { throw new Error("Not implemented"); }
+  async updateLinkTableColumn(_id: string, _column: Partial<InsertLinkTableColumn>): Promise<LinkTableColumn | undefined> { return undefined; }
+  async deleteLinkTableColumn(_id: string): Promise<boolean> { return false; }
   async getSiteUrls(): Promise<SiteUrl[]> { return []; }
   async getSiteUrl(_id: string): Promise<SiteUrl | undefined> { return undefined; }
   async createSiteUrl(_siteUrl: InsertSiteUrl): Promise<SiteUrl> { throw new Error("Not implemented"); }
@@ -538,9 +549,29 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
-  // Site URLs
+  // Link Table Columns
+  async getLinkTableColumns(): Promise<LinkTableColumn[]> {
+    return db.select().from(linkTableColumns).orderBy(linkTableColumns.order);
+  }
+
+  async createLinkTableColumn(column: InsertLinkTableColumn): Promise<LinkTableColumn> {
+    const [created] = await db.insert(linkTableColumns).values(column).returning();
+    return created;
+  }
+
+  async updateLinkTableColumn(id: string, column: Partial<InsertLinkTableColumn>): Promise<LinkTableColumn | undefined> {
+    const [updated] = await db.update(linkTableColumns).set(column).where(eq(linkTableColumns.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLinkTableColumn(id: string): Promise<boolean> {
+    await db.delete(linkTableColumns).where(eq(linkTableColumns.id, id));
+    return true;
+  }
+
+  // Site URLs (rows)
   async getSiteUrls(): Promise<SiteUrl[]> {
-    return db.select().from(siteUrls).orderBy(siteUrls.title);
+    return db.select().from(siteUrls).orderBy(siteUrls.createdAt);
   }
 
   async getSiteUrl(id: string): Promise<SiteUrl | undefined> {

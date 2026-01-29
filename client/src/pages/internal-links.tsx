@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Link, Plus, Trash2, Save, X, ClipboardPaste, Upload } from "lucide-react";
-import type { SiteUrl } from "@shared/schema";
+import { Link, Plus, Trash2, ClipboardPaste, Upload, GripVertical } from "lucide-react";
+import type { SiteUrl, LinkTableColumn } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -15,120 +15,193 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-
-type SiteUrlFormData = {
-  url: string;
-  title: string;
-  category: string;
-  description: string;
-};
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function InternalLinks() {
   const { toast } = useToast();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<SiteUrlFormData>({ url: "", title: "", category: "", description: "" });
+  const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
+  const [cellValue, setCellValue] = useState("");
   const [bulkPasteOpen, setBulkPasteOpen] = useState(false);
   const [bulkData, setBulkData] = useState("");
   const [isPasting, setIsPasting] = useState(false);
-  const tableRef = useRef<HTMLDivElement>(null);
+  const [newColumnName, setNewColumnName] = useState("");
+  const [addColumnOpen, setAddColumnOpen] = useState(false);
 
-  const { data: siteUrls = [], isLoading } = useQuery<SiteUrl[]>({
+  const { data: columns = [], isLoading: columnsLoading } = useQuery<LinkTableColumn[]>({
+    queryKey: ["/api/link-table-columns"],
+  });
+
+  const { data: rows = [], isLoading: rowsLoading } = useQuery<SiteUrl[]>({
     queryKey: ["/api/site-urls"],
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: SiteUrlFormData) => apiRequest("POST", "/api/site-urls", data),
+  const createColumnMutation = useMutation({
+    mutationFn: (data: { name: string; order: number }) => 
+      apiRequest("POST", "/api/link-table-columns", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/link-table-columns"] });
+      setAddColumnOpen(false);
+      setNewColumnName("");
+      toast({ title: "Column added" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add column", variant: "destructive" });
+    },
+  });
+
+  const deleteColumnMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/link-table-columns/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/link-table-columns"] });
+      toast({ title: "Column deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete column", variant: "destructive" });
+    },
+  });
+
+  const createRowMutation = useMutation({
+    mutationFn: (data: { name: string; data: Record<string, string> }) => 
+      apiRequest("POST", "/api/site-urls", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
     },
     onError: () => {
-      toast({ title: "Failed to add URL", variant: "destructive" });
+      toast({ title: "Failed to add row", variant: "destructive" });
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<SiteUrlFormData> }) =>
+  const updateRowMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<{ name: string; data: Record<string, string> }> }) =>
       apiRequest("PATCH", `/api/site-urls/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
-      setEditingId(null);
-      toast({ title: "URL updated" });
     },
     onError: () => {
-      toast({ title: "Failed to update URL", variant: "destructive" });
+      toast({ title: "Failed to update cell", variant: "destructive" });
     },
   });
 
-  const deleteMutation = useMutation({
+  const deleteRowMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/site-urls/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
-      toast({ title: "URL deleted" });
+      toast({ title: "Row deleted" });
     },
     onError: () => {
-      toast({ title: "Failed to delete URL", variant: "destructive" });
+      toast({ title: "Failed to delete row", variant: "destructive" });
     },
   });
 
-  const parseClipboardData = (text: string): SiteUrlFormData[] => {
-    const rows: SiteUrlFormData[] = [];
-    const lines = text.trim().split(/\r?\n/);
+  const startEditCell = (rowId: string, columnId: string, currentValue: string) => {
+    setEditingCell({ rowId, columnId });
+    setCellValue(currentValue);
+  };
+
+  const saveCell = () => {
+    if (!editingCell) return;
     
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      
-      const cells = line.split('\t');
-      
-      if (cells.length >= 2) {
-        rows.push({
-          title: cells[0]?.trim() || "",
-          url: cells[1]?.trim() || "",
-          category: cells[2]?.trim() || "",
-          description: cells[3]?.trim() || "",
-        });
-      } else if (cells.length === 1) {
-        const value = cells[0].trim();
-        if (value.startsWith('http')) {
-          rows.push({ title: "", url: value, category: "", description: "" });
-        } else {
-          rows.push({ title: value, url: "", category: "", description: "" });
-        }
+    const row = rows.find(r => r.id === editingCell.rowId);
+    if (!row) return;
+
+    const newData = { ...(row.data || {}), [editingCell.columnId]: cellValue };
+    updateRowMutation.mutate({ id: editingCell.rowId, data: { data: newData } });
+    setEditingCell(null);
+    setCellValue("");
+  };
+
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setCellValue("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      saveCell();
+    } else if (e.key === "Escape") {
+      cancelEdit();
+    }
+  };
+
+  const addNewRow = () => {
+    createRowMutation.mutate({ name: "", data: {} });
+  };
+
+  const addNewColumn = () => {
+    if (!newColumnName.trim()) return;
+    createColumnMutation.mutate({ name: newColumnName.trim(), order: columns.length });
+  };
+
+  const parseClipboardData = (text: string): { columnNames: string[]; rows: Record<string, string>[] } => {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length === 0) return { columnNames: [], rows: [] };
+
+    const firstLine = lines[0].split('\t');
+    const columnNames = firstLine.map(name => name.trim()).filter(Boolean);
+    
+    const dataRows: Record<string, string>[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cells = lines[i].split('\t');
+      const rowData: Record<string, string> = {};
+      columnNames.forEach((colName, idx) => {
+        rowData[colName] = cells[idx]?.trim() || "";
+      });
+      if (Object.values(rowData).some(v => v)) {
+        dataRows.push(rowData);
       }
     }
     
-    return rows.filter(r => r.url || r.title);
+    return { columnNames, rows: dataRows };
   };
 
   const handleBulkImport = async () => {
-    const rows = parseClipboardData(bulkData);
+    const { columnNames, rows: dataRows } = parseClipboardData(bulkData);
     
-    if (rows.length === 0) {
-      toast({ title: "No valid data found", variant: "destructive" });
-      return;
-    }
-
-    const validRows = rows.filter(r => r.url && r.title);
-    if (validRows.length === 0) {
-      toast({ 
-        title: "Each row needs both Title and URL", 
-        description: "Format: Title [tab] URL [tab] Category [tab] Description",
-        variant: "destructive" 
-      });
+    if (columnNames.length === 0 || dataRows.length === 0) {
+      toast({ title: "No valid data found", description: "First row should be column headers", variant: "destructive" });
       return;
     }
 
     setIsPasting(true);
-    let successCount = 0;
-    let errorCount = 0;
 
-    for (const row of validRows) {
+    const existingColNames = columns.map(c => c.name.toLowerCase());
+    const newCols = columnNames.filter(name => !existingColNames.includes(name.toLowerCase()));
+    
+    for (let i = 0; i < newCols.length; i++) {
       try {
-        await apiRequest("POST", "/api/site-urls", row);
+        await apiRequest("POST", "/api/link-table-columns", { name: newCols[i], order: columns.length + i });
+      } catch {
+      }
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ["/api/link-table-columns"] });
+    const updatedColumns = await queryClient.fetchQuery<LinkTableColumn[]>({ queryKey: ["/api/link-table-columns"] });
+
+    const colNameToId: Record<string, string> = {};
+    updatedColumns.forEach(col => {
+      colNameToId[col.name.toLowerCase()] = col.id;
+    });
+
+    let successCount = 0;
+    for (const rowData of dataRows) {
+      const mappedData: Record<string, string> = {};
+      Object.entries(rowData).forEach(([colName, value]) => {
+        const colId = colNameToId[colName.toLowerCase()];
+        if (colId) {
+          mappedData[colId] = value;
+        }
+      });
+      
+      try {
+        await apiRequest("POST", "/api/site-urls", { name: "", data: mappedData });
         successCount++;
       } catch {
-        errorCount++;
       }
     }
 
@@ -136,19 +209,11 @@ export default function InternalLinks() {
     setIsPasting(false);
     setBulkPasteOpen(false);
     setBulkData("");
-
-    if (errorCount === 0) {
-      toast({ title: `Added ${successCount} URL${successCount !== 1 ? 's' : ''}` });
-    } else {
-      toast({ 
-        title: `Added ${successCount}, failed ${errorCount}`,
-        variant: errorCount > successCount ? "destructive" : "default"
-      });
-    }
+    toast({ title: `Imported ${successCount} row${successCount !== 1 ? 's' : ''}` });
   };
 
   const handleGlobalPaste = useCallback(async (e: ClipboardEvent) => {
-    if (editingId) return;
+    if (editingCell) return;
     
     const activeElement = document.activeElement;
     if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') {
@@ -158,64 +223,21 @@ export default function InternalLinks() {
     const text = e.clipboardData?.getData('text');
     if (!text) return;
 
-    const rows = parseClipboardData(text);
-    if (rows.length === 0) return;
-
-    if (rows.length === 1) {
-      if (rows[0].url && rows[0].title) {
-        e.preventDefault();
-        try {
-          await apiRequest("POST", "/api/site-urls", rows[0]);
-          queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
-          toast({ title: "URL added" });
-        } catch {
-          toast({ title: "Failed to add URL", variant: "destructive" });
-        }
-      }
-      return;
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length > 1) {
+      e.preventDefault();
+      setBulkData(text);
+      setBulkPasteOpen(true);
     }
-
-    e.preventDefault();
-    setBulkData(text);
-    setBulkPasteOpen(true);
-  }, [editingId, toast]);
+  }, [editingCell]);
 
   useEffect(() => {
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
   }, [handleGlobalPaste]);
 
-  const startEdit = (url: SiteUrl) => {
-    setEditingId(url.id);
-    setEditForm({
-      url: url.url,
-      title: url.title,
-      category: url.category || "",
-      description: url.description || "",
-    });
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditForm({ url: "", title: "", category: "", description: "" });
-  };
-
-  const saveEdit = () => {
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, data: editForm });
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && editingId) {
-      saveEdit();
-    } else if (e.key === 'Escape') {
-      cancelEdit();
-    }
-  };
-
-  const previewRows = parseClipboardData(bulkData);
-  const validPreviewRows = previewRows.filter(r => r.url && r.title);
+  const isLoading = columnsLoading || rowsLoading;
+  const { columnNames: previewCols, rows: previewRows } = parseClipboardData(bulkData);
 
   return (
     <div className="space-y-6">
@@ -223,94 +245,14 @@ export default function InternalLinks() {
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Internal Links</h1>
           <p className="text-muted-foreground">
-            Manage site URLs for internal linking. Paste from spreadsheets supported.
+            Dynamic table for managing site URLs. Add/remove columns as needed.
           </p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={bulkPasteOpen} onOpenChange={setBulkPasteOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" data-testid="button-bulk-paste">
-                <ClipboardPaste className="mr-2 h-4 w-4" />
-                Paste Multiple
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[700px]">
-              <DialogHeader>
-                <DialogTitle>Bulk Import URLs</DialogTitle>
-                <DialogDescription>
-                  Paste data from a spreadsheet. Expected columns: Title, URL, Category (optional), Description (optional)
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <Textarea
-                  value={bulkData}
-                  onChange={(e) => setBulkData(e.target.value)}
-                  placeholder={"Title\tURL\tCategory\tDescription\nPsychic Reading Guide\thttps://example.com/guide\tGuides\tComprehensive guide..."}
-                  className="min-h-[150px] font-mono text-sm"
-                  data-testid="textarea-bulk-paste"
-                />
-                
-                {previewRows.length > 0 && (
-                  <div className="border rounded-md overflow-hidden">
-                    <div className="bg-muted/50 px-3 py-2 text-sm font-medium border-b">
-                      Preview ({validPreviewRows.length} valid of {previewRows.length} rows)
-                    </div>
-                    <div className="max-h-[200px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/30">
-                          <tr>
-                            <th className="px-3 py-1.5 text-left font-medium">Title</th>
-                            <th className="px-3 py-1.5 text-left font-medium">URL</th>
-                            <th className="px-3 py-1.5 text-left font-medium">Category</th>
-                            <th className="px-3 py-1.5 text-left font-medium">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {previewRows.slice(0, 10).map((row, i) => {
-                            const isValid = row.url && row.title;
-                            return (
-                              <tr key={i} className={isValid ? "" : "bg-destructive/10"}>
-                                <td className="px-3 py-1.5 truncate max-w-[150px]">{row.title || "-"}</td>
-                                <td className="px-3 py-1.5 truncate max-w-[200px] text-muted-foreground">{row.url || "-"}</td>
-                                <td className="px-3 py-1.5 truncate max-w-[100px]">{row.category || "-"}</td>
-                                <td className="px-3 py-1.5">
-                                  {isValid ? (
-                                    <span className="text-green-600">Valid</span>
-                                  ) : (
-                                    <span className="text-destructive">Missing {!row.title ? "title" : "URL"}</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {previewRows.length > 10 && (
-                            <tr>
-                              <td colSpan={4} className="px-3 py-1.5 text-center text-muted-foreground">
-                                ... and {previewRows.length - 10} more rows
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setBulkPasteOpen(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleBulkImport}
-                  disabled={validPreviewRows.length === 0 || isPasting}
-                  data-testid="button-import"
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  {isPasting ? "Importing..." : `Import ${validPreviewRows.length} URL${validPreviewRows.length !== 1 ? 's' : ''}`}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" onClick={() => setBulkPasteOpen(true)} data-testid="button-bulk-paste">
+            <ClipboardPaste className="mr-2 h-4 w-4" />
+            Paste from Sheet
+          </Button>
         </div>
       </div>
 
@@ -321,151 +263,221 @@ export default function InternalLinks() {
             <CardTitle className="text-lg">Site URLs</CardTitle>
           </div>
           <CardDescription>
-            Click any row to edit. Press Ctrl+V anywhere to paste from a spreadsheet.
+            Click any cell to edit. Paste from spreadsheets with column headers in the first row.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div ref={tableRef} className="border rounded-md overflow-hidden" tabIndex={0}>
-            <div className="bg-muted/50 border-b grid grid-cols-12 text-sm font-medium sticky top-0">
-              <div className="col-span-3 px-3 py-2 border-r">Title</div>
-              <div className="col-span-4 px-3 py-2 border-r">URL</div>
-              <div className="col-span-2 px-3 py-2 border-r">Category</div>
-              <div className="col-span-2 px-3 py-2 border-r">Description</div>
-              <div className="col-span-1 px-3 py-2 text-center">Actions</div>
-            </div>
-
-            <div className="max-h-[calc(100vh-380px)] overflow-y-auto">
-              {isLoading ? (
-                <div className="px-3 py-8 text-center text-muted-foreground">Loading...</div>
-              ) : siteUrls.length === 0 ? (
-                <div className="px-3 py-12 text-center text-muted-foreground space-y-2">
-                  <p>No URLs added yet.</p>
-                  <p className="text-sm">Click "Paste Multiple" or press Ctrl+V to import from a spreadsheet.</p>
-                </div>
-              ) : (
-                <>
-                  {siteUrls.map((url) => (
-                    <div
-                      key={url.id}
-                      className="grid grid-cols-12 border-b last:border-b-0 group"
-                      data-testid={`row-url-${url.id}`}
-                      onKeyDown={handleKeyDown}
+          <div className="border rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <div className="min-w-max">
+                <div className="bg-muted/50 border-b flex text-sm font-medium sticky top-0">
+                  <div className="w-10 px-2 py-2 border-r flex items-center justify-center shrink-0">
+                    <span className="text-muted-foreground">#</span>
+                  </div>
+                  {columns.map((col) => (
+                    <div key={col.id} className="w-48 px-3 py-2 border-r flex items-center justify-between group shrink-0">
+                      <span className="truncate">{col.name}</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                            data-testid={`button-col-menu-${col.id}`}
+                          >
+                            <GripVertical className="h-3 w-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem 
+                            onClick={() => deleteColumnMutation.mutate(col.id)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Column
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ))}
+                  <div className="w-32 px-3 py-2 shrink-0">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-xs"
+                      onClick={() => setAddColumnOpen(true)}
+                      data-testid="button-add-column"
                     >
-                      {editingId === url.id ? (
-                        <>
-                          <div className="col-span-3 border-r">
-                            <Input
-                              value={editForm.title}
-                              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                              className="border-0 rounded-none h-10 focus-visible:ring-1 focus-visible:ring-inset"
-                              placeholder="Page title"
-                              autoFocus
-                              data-testid="input-edit-title"
-                            />
+                      <Plus className="mr-1 h-3 w-3" />
+                      Add Column
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="max-h-[calc(100vh-400px)] overflow-y-auto">
+                  {isLoading ? (
+                    <div className="px-3 py-8 text-center text-muted-foreground">Loading...</div>
+                  ) : rows.length === 0 && columns.length === 0 ? (
+                    <div className="px-3 py-12 text-center text-muted-foreground space-y-2">
+                      <p>No data yet. Start by adding columns or paste from a spreadsheet.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {rows.map((row, rowIndex) => (
+                        <div key={row.id} className="flex border-b last:border-b-0 group/row" data-testid={`row-${row.id}`}>
+                          <div className="w-10 px-2 py-2 border-r flex items-center justify-center text-sm text-muted-foreground shrink-0">
+                            {rowIndex + 1}
                           </div>
-                          <div className="col-span-4 border-r">
-                            <Input
-                              value={editForm.url}
-                              onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
-                              className="border-0 rounded-none h-10 focus-visible:ring-1 focus-visible:ring-inset"
-                              placeholder="https://..."
-                              data-testid="input-edit-url"
-                            />
-                          </div>
-                          <div className="col-span-2 border-r">
-                            <Input
-                              value={editForm.category}
-                              onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                              className="border-0 rounded-none h-10 focus-visible:ring-1 focus-visible:ring-inset"
-                              placeholder="Category"
-                              data-testid="input-edit-category"
-                            />
-                          </div>
-                          <div className="col-span-2 border-r">
-                            <Input
-                              value={editForm.description}
-                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                              className="border-0 rounded-none h-10 focus-visible:ring-1 focus-visible:ring-inset"
-                              placeholder="Description"
-                              data-testid="input-edit-description"
-                            />
-                          </div>
-                          <div className="col-span-1 flex items-center justify-center gap-1 px-1">
+                          {columns.map((col) => {
+                            const value = (row.data as Record<string, string>)?.[col.id] || "";
+                            const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === col.id;
+                            
+                            return (
+                              <div key={col.id} className="w-48 border-r shrink-0">
+                                {isEditing ? (
+                                  <Input
+                                    value={cellValue}
+                                    onChange={(e) => setCellValue(e.target.value)}
+                                    onBlur={saveCell}
+                                    onKeyDown={handleKeyDown}
+                                    className="border-0 rounded-none h-10 focus-visible:ring-1 focus-visible:ring-inset"
+                                    autoFocus
+                                    data-testid={`input-cell-${row.id}-${col.id}`}
+                                  />
+                                ) : (
+                                  <div
+                                    className="px-3 py-2 h-10 truncate cursor-pointer hover:bg-muted/30 text-sm"
+                                    onClick={() => startEditCell(row.id, col.id, value)}
+                                    title={value}
+                                  >
+                                    {value || <span className="text-muted-foreground/50">-</span>}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <div className="w-32 flex items-center px-2 shrink-0">
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={saveEdit}
-                              disabled={updateMutation.isPending}
-                              className="h-8 w-8"
-                              data-testid="button-save-edit"
-                            >
-                              <Save className="h-4 w-4 text-green-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={cancelEdit}
-                              className="h-8 w-8"
-                              data-testid="button-cancel-edit"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div
-                            className="col-span-3 px-3 py-2 border-r truncate cursor-pointer hover:bg-muted/30"
-                            onClick={() => startEdit(url)}
-                            title={url.title}
-                          >
-                            {url.title}
-                          </div>
-                          <div
-                            className="col-span-4 px-3 py-2 border-r text-muted-foreground truncate cursor-pointer hover:bg-muted/30"
-                            onClick={() => startEdit(url)}
-                            title={url.url}
-                          >
-                            {url.url}
-                          </div>
-                          <div
-                            className="col-span-2 px-3 py-2 border-r text-muted-foreground truncate cursor-pointer hover:bg-muted/30"
-                            onClick={() => startEdit(url)}
-                          >
-                            {url.category || "-"}
-                          </div>
-                          <div
-                            className="col-span-2 px-3 py-2 border-r text-muted-foreground truncate cursor-pointer hover:bg-muted/30"
-                            onClick={() => startEdit(url)}
-                            title={url.description || ""}
-                          >
-                            {url.description || "-"}
-                          </div>
-                          <div className="col-span-1 flex items-center justify-center">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteMutation.mutate(url.id)}
-                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                              data-testid={`button-delete-${url.id}`}
+                              onClick={() => deleteRowMutation.mutate(row.id)}
+                              className="h-8 w-8 opacity-0 group-hover/row:opacity-100 transition-opacity"
+                              data-testid={`button-delete-row-${row.id}`}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </>
-              )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="px-4 py-3 text-sm text-muted-foreground border-t bg-muted/30">
-            {siteUrls.length} URL{siteUrls.length !== 1 ? "s" : ""} total
+            <div className="px-4 py-3 border-t bg-muted/30 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {rows.length} row{rows.length !== 1 ? "s" : ""}, {columns.length} column{columns.length !== 1 ? "s" : ""}
+              </span>
+              <Button variant="outline" size="sm" onClick={addNewRow} data-testid="button-add-row">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Row
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={addColumnOpen} onOpenChange={setAddColumnOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Add Column</DialogTitle>
+            <DialogDescription>Enter a name for the new column</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={newColumnName}
+              onChange={(e) => setNewColumnName(e.target.value)}
+              placeholder="Column name"
+              onKeyDown={(e) => e.key === "Enter" && addNewColumn()}
+              autoFocus
+              data-testid="input-new-column-name"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddColumnOpen(false)}>Cancel</Button>
+            <Button onClick={addNewColumn} disabled={!newColumnName.trim() || createColumnMutation.isPending} data-testid="button-create-column">
+              Add Column
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkPasteOpen} onOpenChange={setBulkPasteOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Paste from Spreadsheet</DialogTitle>
+            <DialogDescription>
+              Paste data from Google Sheets or Excel. First row should contain column headers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Textarea
+              value={bulkData}
+              onChange={(e) => setBulkData(e.target.value)}
+              placeholder={"Column1\tColumn2\tColumn3\nValue1\tValue2\tValue3\nValue4\tValue5\tValue6"}
+              className="min-h-[150px] font-mono text-sm"
+              data-testid="textarea-bulk-paste"
+            />
+            
+            {previewCols.length > 0 && previewRows.length > 0 && (
+              <div className="border rounded-md overflow-hidden">
+                <div className="bg-muted/50 px-3 py-2 text-sm font-medium border-b">
+                  Preview: {previewCols.length} columns, {previewRows.length} rows
+                </div>
+                <div className="max-h-[200px] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/30 sticky top-0">
+                      <tr>
+                        {previewCols.map((col, i) => (
+                          <th key={i} className="px-3 py-1.5 text-left font-medium border-r last:border-r-0">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {previewRows.slice(0, 5).map((row, i) => (
+                        <tr key={i}>
+                          {previewCols.map((col, j) => (
+                            <td key={j} className="px-3 py-1.5 truncate max-w-[150px] border-r last:border-r-0">{row[col] || "-"}</td>
+                          ))}
+                        </tr>
+                      ))}
+                      {previewRows.length > 5 && (
+                        <tr>
+                          <td colSpan={previewCols.length} className="px-3 py-1.5 text-center text-muted-foreground">
+                            ... and {previewRows.length - 5} more rows
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkPasteOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleBulkImport}
+              disabled={previewRows.length === 0 || isPasting}
+              data-testid="button-import"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {isPasting ? "Importing..." : `Import ${previewRows.length} rows`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
