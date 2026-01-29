@@ -1,12 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Link, Plus, Trash2, ClipboardPaste, Upload, GripVertical } from "lucide-react";
+import { Link, Plus, Trash2, GripVertical } from "lucide-react";
 import type { SiteUrl, LinkTableColumn } from "@shared/schema";
 import {
   Dialog,
@@ -27,9 +26,6 @@ export default function InternalLinks() {
   const { toast } = useToast();
   const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
   const [cellValue, setCellValue] = useState("");
-  const [bulkPasteOpen, setBulkPasteOpen] = useState(false);
-  const [bulkData, setBulkData] = useState("");
-  const [isPasting, setIsPasting] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
   const [addColumnOpen, setAddColumnOpen] = useState(false);
 
@@ -208,106 +204,7 @@ export default function InternalLinks() {
     createColumnMutation.mutate({ name: newColumnName.trim(), order: columns.length });
   };
 
-  const parseClipboardData = (text: string): { columnNames: string[]; rows: Record<string, string>[] } => {
-    const lines = text.trim().split(/\r?\n/);
-    if (lines.length === 0) return { columnNames: [], rows: [] };
-
-    const firstLine = lines[0].split('\t');
-    const columnNames = firstLine.map(name => name.trim()).filter(Boolean);
-    
-    const dataRows: Record<string, string>[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cells = lines[i].split('\t');
-      const rowData: Record<string, string> = {};
-      columnNames.forEach((colName, idx) => {
-        rowData[colName] = cells[idx]?.trim() || "";
-      });
-      if (Object.values(rowData).some(v => v)) {
-        dataRows.push(rowData);
-      }
-    }
-    
-    return { columnNames, rows: dataRows };
-  };
-
-  const handleBulkImport = async () => {
-    const { columnNames, rows: dataRows } = parseClipboardData(bulkData);
-    
-    if (columnNames.length === 0 || dataRows.length === 0) {
-      toast({ title: "No valid data found", description: "First row should be column headers", variant: "destructive" });
-      return;
-    }
-
-    setIsPasting(true);
-
-    const existingColNames = columns.map(c => c.name.toLowerCase());
-    const newCols = columnNames.filter(name => !existingColNames.includes(name.toLowerCase()));
-    
-    for (let i = 0; i < newCols.length; i++) {
-      try {
-        await apiRequest("POST", "/api/link-table-columns", { name: newCols[i], order: columns.length + i });
-      } catch {
-      }
-    }
-
-    await queryClient.invalidateQueries({ queryKey: ["/api/link-table-columns"] });
-    const updatedColumns = await queryClient.fetchQuery<LinkTableColumn[]>({ queryKey: ["/api/link-table-columns"] });
-
-    const colNameToId: Record<string, string> = {};
-    updatedColumns.forEach(col => {
-      colNameToId[col.name.toLowerCase()] = col.id;
-    });
-
-    let successCount = 0;
-    for (const rowData of dataRows) {
-      const mappedData: Record<string, string> = {};
-      Object.entries(rowData).forEach(([colName, value]) => {
-        const colId = colNameToId[colName.toLowerCase()];
-        if (colId) {
-          mappedData[colId] = value;
-        }
-      });
-      
-      try {
-        await apiRequest("POST", "/api/site-urls", { name: "", data: mappedData });
-        successCount++;
-      } catch {
-      }
-    }
-
-    queryClient.invalidateQueries({ queryKey: ["/api/site-urls"] });
-    setIsPasting(false);
-    setBulkPasteOpen(false);
-    setBulkData("");
-    toast({ title: `Imported ${successCount} row${successCount !== 1 ? 's' : ''}` });
-  };
-
-  const handleGlobalPaste = useCallback(async (e: ClipboardEvent) => {
-    if (editingCell) return;
-    
-    const activeElement = document.activeElement;
-    if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') {
-      return;
-    }
-
-    const text = e.clipboardData?.getData('text');
-    if (!text) return;
-
-    const lines = text.trim().split(/\r?\n/);
-    if (lines.length > 1) {
-      e.preventDefault();
-      setBulkData(text);
-      setBulkPasteOpen(true);
-    }
-  }, [editingCell]);
-
-  useEffect(() => {
-    document.addEventListener('paste', handleGlobalPaste);
-    return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [handleGlobalPaste]);
-
   const isLoading = columnsLoading || rowsLoading;
-  const { columnNames: previewCols, rows: previewRows } = parseClipboardData(bulkData);
 
   return (
     <div className="space-y-6">
@@ -318,12 +215,6 @@ export default function InternalLinks() {
             Dynamic table for managing site URLs. Add/remove columns as needed.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setBulkPasteOpen(true)} data-testid="button-bulk-paste">
-            <ClipboardPaste className="mr-2 h-4 w-4" />
-            Paste from Sheet
-          </Button>
-        </div>
       </div>
 
       <Card>
@@ -333,7 +224,7 @@ export default function InternalLinks() {
             <CardTitle className="text-lg">Site URLs</CardTitle>
           </div>
           <CardDescription>
-            Click any cell to edit. Paste from spreadsheets with column headers in the first row.
+            Click any cell to edit. Paste from spreadsheets to fill multiple cells.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -389,7 +280,7 @@ export default function InternalLinks() {
                     <div className="px-3 py-8 text-center text-muted-foreground">Loading...</div>
                   ) : rows.length === 0 && columns.length === 0 ? (
                     <div className="px-3 py-12 text-center text-muted-foreground space-y-2">
-                      <p>No data yet. Start by adding columns or paste from a spreadsheet.</p>
+                      <p>No data yet. Start by adding columns, then add rows.</p>
                     </div>
                   ) : (
                     <>
@@ -479,72 +370,6 @@ export default function InternalLinks() {
             <Button variant="outline" onClick={() => setAddColumnOpen(false)}>Cancel</Button>
             <Button onClick={addNewColumn} disabled={!newColumnName.trim() || createColumnMutation.isPending} data-testid="button-create-column">
               Add Column
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={bulkPasteOpen} onOpenChange={setBulkPasteOpen}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader>
-            <DialogTitle>Paste from Spreadsheet</DialogTitle>
-            <DialogDescription>
-              Paste data from Google Sheets or Excel. First row should contain column headers.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Textarea
-              value={bulkData}
-              onChange={(e) => setBulkData(e.target.value)}
-              placeholder={"Column1\tColumn2\tColumn3\nValue1\tValue2\tValue3\nValue4\tValue5\tValue6"}
-              className="min-h-[150px] font-mono text-sm"
-              data-testid="textarea-bulk-paste"
-            />
-            
-            {previewCols.length > 0 && previewRows.length > 0 && (
-              <div className="border rounded-md overflow-hidden">
-                <div className="bg-muted/50 px-3 py-2 text-sm font-medium border-b">
-                  Preview: {previewCols.length} columns, {previewRows.length} rows
-                </div>
-                <div className="max-h-[200px] overflow-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/30 sticky top-0">
-                      <tr>
-                        {previewCols.map((col, i) => (
-                          <th key={i} className="px-3 py-1.5 text-left font-medium border-r last:border-r-0">{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {previewRows.slice(0, 5).map((row, i) => (
-                        <tr key={i}>
-                          {previewCols.map((col, j) => (
-                            <td key={j} className="px-3 py-1.5 truncate max-w-[150px] border-r last:border-r-0">{row[col] || "-"}</td>
-                          ))}
-                        </tr>
-                      ))}
-                      {previewRows.length > 5 && (
-                        <tr>
-                          <td colSpan={previewCols.length} className="px-3 py-1.5 text-center text-muted-foreground">
-                            ... and {previewRows.length - 5} more rows
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkPasteOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleBulkImport}
-              disabled={previewRows.length === 0 || isPasting}
-              data-testid="button-import"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              {isPasting ? "Importing..." : `Import ${previewRows.length} rows`}
             </Button>
           </DialogFooter>
         </DialogContent>
