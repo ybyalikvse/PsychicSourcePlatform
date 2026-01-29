@@ -3280,8 +3280,8 @@ Be extremely specific and actionable. Reference specific competitor content when
     try {
       const { content, recommendations, targetKeyword, promptId } = req.body;
       
-      if (!content || !recommendations || !Array.isArray(recommendations) || recommendations.length === 0) {
-        return res.status(400).json({ error: "Content and recommendations are required" });
+      if (!content || !Array.isArray(recommendations)) {
+        return res.status(400).json({ error: "Content is required" });
       }
 
       console.log("[Optimize Implement] Starting content rewrite");
@@ -3300,13 +3300,15 @@ Be extremely specific and actionable. Reference specific competitor content when
         },
       });
 
-      // Format recommendations for the prompt
-      const recommendationsFormatted = recommendations.map((rec: any, i: number) => 
-        `${i + 1}. [${rec.type.toUpperCase()}] ${rec.priority} priority
+      // Format recommendations for the prompt (may be empty)
+      const recommendationsFormatted = recommendations.length > 0 
+        ? recommendations.map((rec: any, i: number) => 
+            `${i + 1}. [${rec.type.toUpperCase()}] ${rec.priority} priority
    Reason: ${rec.reason}
    ${rec.current ? `Current: ${rec.current}` : ""}
    Suggested: ${rec.suggested}`
-      ).join("\n\n");
+          ).join("\n\n")
+        : "(No specific recommendations selected)";
 
       // Fetch the selected optimization prompt or use default
       let customPromptText = "";

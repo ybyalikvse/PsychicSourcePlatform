@@ -318,14 +318,12 @@ export default function Optimize() {
   });
 
   const handleImplementRecommendations = () => {
-    if (!analysisResult || selectedRecommendations.length === 0) return;
+    if (!analysisResult) return;
     
     const content = analysisResult.pageContent.htmlContent || analysisResult.pageContent.content;
     const recsToImplement = selectedRecommendations
       .map(i => analysisResult.recommendations[i])
       .filter(rec => rec !== undefined);
-    
-    if (recsToImplement.length === 0) return;
     
     const selectedPrompt = getSelectedPrompt();
     implementMutation.mutate({ 
@@ -757,7 +755,7 @@ export default function Optimize() {
                       <Button
                         size="sm"
                         onClick={handleImplementRecommendations}
-                        disabled={selectedRecommendations.length === 0 || implementMutation.isPending}
+                        disabled={implementMutation.isPending}
                         data-testid="button-implement-recommendations"
                       >
                         {implementMutation.isPending ? (
@@ -768,7 +766,10 @@ export default function Optimize() {
                         ) : (
                           <>
                             <Wand2 className="h-4 w-4 mr-2" />
-                            Implement ({selectedRecommendations.length})
+                            {selectedRecommendations.length > 0 
+                              ? `Implement (${selectedRecommendations.length})`
+                              : "Implement"
+                            }
                           </>
                         )}
                       </Button>
