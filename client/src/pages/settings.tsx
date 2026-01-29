@@ -27,8 +27,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience, LinkTableColumn } from "@shared/schema";
-import { Copy } from "lucide-react";
+import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience, LinkTableColumn, OptimizationPrompt } from "@shared/schema";
+import { Copy, Target } from "lucide-react";
 
 interface WritingStyleFormData {
   name: string;
@@ -49,7 +49,13 @@ interface SeoSettingsFormData {
   metaTitleMaxLength: number;
   metaDescriptionGuidelines: string;
   metaDescriptionMaxLength: number;
-  optimizationPrompt: string;
+}
+
+interface OptimizationPromptFormData {
+  name: string;
+  description: string;
+  prompt: string;
+  isDefault: boolean;
 }
 
 interface TargetAudienceFormData {
@@ -99,6 +105,15 @@ export default function Settings() {
     tone: "",
   });
 
+  const [optimizationPromptDialogOpen, setOptimizationPromptDialogOpen] = useState(false);
+  const [editingOptimizationPrompt, setEditingOptimizationPrompt] = useState<OptimizationPrompt | null>(null);
+  const [optimizationPromptForm, setOptimizationPromptForm] = useState<OptimizationPromptFormData>({
+    name: "",
+    description: "",
+    prompt: "",
+    isDefault: false,
+  });
+
   const { data: writingStyles = [], isLoading: stylesLoading } = useQuery<WritingStyle[]>({
     queryKey: ["/api/writing-styles"],
   });
@@ -115,6 +130,10 @@ export default function Settings() {
     queryKey: ["/api/link-table-columns"],
   });
 
+  const { data: optimizationPrompts = [], isLoading: optimizationPromptsLoading } = useQuery<OptimizationPrompt[]>({
+    queryKey: ["/api/optimization-prompts"],
+  });
+
   const { data: seoSettings, isLoading: seoLoading } = useQuery<SeoSettingsType>({
     queryKey: ["/api/seo-settings"],
   });
@@ -124,7 +143,6 @@ export default function Settings() {
     metaTitleMaxLength: 60,
     metaDescriptionGuidelines: "",
     metaDescriptionMaxLength: 160,
-    optimizationPrompt: "",
   });
 
   useEffect(() => {
@@ -134,7 +152,6 @@ export default function Settings() {
         metaTitleMaxLength: seoSettings.metaTitleMaxLength || 60,
         metaDescriptionGuidelines: seoSettings.metaDescriptionGuidelines || "",
         metaDescriptionMaxLength: seoSettings.metaDescriptionMaxLength || 160,
-        optimizationPrompt: seoSettings.optimizationPrompt || "",
       });
     }
   }, [seoSettings]);
@@ -262,6 +279,47 @@ export default function Settings() {
     },
   });
 
+  const createOptimizationPromptMutation = useMutation({
+    mutationFn: (data: OptimizationPromptFormData) => 
+      apiRequest("POST", "/api/optimization-prompts", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/optimization-prompts"] });
+      setOptimizationPromptDialogOpen(false);
+      resetOptimizationPromptForm();
+      toast({ title: "Optimization prompt created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create optimization prompt", variant: "destructive" });
+    },
+  });
+
+  const updateOptimizationPromptMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<OptimizationPromptFormData> }) => 
+      apiRequest("PATCH", `/api/optimization-prompts/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/optimization-prompts"] });
+      setOptimizationPromptDialogOpen(false);
+      setEditingOptimizationPrompt(null);
+      resetOptimizationPromptForm();
+      toast({ title: "Optimization prompt updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update optimization prompt", variant: "destructive" });
+    },
+  });
+
+  const deleteOptimizationPromptMutation = useMutation({
+    mutationFn: (id: string) => 
+      apiRequest("DELETE", `/api/optimization-prompts/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/optimization-prompts"] });
+      toast({ title: "Optimization prompt deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete optimization prompt", variant: "destructive" });
+    },
+  });
+
   const saveSeoMutation = useMutation({
     mutationFn: (data: SeoSettingsFormData) => 
       apiRequest("PUT", "/api/seo-settings", data),
@@ -284,6 +342,32 @@ export default function Settings() {
 
   const resetAudienceForm = () => {
     setAudienceForm({ name: "", description: "", demographics: "", painPoints: "", goals: "", tone: "" });
+  };
+
+  const resetOptimizationPromptForm = () => {
+    setOptimizationPromptForm({ name: "", description: "", prompt: "", isDefault: false });
+  };
+
+  const handleEditOptimizationPrompt = (prompt: OptimizationPrompt) => {
+    setEditingOptimizationPrompt(prompt);
+    setOptimizationPromptForm({
+      name: prompt.name,
+      description: prompt.description || "",
+      prompt: prompt.prompt,
+      isDefault: prompt.isDefault || false,
+    });
+    setOptimizationPromptDialogOpen(true);
+  };
+
+  const handleSaveOptimizationPrompt = () => {
+    if (editingOptimizationPrompt) {
+      updateOptimizationPromptMutation.mutate({
+        id: editingOptimizationPrompt.id,
+        data: optimizationPromptForm,
+      });
+    } else {
+      createOptimizationPromptMutation.mutate(optimizationPromptForm);
+    }
   };
 
   const handleEditStyle = (style: WritingStyle) => {
@@ -860,29 +944,6 @@ export default function Settings() {
             </div>
           </div>
 
-          <Separator />
-
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium">Article Optimization AI Prompt</h4>
-            <p className="text-xs text-muted-foreground">
-              Customize the AI prompt used to generate optimization recommendations. Use placeholders like {"{targetKeyword}"}, {"{url}"}, {"{pageContent}"}, {"{keywords}"}, and {"{competitors}"} which will be replaced with actual data.
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor="optimization-prompt">Custom Optimization Prompt</Label>
-              <Textarea
-                id="optimization-prompt"
-                value={seoForm.optimizationPrompt}
-                onChange={(e) => setSeoForm({ ...seoForm, optimizationPrompt: e.target.value })}
-                placeholder="Leave empty to use the default prompt. Enter a custom prompt to override..."
-                className="min-h-[300px] font-mono text-sm"
-                data-testid="input-optimization-prompt"
-              />
-              <p className="text-xs text-muted-foreground">
-                Available placeholders: {"{targetKeyword}"}, {"{url}"}, {"{pageTitle}"}, {"{pageMetaDescription}"}, {"{pageWordCount}"}, {"{pageHeadings}"}, {"{pageContent}"}, {"{keywords}"}, {"{competitors}"}, {"{keywordsInStrikingDistance}"}
-              </p>
-            </div>
-          </div>
-
           <Button 
             onClick={handleSaveSeo}
             disabled={saveSeoMutation.isPending || seoLoading}
@@ -891,6 +952,145 @@ export default function Settings() {
             <Save className="mr-2 h-4 w-4" />
             {saveSeoMutation.isPending ? "Saving..." : "Save SEO Settings"}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Target className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-lg">Optimization Prompts</CardTitle>
+                <CardDescription>
+                  Create and manage AI prompts for article optimization analysis
+                </CardDescription>
+              </div>
+            </div>
+            <Dialog open={optimizationPromptDialogOpen} onOpenChange={(open) => {
+              setOptimizationPromptDialogOpen(open);
+              if (!open) {
+                setEditingOptimizationPrompt(null);
+                resetOptimizationPromptForm();
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button size="sm" data-testid="button-add-optimization-prompt">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Prompt
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{editingOptimizationPrompt ? "Edit" : "Create"} Optimization Prompt</DialogTitle>
+                  <DialogDescription>
+                    Define an AI prompt template for analyzing and optimizing articles.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="opt-prompt-name">Prompt Name</Label>
+                    <Input
+                      id="opt-prompt-name"
+                      value={optimizationPromptForm.name}
+                      onChange={(e) => setOptimizationPromptForm({ ...optimizationPromptForm, name: e.target.value })}
+                      placeholder="e.g., Basic SEO Analysis, Comprehensive Review"
+                      data-testid="input-optimization-prompt-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="opt-prompt-description">Description (optional)</Label>
+                    <Input
+                      id="opt-prompt-description"
+                      value={optimizationPromptForm.description}
+                      onChange={(e) => setOptimizationPromptForm({ ...optimizationPromptForm, description: e.target.value })}
+                      placeholder="Brief description of what this prompt does..."
+                      data-testid="input-optimization-prompt-description"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="opt-prompt-text">Prompt Template</Label>
+                    <Textarea
+                      id="opt-prompt-text"
+                      value={optimizationPromptForm.prompt}
+                      onChange={(e) => setOptimizationPromptForm({ ...optimizationPromptForm, prompt: e.target.value })}
+                      placeholder="Enter your optimization prompt template..."
+                      className="min-h-[300px] font-mono text-sm"
+                      data-testid="input-optimization-prompt-text"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Available placeholders: {"{targetKeyword}"}, {"{url}"}, {"{pageTitle}"}, {"{pageMetaDescription}"}, {"{pageWordCount}"}, {"{pageHeadings}"}, {"{pageContent}"}, {"{keywords}"}, {"{competitors}"}, {"{keywordsInStrikingDistance}"}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="opt-prompt-default"
+                      checked={optimizationPromptForm.isDefault}
+                      onCheckedChange={(checked) => setOptimizationPromptForm({ ...optimizationPromptForm, isDefault: checked })}
+                    />
+                    <Label htmlFor="opt-prompt-default">Set as default prompt</Label>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={handleSaveOptimizationPrompt}
+                    disabled={!optimizationPromptForm.name || !optimizationPromptForm.prompt || createOptimizationPromptMutation.isPending || updateOptimizationPromptMutation.isPending}
+                    data-testid="button-save-optimization-prompt"
+                  >
+                    {createOptimizationPromptMutation.isPending || updateOptimizationPromptMutation.isPending ? "Saving..." : "Save Prompt"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {optimizationPromptsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading prompts...</p>
+          ) : optimizationPrompts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No optimization prompts created yet. Add one to get started.</p>
+          ) : (
+            <div className="space-y-3">
+              {optimizationPrompts.map((prompt) => (
+                <div
+                  key={prompt.id}
+                  className="flex items-start justify-between p-3 border rounded-md"
+                  data-testid={`optimization-prompt-${prompt.id}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{prompt.name}</p>
+                      {prompt.isDefault && (
+                        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">Default</span>
+                      )}
+                    </div>
+                    {prompt.description && (
+                      <p className="text-sm text-muted-foreground mt-1">{prompt.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2 font-mono truncate">{prompt.prompt.substring(0, 100)}...</p>
+                  </div>
+                  <div className="flex gap-1 ml-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEditOptimizationPrompt(prompt)}
+                      data-testid={`button-edit-optimization-prompt-${prompt.id}`}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteOptimizationPromptMutation.mutate(prompt.id)}
+                      data-testid={`button-delete-optimization-prompt-${prompt.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

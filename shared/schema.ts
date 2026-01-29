@@ -145,6 +145,24 @@ export const insertWritingStyleSchema = createInsertSchema(writingStyles).omit({
 export type InsertWritingStyle = z.infer<typeof insertWritingStyleSchema>;
 export type WritingStyle = typeof writingStyles.$inferSelect;
 
+// Optimization prompts table
+export const optimizationPrompts = pgTable("optimization_prompts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  prompt: text("prompt").notNull(),
+  isDefault: boolean("is_default").default(false),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertOptimizationPromptSchema = createInsertSchema(optimizationPrompts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertOptimizationPrompt = z.infer<typeof insertOptimizationPromptSchema>;
+export type OptimizationPrompt = typeof optimizationPrompts.$inferSelect;
+
 // SEO settings table
 export const seoSettings = pgTable("seo_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

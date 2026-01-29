@@ -6,6 +6,7 @@ import {
   type ContentSuggestion, type InsertContentSuggestion,
   type AnalyticsSnapshot, type InsertAnalyticsSnapshot,
   type WritingStyle, type InsertWritingStyle,
+  type OptimizationPrompt, type InsertOptimizationPrompt,
   type SeoSettings, type InsertSeoSettings,
   type ImageStyle, type InsertImageStyle,
   type TargetAudience, type InsertTargetAudience,
@@ -13,7 +14,7 @@ import {
   type SiteUrl, type InsertSiteUrl,
   type OptimizationAnalysis, type InsertOptimizationAnalysis,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
-  writingStyles, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
+  writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -59,6 +60,13 @@ export interface IStorage {
   createWritingStyle(style: InsertWritingStyle): Promise<WritingStyle>;
   updateWritingStyle(id: string, style: Partial<InsertWritingStyle>): Promise<WritingStyle | undefined>;
   deleteWritingStyle(id: string): Promise<boolean>;
+
+  // Optimization Prompts
+  getOptimizationPrompts(): Promise<OptimizationPrompt[]>;
+  getOptimizationPrompt(id: string): Promise<OptimizationPrompt | undefined>;
+  createOptimizationPrompt(prompt: InsertOptimizationPrompt): Promise<OptimizationPrompt>;
+  updateOptimizationPrompt(id: string, prompt: Partial<InsertOptimizationPrompt>): Promise<OptimizationPrompt | undefined>;
+  deleteOptimizationPrompt(id: string): Promise<boolean>;
 
   // SEO Settings
   getSeoSettings(): Promise<SeoSettings | undefined>;
@@ -289,6 +297,11 @@ export class MemStorage implements IStorage {
   async createWritingStyle(_style: InsertWritingStyle): Promise<WritingStyle> { throw new Error("Not implemented"); }
   async updateWritingStyle(_id: string, _style: Partial<InsertWritingStyle>): Promise<WritingStyle | undefined> { return undefined; }
   async deleteWritingStyle(_id: string): Promise<boolean> { return false; }
+  async getOptimizationPrompts(): Promise<OptimizationPrompt[]> { return []; }
+  async getOptimizationPrompt(_id: string): Promise<OptimizationPrompt | undefined> { return undefined; }
+  async createOptimizationPrompt(_prompt: InsertOptimizationPrompt): Promise<OptimizationPrompt> { throw new Error("Not implemented"); }
+  async updateOptimizationPrompt(_id: string, _prompt: Partial<InsertOptimizationPrompt>): Promise<OptimizationPrompt | undefined> { return undefined; }
+  async deleteOptimizationPrompt(_id: string): Promise<boolean> { return false; }
   async getSeoSettings(): Promise<SeoSettings | undefined> { return undefined; }
   async upsertSeoSettings(_settings: InsertSeoSettings): Promise<SeoSettings> { throw new Error("Not implemented"); }
   async getImageStyles(): Promise<ImageStyle[]> { return []; }
@@ -471,6 +484,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteWritingStyle(id: string): Promise<boolean> {
     await db.delete(writingStyles).where(eq(writingStyles.id, id));
+    return true;
+  }
+
+  // Optimization Prompts
+  async getOptimizationPrompts(): Promise<OptimizationPrompt[]> {
+    return db.select().from(optimizationPrompts).orderBy(optimizationPrompts.name);
+  }
+
+  async getOptimizationPrompt(id: string): Promise<OptimizationPrompt | undefined> {
+    const [prompt] = await db.select().from(optimizationPrompts).where(eq(optimizationPrompts.id, id));
+    return prompt;
+  }
+
+  async createOptimizationPrompt(insertPrompt: InsertOptimizationPrompt): Promise<OptimizationPrompt> {
+    const [prompt] = await db.insert(optimizationPrompts).values(insertPrompt).returning();
+    return prompt;
+  }
+
+  async updateOptimizationPrompt(id: string, updates: Partial<InsertOptimizationPrompt>): Promise<OptimizationPrompt | undefined> {
+    const [prompt] = await db.update(optimizationPrompts)
+      .set(updates)
+      .where(eq(optimizationPrompts.id, id))
+      .returning();
+    return prompt;
+  }
+
+  async deleteOptimizationPrompt(id: string): Promise<boolean> {
+    await db.delete(optimizationPrompts).where(eq(optimizationPrompts.id, id));
     return true;
   }
 

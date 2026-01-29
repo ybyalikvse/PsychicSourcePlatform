@@ -1389,6 +1389,63 @@ export async function registerRoutes(
     }
   });
 
+  // Optimization Prompts endpoints
+  app.get("/api/optimization-prompts", async (req, res) => {
+    try {
+      const prompts = await storage.getOptimizationPrompts();
+      res.json(prompts);
+    } catch (error) {
+      console.error("Error fetching optimization prompts:", error);
+      res.status(500).json({ error: "Failed to fetch optimization prompts" });
+    }
+  });
+
+  app.get("/api/optimization-prompts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const prompt = await storage.getOptimizationPrompt(id);
+      if (!prompt) {
+        return res.status(404).json({ error: "Optimization prompt not found" });
+      }
+      res.json(prompt);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch optimization prompt" });
+    }
+  });
+
+  app.post("/api/optimization-prompts", async (req, res) => {
+    try {
+      const prompt = await storage.createOptimizationPrompt(req.body);
+      res.status(201).json(prompt);
+    } catch (error) {
+      console.error("Error creating optimization prompt:", error);
+      res.status(500).json({ error: "Failed to create optimization prompt" });
+    }
+  });
+
+  app.patch("/api/optimization-prompts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const prompt = await storage.updateOptimizationPrompt(id, req.body);
+      if (!prompt) {
+        return res.status(404).json({ error: "Optimization prompt not found" });
+      }
+      res.json(prompt);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update optimization prompt" });
+    }
+  });
+
+  app.delete("/api/optimization-prompts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteOptimizationPrompt(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete optimization prompt" });
+    }
+  });
+
   // SEO Settings endpoints
   app.get("/api/seo-settings", async (req, res) => {
     try {
