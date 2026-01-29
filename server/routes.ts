@@ -3349,6 +3349,12 @@ Be extremely specific and actionable. Reference specific competitor content when
       let rewritePrompt: string;
       if (customPromptText) {
         rewritePrompt = customPromptText;
+        console.log("[Optimize Implement] === CUSTOM PROMPT DEBUG ===");
+        console.log("[Optimize Implement] Using custom prompt");
+        console.log("[Optimize Implement] Full prompt being sent to AI:");
+        console.log("---START PROMPT---");
+        console.log(rewritePrompt);
+        console.log("---END PROMPT---");
       } else {
         rewritePrompt = `You are an expert SEO content editor. Your task is to extract and rewrite ONLY the main article content from the provided HTML, implementing the selected recommendations with MINIMAL changes.
 
@@ -3382,9 +3388,13 @@ ${content}
 
 === YOUR TASK ===
 Extract the main article content from above, implement the recommendations with MINIMAL word count increase, and return ONLY clean semantic HTML. Make surgical edits - replace and tweak rather than expand. Do not wrap in markdown code blocks.`;
+        console.log("[Optimize Implement] === DEFAULT PROMPT DEBUG ===");
+        console.log("[Optimize Implement] Using DEFAULT prompt (no custom prompt found or no promptId provided)");
+        console.log("[Optimize Implement] promptId was:", promptId);
       }
 
       console.log("[Optimize Implement] Sending prompt to Gemini");
+      console.log("[Optimize Implement] Prompt length:", rewritePrompt.length, "characters");
       
       const response = await genAI.models.generateContent({
         model: "gemini-2.5-flash",

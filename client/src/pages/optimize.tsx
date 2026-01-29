@@ -326,6 +326,19 @@ export default function Optimize() {
       .filter(rec => rec !== undefined);
     
     const selectedPrompt = getSelectedPrompt();
+    
+    // DEBUG LOGGING - Remove later
+    console.log("=== IMPLEMENT REQUEST DEBUG ===");
+    console.log("Selected Prompt:", selectedPrompt);
+    console.log("Prompt ID being sent:", selectedPrompt?.id ? Number(selectedPrompt.id) : undefined);
+    console.log("Prompt Name:", selectedPrompt?.name);
+    console.log("Prompt Text:", selectedPrompt?.prompt);
+    console.log("Number of recommendations selected:", recsToImplement.length);
+    console.log("Recommendations:", recsToImplement);
+    console.log("Target Keyword:", form.getValues("targetKeyword"));
+    console.log("Content length:", content.length);
+    console.log("=== END DEBUG ===");
+    
     implementMutation.mutate({ 
       content, 
       recommendations: recsToImplement,
