@@ -183,11 +183,14 @@ export default function Optimize() {
   const [debugInfo, setDebugInfo] = useState<{
     promptName: string;
     promptText: string;
+    promptId: string;
     targetKeyword: string;
     recommendationsCount: number;
     recommendations: string;
     contentLength: number;
     timestamp: string;
+    selectedPromptIdState: string;
+    optimizationPromptsCount: number;
   } | null>(null);
 
   // Get the default prompt or first one
@@ -340,8 +343,9 @@ export default function Optimize() {
     
     // Set debug info for UI display
     setDebugInfo({
-      promptName: selectedPrompt?.name || "(Default prompt)",
+      promptName: selectedPrompt?.name || "(No prompt found - using default)",
       promptText: selectedPrompt?.prompt || "(Using default optimization prompt)",
+      promptId: selectedPrompt?.id ? String(selectedPrompt.id) : "null/undefined",
       targetKeyword: form.getValues("targetKeyword"),
       recommendationsCount: recsToImplement.length,
       recommendations: recsToImplement.length > 0 
@@ -351,6 +355,8 @@ export default function Optimize() {
         : "(No recommendations selected)",
       contentLength: content.length,
       timestamp: new Date().toLocaleTimeString(),
+      selectedPromptIdState: selectedPromptId || "null",
+      optimizationPromptsCount: optimizationPrompts.length,
     });
     
     implementMutation.mutate({ 
@@ -887,9 +893,23 @@ export default function Optimize() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Selected Prompt:</Label>
-                    <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.promptName}</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Selected Prompt:</Label>
+                      <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.promptName}</p>
+                    </div>
+                    <div>
+                      <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Prompt ID (sent to API):</Label>
+                      <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.promptId}</p>
+                    </div>
+                    <div>
+                      <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Dropdown State:</Label>
+                      <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.selectedPromptIdState}</p>
+                    </div>
+                    <div>
+                      <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Available Prompts:</Label>
+                      <p className="text-sm font-mono bg-white dark:bg-black/30 p-2 rounded mt-1">{debugInfo.optimizationPromptsCount} prompts loaded</p>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Target Keyword:</Label>
@@ -904,7 +924,7 @@ export default function Optimize() {
                     <pre className="text-xs font-mono bg-white dark:bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-40 overflow-y-auto">{debugInfo.recommendations}</pre>
                   </div>
                   <div>
-                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Full Prompt Text:</Label>
+                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Full Prompt Text (raw template - placeholders replaced on server):</Label>
                     <pre className="text-xs font-mono bg-white dark:bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">{debugInfo.promptText}</pre>
                   </div>
                 </CardContent>
