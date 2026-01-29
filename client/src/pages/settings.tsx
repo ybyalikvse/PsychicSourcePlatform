@@ -1021,6 +1021,30 @@ export default function Settings() {
                     <p className="text-xs text-muted-foreground">
                       Available placeholders: {"{targetKeyword}"}, {"{url}"}, {"{pageTitle}"}, {"{pageMetaDescription}"}, {"{pageWordCount}"}, {"{pageHeadings}"}, {"{pageContent}"}, {"{keywords}"}, {"{competitors}"}, {"{keywordsInStrikingDistance}"}
                     </p>
+                    {linkColumns.length > 0 && (
+                      <div className="pt-2">
+                        <div className="text-xs text-muted-foreground mb-1.5">Available placeholders from Internal Links:</div>
+                        <div className="flex flex-wrap gap-1">
+                          {linkColumns.map((col) => (
+                            <Button
+                              key={col.id}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-xs font-mono"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`{{${col.name}}}`);
+                                toast({ title: `Copied {{${col.name}}}` });
+                              }}
+                              data-testid={`opt-placeholder-${col.id}`}
+                            >
+                              {`{{${col.name}}}`}
+                              <Copy className="ml-1 h-3 w-3" />
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center space-x-2">
                     <Switch
