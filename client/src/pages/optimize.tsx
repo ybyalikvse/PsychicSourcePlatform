@@ -306,7 +306,7 @@ export default function Optimize() {
   });
 
   const implementMutation = useMutation({
-    mutationFn: async ({ content, recommendations, promptId }: { content: string; recommendations: Recommendation[]; promptId?: number }) => {
+    mutationFn: async ({ content, recommendations, promptId }: { content: string; recommendations: Recommendation[]; promptId?: string }) => {
       const response = await apiRequest("POST", `/api/optimize/implement`, {
         content,
         recommendations,
@@ -367,7 +367,7 @@ export default function Optimize() {
     implementMutation.mutate({ 
       content, 
       recommendations: recsToImplement,
-      promptId: selectedPrompt?.id ? Number(selectedPrompt.id) : undefined,
+      promptId: selectedPrompt?.id ? String(selectedPrompt.id) : undefined,
     });
   };
 
