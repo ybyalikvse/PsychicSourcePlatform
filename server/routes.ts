@@ -3360,13 +3360,23 @@ Be extremely specific and actionable. Reference specific competitor content when
       // Use custom prompt if available, otherwise use default
       let rewritePrompt: string;
       if (customPromptText) {
-        rewritePrompt = customPromptText;
+        // If custom prompt doesn't include {pageContent} placeholder, append the content at the end
+        if (!customPromptText.includes('{pageContent}')) {
+          rewritePrompt = `${customPromptText}
+
+=== ORIGINAL PAGE CONTENT TO MODIFY ===
+${content}
+
+=== YOUR TASK ===
+Apply the instructions above to modify the page content. Return ONLY the modified HTML content, no explanations.`;
+        } else {
+          rewritePrompt = customPromptText;
+        }
         console.log("[Optimize Implement] === CUSTOM PROMPT DEBUG ===");
         console.log("[Optimize Implement] Using custom prompt");
-        console.log("[Optimize Implement] Full prompt being sent to AI:");
-        console.log("---START PROMPT---");
-        console.log(rewritePrompt);
-        console.log("---END PROMPT---");
+        console.log("[Optimize Implement] Prompt length:", rewritePrompt.length, "chars");
+        console.log("[Optimize Implement] First 1000 chars of prompt:");
+        console.log(rewritePrompt.substring(0, 1000));
       } else {
         rewritePrompt = `You are an expert SEO content editor. Your task is to extract and rewrite ONLY the main article content from the provided HTML, implementing the selected recommendations with MINIMAL changes.
 
