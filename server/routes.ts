@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema } from "@shared/schema";
+import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertSiteUrlSchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
@@ -1770,6 +1770,60 @@ Respond in JSON format:
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete target audience" });
+    }
+  });
+
+  // ============ SITE URLS (for internal linking) ============
+  app.get("/api/site-urls", async (req, res) => {
+    try {
+      const urls = await storage.getSiteUrls();
+      res.json(urls);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch site URLs" });
+    }
+  });
+
+  app.get("/api/site-urls/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const url = await storage.getSiteUrl(id);
+      if (!url) {
+        return res.status(404).json({ error: "Site URL not found" });
+      }
+      res.json(url);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch site URL" });
+    }
+  });
+
+  app.post("/api/site-urls", async (req, res) => {
+    try {
+      const validated = insertSiteUrlSchema.parse(req.body);
+      const url = await storage.createSiteUrl(validated);
+      res.status(201).json(url);
+    } catch (error) {
+      console.error("Error creating site URL:", error);
+      res.status(500).json({ error: "Failed to create site URL" });
+    }
+  });
+
+  app.patch("/api/site-urls/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const url = await storage.updateSiteUrl(id, req.body);
+      res.json(url);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update site URL" });
+    }
+  });
+
+  app.delete("/api/site-urls/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSiteUrl(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete site URL" });
     }
   });
 

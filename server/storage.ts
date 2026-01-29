@@ -9,9 +9,10 @@ import {
   type SeoSettings, type InsertSeoSettings,
   type ImageStyle, type InsertImageStyle,
   type TargetAudience, type InsertTargetAudience,
+  type SiteUrl, type InsertSiteUrl,
   type OptimizationAnalysis, type InsertOptimizationAnalysis,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
-  writingStyles, seoSettings, imageStyles, targetAudiences, optimizationAnalyses,
+  writingStyles, seoSettings, imageStyles, targetAudiences, siteUrls, optimizationAnalyses,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -75,6 +76,13 @@ export interface IStorage {
   createTargetAudience(audience: InsertTargetAudience): Promise<TargetAudience>;
   updateTargetAudience(id: string, audience: Partial<InsertTargetAudience>): Promise<TargetAudience | undefined>;
   deleteTargetAudience(id: string): Promise<boolean>;
+
+  // Site URLs
+  getSiteUrls(): Promise<SiteUrl[]>;
+  getSiteUrl(id: string): Promise<SiteUrl | undefined>;
+  createSiteUrl(siteUrl: InsertSiteUrl): Promise<SiteUrl>;
+  updateSiteUrl(id: string, siteUrl: Partial<InsertSiteUrl>): Promise<SiteUrl | undefined>;
+  deleteSiteUrl(id: string): Promise<boolean>;
 
   // Optimization Analyses
   getOptimizationAnalyses(): Promise<OptimizationAnalysis[]>;
@@ -286,6 +294,11 @@ export class MemStorage implements IStorage {
   async createTargetAudience(_audience: InsertTargetAudience): Promise<TargetAudience> { throw new Error("Not implemented"); }
   async updateTargetAudience(_id: string, _audience: Partial<InsertTargetAudience>): Promise<TargetAudience | undefined> { return undefined; }
   async deleteTargetAudience(_id: string): Promise<boolean> { return false; }
+  async getSiteUrls(): Promise<SiteUrl[]> { return []; }
+  async getSiteUrl(_id: string): Promise<SiteUrl | undefined> { return undefined; }
+  async createSiteUrl(_siteUrl: InsertSiteUrl): Promise<SiteUrl> { throw new Error("Not implemented"); }
+  async updateSiteUrl(_id: string, _siteUrl: Partial<InsertSiteUrl>): Promise<SiteUrl | undefined> { return undefined; }
+  async deleteSiteUrl(_id: string): Promise<boolean> { return false; }
   async getOptimizationAnalyses(): Promise<OptimizationAnalysis[]> { return []; }
   async getOptimizationAnalysis(_id: string): Promise<OptimizationAnalysis | undefined> { return undefined; }
   async createOptimizationAnalysis(_analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis> { throw new Error("Not implemented"); }
@@ -522,6 +535,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTargetAudience(id: string): Promise<boolean> {
     await db.delete(targetAudiences).where(eq(targetAudiences.id, id));
+    return true;
+  }
+
+  // Site URLs
+  async getSiteUrls(): Promise<SiteUrl[]> {
+    return db.select().from(siteUrls).orderBy(siteUrls.title);
+  }
+
+  async getSiteUrl(id: string): Promise<SiteUrl | undefined> {
+    const [url] = await db.select().from(siteUrls).where(eq(siteUrls.id, id));
+    return url;
+  }
+
+  async createSiteUrl(siteUrl: InsertSiteUrl): Promise<SiteUrl> {
+    const [created] = await db.insert(siteUrls).values(siteUrl).returning();
+    return created;
+  }
+
+  async updateSiteUrl(id: string, siteUrl: Partial<InsertSiteUrl>): Promise<SiteUrl | undefined> {
+    const [updated] = await db.update(siteUrls).set(siteUrl).where(eq(siteUrls.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSiteUrl(id: string): Promise<boolean> {
+    await db.delete(siteUrls).where(eq(siteUrls.id, id));
     return true;
   }
 

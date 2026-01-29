@@ -205,6 +205,24 @@ export const insertTargetAudienceSchema = createInsertSchema(targetAudiences).om
 export type InsertTargetAudience = z.infer<typeof insertTargetAudienceSchema>;
 export type TargetAudience = typeof targetAudiences.$inferSelect;
 
+// Site URLs for internal linking
+export const siteUrls = pgTable("site_urls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  url: text("url").notNull(),
+  title: text("title").notNull(), // Anchor text / page title
+  category: text("category"), // Optional category for organization
+  description: text("description"), // Brief description of the page
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSiteUrlSchema = createInsertSchema(siteUrls).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSiteUrl = z.infer<typeof insertSiteUrlSchema>;
+export type SiteUrl = typeof siteUrls.$inferSelect;
+
 // Saved optimization analyses
 export const optimizationAnalyses = pgTable("optimization_analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
