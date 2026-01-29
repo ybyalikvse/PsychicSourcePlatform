@@ -191,6 +191,7 @@ export default function Optimize() {
     timestamp: string;
     selectedPromptIdState: string;
     optimizationPromptsCount: number;
+    processedPrompt?: string; // Actual prompt sent to AI (after placeholder replacement)
   } | null>(null);
 
   // Get the default prompt or first one
@@ -317,6 +318,10 @@ export default function Optimize() {
     onSuccess: (data) => {
       setRewrittenContent(data.content);
       setShowRewriteEditor(true);
+      // Update debug info with the actual processed prompt from the API
+      if (data.processedPrompt && debugInfo) {
+        setDebugInfo(prev => prev ? { ...prev, processedPrompt: data.processedPrompt } : null);
+      }
       toast({
         title: "Content Rewritten",
         description: "Your content has been updated with the selected recommendations.",
@@ -924,9 +929,21 @@ export default function Optimize() {
                     <pre className="text-xs font-mono bg-white dark:bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-40 overflow-y-auto">{debugInfo.recommendations}</pre>
                   </div>
                   <div>
-                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Full Prompt Text (raw template - placeholders replaced on server):</Label>
-                    <pre className="text-xs font-mono bg-white dark:bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">{debugInfo.promptText}</pre>
+                    <Label className="text-yellow-700 dark:text-yellow-300 font-semibold">Raw Template (before placeholder replacement):</Label>
+                    <pre className="text-xs font-mono bg-white dark:bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-40 overflow-y-auto">{debugInfo.promptText}</pre>
                   </div>
+                  {debugInfo.processedPrompt && (
+                    <div className="border-t-2 border-green-500 pt-4">
+                      <Label className="text-green-700 dark:text-green-300 font-semibold">ACTUAL PROMPT SENT TO AI (after placeholder replacement):</Label>
+                      <pre className="text-xs font-mono bg-green-50 dark:bg-green-900/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap max-h-80 overflow-y-auto border border-green-300 dark:border-green-700">{debugInfo.processedPrompt}</pre>
+                    </div>
+                  )}
+                  {!debugInfo.processedPrompt && (
+                    <div className="border-t-2 border-gray-300 pt-4">
+                      <Label className="text-gray-500 dark:text-gray-400 font-semibold">Processed Prompt:</Label>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 italic">Will appear after AI completes processing...</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

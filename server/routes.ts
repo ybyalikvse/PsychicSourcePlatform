@@ -3322,14 +3322,22 @@ Be extremely specific and actionable. Reference specific competitor content when
           const linkColumns = await storage.getLinkTableColumns();
           const siteUrls = await storage.getSiteUrls();
           
+          console.log("[Optimize Implement] === INTERNAL LINKS DEBUG ===");
+          console.log("[Optimize Implement] Link columns found:", linkColumns.length);
+          console.log("[Optimize Implement] Link columns:", linkColumns.map(c => ({ id: c.id, name: c.name })));
+          console.log("[Optimize Implement] Site URLs found:", siteUrls.length);
+          
           // Format internal links data for placeholders
           const internalLinksData: Record<string, string[]> = {};
           for (const col of linkColumns) {
             internalLinksData[col.name] = siteUrls.map((row: any) => {
               const data = row.data as Record<string, string> | null;
+              console.log(`[Optimize Implement] Row data for col ${col.name} (id: ${col.id}):`, data);
               return data?.[col.id] || "";
             }).filter((v: string) => v);
           }
+          
+          console.log("[Optimize Implement] Internal links data:", internalLinksData);
           
           // Replace placeholders in custom prompt
           customPromptText = customPromptText
@@ -3340,8 +3348,12 @@ Be extremely specific and actionable. Reference specific competitor content when
           // Replace internal links placeholders
           for (const [colName, values] of Object.entries(internalLinksData)) {
             const placeholder = `{{${colName}}}`;
+            console.log(`[Optimize Implement] Replacing placeholder: ${placeholder} with ${values.length} values`);
+            console.log(`[Optimize Implement] Values:`, values);
             customPromptText = customPromptText.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), values.join("\n"));
           }
+          
+          console.log("[Optimize Implement] After placeholder replacement (first 500 chars):", customPromptText.substring(0, 500));
         }
       }
 
@@ -3417,6 +3429,7 @@ Extract the main article content from above, implement the recommendations with 
       res.json({
         success: true,
         content: rewrittenContent,
+        processedPrompt: rewritePrompt, // Return the actual prompt sent to AI for debugging
       });
     } catch (error) {
       console.error("Failed to implement recommendations:", error);
