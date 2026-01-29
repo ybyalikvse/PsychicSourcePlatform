@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Link, Plus, Trash2, GripVertical } from "lucide-react";
+import { Link, Plus, Trash2, GripVertical, Edit2 } from "lucide-react";
 import type { SiteUrl, LinkTableColumn } from "@shared/schema";
 import {
   Dialog,
@@ -28,6 +28,9 @@ export default function InternalLinks() {
   const [cellValue, setCellValue] = useState("");
   const [newColumnName, setNewColumnName] = useState("");
   const [addColumnOpen, setAddColumnOpen] = useState(false);
+  const [renameColumnOpen, setRenameColumnOpen] = useState(false);
+  const [renamingColumn, setRenamingColumn] = useState<LinkTableColumn | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const { data: columns = [], isLoading: columnsLoading } = useQuery<LinkTableColumn[]>({
     queryKey: ["/api/link-table-columns"],
@@ -61,6 +64,32 @@ export default function InternalLinks() {
       toast({ title: "Failed to delete column", variant: "destructive" });
     },
   });
+
+  const updateColumnMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => 
+      apiRequest("PATCH", `/api/link-table-columns/${id}`, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/link-table-columns"] });
+      setRenameColumnOpen(false);
+      setRenamingColumn(null);
+      setRenameValue("");
+      toast({ title: "Column renamed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to rename column", variant: "destructive" });
+    },
+  });
+
+  const handleRenameColumn = (col: LinkTableColumn) => {
+    setRenamingColumn(col);
+    setRenameValue(col.name);
+    setRenameColumnOpen(true);
+  };
+
+  const saveRenameColumn = () => {
+    if (!renamingColumn || !renameValue.trim()) return;
+    updateColumnMutation.mutate({ id: renamingColumn.id, name: renameValue.trim() });
+  };
 
   const createRowMutation = useMutation({
     mutationFn: (data: { name: string; data: Record<string, string> }) => 
@@ -251,6 +280,12 @@ export default function InternalLinks() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                           <DropdownMenuItem 
+                            onClick={() => handleRenameColumn(col)}
+                          >
+                            <Edit2 className="mr-2 h-4 w-4" />
+                            Rename Column
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
                             onClick={() => deleteColumnMutation.mutate(col.id)}
                             className="text-destructive"
                           >
@@ -370,6 +405,35 @@ export default function InternalLinks() {
             <Button variant="outline" onClick={() => setAddColumnOpen(false)}>Cancel</Button>
             <Button onClick={addNewColumn} disabled={!newColumnName.trim() || createColumnMutation.isPending} data-testid="button-create-column">
               Add Column
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={renameColumnOpen} onOpenChange={setRenameColumnOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Rename Column</DialogTitle>
+            <DialogDescription>Enter a new name for "{renamingColumn?.name}"</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="Column name"
+              onKeyDown={(e) => e.key === "Enter" && saveRenameColumn()}
+              autoFocus
+              data-testid="input-rename-column"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameColumnOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={saveRenameColumn} 
+              disabled={!renameValue.trim() || updateColumnMutation.isPending}
+              data-testid="button-save-rename"
+            >
+              Rename
             </Button>
           </DialogFooter>
         </DialogContent>
