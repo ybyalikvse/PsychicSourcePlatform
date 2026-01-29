@@ -3378,41 +3378,12 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
         console.log("[Optimize Implement] First 1000 chars of prompt:");
         console.log(rewritePrompt.substring(0, 1000));
       } else {
-        rewritePrompt = `You are an expert SEO content editor. Your task is to extract and rewrite ONLY the main article content from the provided HTML, implementing the selected recommendations with MINIMAL changes.
-
-=== CRITICAL INSTRUCTIONS ===
-1. EXTRACT ONLY THE MAIN ARTICLE CONTENT - ignore navigation, headers, footers, sidebars, scripts, CSS, and any non-article elements
-2. Output CLEAN, SEMANTIC HTML ONLY - no CSS, no style attributes, no class names, no inline styles
-3. Use ONLY these HTML tags: h1, h2, h3, h4, p, ul, ol, li, strong, em, a, blockquote, img (with alt text), table, thead, tbody, tr, th, td
-4. Keep the same structure and flow of the original article content
-5. Preserve the author's voice and tone
-6. Implement ONLY recommendations that involve changing the actual text/content of the article
-7. SKIP any recommendations about: strategy, processes, features, comments, external tools, site structure, or things that cannot be done by editing text
-8. Ensure the content is natural and readable - avoid keyword stuffing
-9. Do NOT include any <html>, <head>, <body>, <div>, <span>, <script>, <style>, or <link> tags
-10. Do NOT add any meta commentary, explanations, or notes - just return the clean article HTML
-11. Target keyword to optimize for: "${targetKeyword || 'general optimization'}"
-
-=== WORD COUNT PRESERVATION (VERY IMPORTANT) ===
-- Make SURGICAL, MINIMAL edits - do NOT bloat the content
-- Keep the word count as close to the original as possible
-- Implement recommendations by REPLACING or TWEAKING existing text, not by adding large new sections
-- If a recommendation suggests adding content, integrate it concisely within existing paragraphs
-- Prefer rewording existing sentences over adding new ones
-- The goal is optimization through precision, not expansion
-- Only add significant new content if the recommendation specifically requires it AND there's no way to achieve it through existing text
-
-=== RECOMMENDATIONS TO IMPLEMENT ===
-${recommendationsFormatted}
-
-=== ORIGINAL PAGE HTML (extract article content only) ===
-${content}
-
-=== YOUR TASK ===
-Extract the main article content from above, implement the recommendations with MINIMAL word count increase, and return ONLY clean semantic HTML. Make surgical edits - replace and tweak rather than expand. Do not wrap in markdown code blocks.`;
-        console.log("[Optimize Implement] === DEFAULT PROMPT DEBUG ===");
-        console.log("[Optimize Implement] Using DEFAULT prompt (no custom prompt found or no promptId provided)");
+        // No custom prompt selected - require a prompt template
+        console.log("[Optimize Implement] No prompt template selected");
         console.log("[Optimize Implement] promptId was:", promptId);
+        return res.status(400).json({ 
+          error: "Please select a prompt template from the dropdown before implementing." 
+        });
       }
 
       console.log("[Optimize Implement] Sending prompt to Gemini");
