@@ -181,8 +181,8 @@ export default function Optimize() {
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
   // Filter prompts by type
-  const analysisPrompts = optimizationPrompts.filter(p => p.promptType !== "direct");
-  const directPrompts = optimizationPrompts.filter(p => p.promptType === "direct");
+  // All prompts available everywhere - no type restriction
+  const allPrompts = optimizationPrompts;
 
   // Debug state - shows what gets sent to AI
   const [debugInfo, setDebugInfo] = useState<{
@@ -202,9 +202,9 @@ export default function Optimize() {
   // Get the default prompt or first one (from analysis prompts only)
   const getSelectedPrompt = () => {
     if (selectedPromptId) {
-      return analysisPrompts.find(p => p.id.toString() === selectedPromptId);
+      return allPrompts.find(p => p.id.toString() === selectedPromptId);
     }
-    return analysisPrompts.find(p => p.isDefault) || analysisPrompts[0];
+    return allPrompts.find(p => p.isDefault) || allPrompts[0];
   };
 
   const form = useForm<OptimizeFormData>({
@@ -885,7 +885,7 @@ export default function Optimize() {
       {quickFetchResult && !analysisResult && (
         <div className="space-y-4">
           {/* Quick Actions Card */}
-          {directPrompts.length > 0 && (
+          {allPrompts.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -898,7 +898,7 @@ export default function Optimize() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {directPrompts.map((prompt) => (
+                  {allPrompts.map((prompt) => (
                     <Button
                       key={prompt.id}
                       variant="outline"
@@ -1046,7 +1046,7 @@ export default function Optimize() {
                   )}
                   {analysisResult.recommendations.length > 0 && (
                     <div className="flex items-center gap-2">
-                      {analysisPrompts.length > 0 && (
+                      {allPrompts.length > 0 && (
                         <Select
                           value={selectedPromptId || (getSelectedPrompt()?.id?.toString() || "")}
                           onValueChange={setSelectedPromptId}
@@ -1055,7 +1055,7 @@ export default function Optimize() {
                             <SelectValue placeholder="Select prompt..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {analysisPrompts.map((prompt) => (
+                            {allPrompts.map((prompt) => (
                               <SelectItem key={prompt.id} value={prompt.id.toString()}>
                                 {prompt.name} {prompt.isDefault && "(default)"}
                               </SelectItem>
@@ -1158,8 +1158,8 @@ export default function Optimize() {
               </CardContent>
             </Card>
 
-            {/* Direct Apply Prompts - Can be applied without full analysis */}
-            {directPrompts.length > 0 && analysisResult?.pageContent && (
+            {/* Quick Actions - Apply prompts directly to content */}
+            {allPrompts.length > 0 && analysisResult?.pageContent && (
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -1172,7 +1172,7 @@ export default function Optimize() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {directPrompts.map((prompt) => (
+                    {allPrompts.map((prompt) => (
                       <div
                         key={prompt.id}
                         className="flex items-center justify-between p-3 border rounded-md hover-elevate"
