@@ -4,6 +4,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
+
+// Helper to strip markdown formatting from text
+const stripMarkdown = (text: string): string => {
+  if (!text) return text;
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1') // Remove **bold**
+    .replace(/\*(.*?)\*/g, '$1')     // Remove *italic*
+    .replace(/`(.*?)`/g, '$1')       // Remove `code`
+    .replace(/_{2}(.*?)_{2}/g, '$1') // Remove __bold__
+    .replace(/_(.*?)_/g, '$1');      // Remove _italic_
+};
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1133,13 +1144,13 @@ export default function Optimize() {
                               {rec.priority} priority
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground ml-7">{rec.reason}</p>
+                          <p className="text-sm text-muted-foreground ml-7">{stripMarkdown(rec.reason)}</p>
                           {rec.current && (
                             <div className="bg-red-50 dark:bg-red-900/20 rounded-md p-3 ml-7">
                               <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">
                                 Current:
                               </p>
-                              <p className="text-sm">{rec.current}</p>
+                              <p className="text-sm">{stripMarkdown(rec.current)}</p>
                             </div>
                           )}
                           {rec.suggested && (
@@ -1147,7 +1158,7 @@ export default function Optimize() {
                               <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
                                 Suggested:
                               </p>
-                              <p className="text-sm">{rec.suggested}</p>
+                              <p className="text-sm">{stripMarkdown(rec.suggested)}</p>
                             </div>
                           )}
                         </div>
