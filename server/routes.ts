@@ -2777,7 +2777,10 @@ ${strikingDistanceFormatted}
 ${competitorsFormatted}
 
 === YOUR ANALYSIS TASK ===
-IMPORTANT: Ignore "Table of Contents" and "Key Takeaway" sections in both our content and competitor content during analysis. Focus only on the main body content.
+CRITICAL RULES:
+1. NEVER make recommendations about "Table of Contents", "Key Takeaways", "Quick Summary", or similar navigation/summary sections. These are intentional formatting choices, not content gaps.
+2. Focus ONLY on main body content - ignore introductory lists, TOC links, and summary boxes.
+3. Do NOT suggest adding a table of contents or key takeaways section.
 
 Compare our content against all competitor content and identify:
 
@@ -3681,13 +3684,20 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
       // Remove lines that are just a number followed by period (like "1.")
       rewrittenContent = rewrittenContent.replace(/^\s*\d+\.\s*$/gm, '');
       // Remove stray bullet points (•, *, -) on their own lines or with just whitespace
-      rewrittenContent = rewrittenContent.replace(/^\s*[•\*\-]\s*$/gm, '');
+      rewrittenContent = rewrittenContent.replace(/^\s*[•\*\-◦○]\s*$/gm, '');
       // Remove markdown list markers at start of lines that weren't converted to HTML lists
-      // This handles "1. " or "- " or "* " at the beginning of content not in list tags
       rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*\d+\.\s*/g, '$1');
-      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*[•\*\-]\s*/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*[•\*\-◦○]\s*/g, '$1');
+      // Remove stray bullets/markers that appear after closing tags
+      rewrittenContent = rewrittenContent.replace(/(<\/[^>]+>)\s*[•\*\-◦○]\s*(?=<|$)/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/(<\/[^>]+>)\s*\d+\.\s*(?=<|$)/g, '$1');
+      // Remove stray bullets between tags (e.g., </p> • <p>)
+      rewrittenContent = rewrittenContent.replace(/>\s*[•\*\-◦○]\s*</g, '><');
+      rewrittenContent = rewrittenContent.replace(/>\s*\d+\.\s*</g, '><');
       // Clean up empty paragraphs that might result from removal
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
+      // Clean up multiple consecutive newlines/spaces
+      rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
       
       rewrittenContent = rewrittenContent.trim();
 
@@ -3799,10 +3809,15 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
       
       // Remove stray markdown list markers that weren't converted
       rewrittenContent = rewrittenContent.replace(/^\s*\d+\.\s*$/gm, '');
-      rewrittenContent = rewrittenContent.replace(/^\s*[•\*\-]\s*$/gm, '');
+      rewrittenContent = rewrittenContent.replace(/^\s*[•\*\-◦○]\s*$/gm, '');
       rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*\d+\.\s*/g, '$1');
-      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*[•\*\-]\s*/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*[•\*\-◦○]\s*/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/(<\/[^>]+>)\s*[•\*\-◦○]\s*(?=<|$)/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/(<\/[^>]+>)\s*\d+\.\s*(?=<|$)/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/>\s*[•\*\-◦○]\s*</g, '><');
+      rewrittenContent = rewrittenContent.replace(/>\s*\d+\.\s*</g, '><');
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
+      rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
       
       rewrittenContent = rewrittenContent.trim();
 
