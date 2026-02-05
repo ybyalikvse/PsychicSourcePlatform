@@ -1,22 +1,32 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
-});
+function getS3Client() {
+  return new S3Client({
+    region: process.env.AWS_REGION || "us-east-1",
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+    },
+  });
+}
 
-const BUCKET_NAME = process.env.AWS_S3_BUCKET || "";
+export function isS3Configured(): boolean {
+  return !!(process.env.AWS_S3_BUCKET && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+}
 
 export async function uploadImageToS3(
   imageData: string | Buffer,
   filename?: string,
   contentType: string = "image/png"
 ): Promise<string> {
-  if (!BUCKET_NAME) {
+  const bucketName = process.env.AWS_S3_BUCKET;
+  const region = process.env.AWS_REGION || "us-east-1";
+  const usePublicUrl = process.env.AWS_S3_PUBLIC === "true";
+  
+  if (!bucketName) {
     throw new Error("AWS_S3_BUCKET environment variable is not set");
   }
 
@@ -37,21 +47,30 @@ export async function uploadImageToS3(
     buffer = imageData;
   }
 
-  const key = filename || `images/${uuidv4()}.png`;
+  const extension = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : "png";
+  const key = filename || `images/${uuidv4()}.${extension}`;
 
+  const s3Client = getS3Client();
+  
   const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
+    Bucket: bucketName,
     Key: key,
     Body: buffer,
     ContentType: contentType,
-    ACL: "public-read",
   });
 
   await s3Client.send(command);
 
-  const s3Url = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || "us-east-1"}.amazonaws.com/${key}`;
-  
-  return s3Url;
+  if (usePublicUrl) {
+    return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
+  } else {
+    const getCommand = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+    const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 604800 });
+    return signedUrl;
+  }
 }
 
 export async function uploadImageFromUrl(
@@ -72,4 +91,4 @@ export async function uploadImageFromUrl(
   return uploadImageToS3(buffer, filename, contentType);
 }
 
-export { s3Client, BUCKET_NAME };
+export { getS3Client };

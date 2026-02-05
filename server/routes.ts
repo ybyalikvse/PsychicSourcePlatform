@@ -1968,6 +1968,9 @@ Respond in JSON format:
         ? `${prompt}. Style: ${stylePrompt}. Aspect ratio: ${aspectRatio}`
         : `${prompt}. Aspect ratio: ${aspectRatio}`;
 
+      // Check if S3 is configured
+      const s3Configured = !!(process.env.AWS_S3_BUCKET && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+
       if (provider === "openai") {
         // Use OpenAI gpt-image-1 for image generation
         const openai = new OpenAI({
@@ -1995,10 +1998,29 @@ Respond in JSON format:
           return res.status(500).json({ error: "No image data in OpenAI response" });
         }
 
+        // Upload to S3 if configured
+        if (s3Configured) {
+          try {
+            const { uploadImageToS3 } = await import("./s3");
+            const s3Url = await uploadImageToS3(imageData, undefined, "image/png");
+            console.log("[Image Generation] Uploaded to S3:", s3Url);
+            return res.json({
+              imageData: s3Url,
+              imageUrl: s3Url,
+              imageType: imageType || "featured",
+              provider: "openai",
+              storage: "s3",
+            });
+          } catch (s3Error) {
+            console.error("[Image Generation] S3 upload failed, returning base64:", s3Error);
+          }
+        }
+
         res.json({
           imageData: `data:image/png;base64,${imageData}`,
           imageType: imageType || "featured",
           provider: "openai",
+          storage: "base64",
         });
       } else {
         // Use Gemini for image generation (default)
@@ -2033,10 +2055,32 @@ Respond in JSON format:
         }
 
         const mimeType = imagePart.inlineData.mimeType || "image/png";
+        const base64Data = imagePart.inlineData.data;
+
+        // Upload to S3 if configured
+        if (s3Configured) {
+          try {
+            const { uploadImageToS3 } = await import("./s3");
+            const extension = mimeType.includes("jpeg") ? "jpg" : "png";
+            const s3Url = await uploadImageToS3(base64Data, undefined, mimeType);
+            console.log("[Image Generation] Uploaded to S3:", s3Url);
+            return res.json({
+              imageData: s3Url,
+              imageUrl: s3Url,
+              imageType: imageType || "featured",
+              provider: "gemini",
+              storage: "s3",
+            });
+          } catch (s3Error) {
+            console.error("[Image Generation] S3 upload failed, returning base64:", s3Error);
+          }
+        }
+
         res.json({
-          imageData: `data:${mimeType};base64,${imagePart.inlineData.data}`,
+          imageData: `data:${mimeType};base64,${base64Data}`,
           imageType: imageType || "featured",
           provider: "gemini",
+          storage: "base64",
         });
       }
     } catch (error) {
