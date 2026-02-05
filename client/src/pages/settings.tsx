@@ -1022,7 +1022,10 @@ export default function Settings() {
                       data-testid="input-optimization-prompt-text"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Available placeholders: {"{targetKeyword}"}, {"{url}"}, {"{pageTitle}"}, {"{pageMetaDescription}"}, {"{pageWordCount}"}, {"{pageHeadings}"}, {"{pageContent}"}, {"{keywords}"}, {"{competitors}"}, {"{keywordsInStrikingDistance}"}
+                      For Analyze: {"{targetKeyword}"}, {"{url}"}, {"{pageTitle}"}, {"{pageMetaDescription}"}, {"{pageWordCount}"}, {"{pageHeadings}"}, {"{pageContent}"}, {"{keywords}"}, {"{competitors}"}, {"{keywordsInStrikingDistance}"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      For Implement: {"{targetKeyword}"}, {"{recommendations}"}, {"{pageContent}"}
                     </p>
                     {linkColumns.length > 0 && (
                       <div className="pt-2">
