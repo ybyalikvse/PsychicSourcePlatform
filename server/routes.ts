@@ -2193,20 +2193,52 @@ Make the first suggestion suitable as a featured/hero image. The rest should be 
   // ============ IMAGE PLACEMENT (AI-powered) ============
   app.post("/api/images/find-placement", async (req, res) => {
     try {
-      const { content, imageUrl, imagePrompt } = req.body;
+      const { content, imageUrl, imagePrompt, imageIndex } = req.body;
       
       if (!content || !imageUrl) {
         return res.status(400).json({ error: "Content and image URL are required" });
       }
+
+      // Count existing images in content to determine where NOT to place new ones
+      const existingImageMatches = content.match(/<img[^>]*>/g) || [];
+      const existingImageCount = existingImageMatches.length;
+      
+      // Find paragraphs that already have images nearby (within 2 paragraphs)
+      const paragraphs = content.match(/<p[^>]*>[\s\S]*?<\/p>/gi) || [];
+      const paragraphsNearImages: number[] = [];
+      
+      paragraphs.forEach((p, idx) => {
+        // Check if this paragraph or nearby ones contain an image
+        const nearbyContent = paragraphs.slice(Math.max(0, idx - 1), idx + 2).join('');
+        if (nearbyContent.includes('<img') || nearbyContent.includes('<figure')) {
+          paragraphsNearImages.push(idx);
+        }
+      });
+
+      // Determine image style variation based on index
+      // Cycle through: full-width center, medium left float, medium right float
+      const styleVariations = [
+        { size: "full", align: "center", description: "full-width centered" },
+        { size: "medium", align: "left", description: "medium size floated left with text wrapping" },
+        { size: "medium", align: "right", description: "medium size floated right with text wrapping" },
+        { size: "large", align: "center", description: "large centered" },
+        { size: "small", align: "right", description: "small floated right" },
+      ];
+      const currentStyle = styleVariations[(imageIndex ?? existingImageCount) % styleVariations.length];
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
+      const avoidParagraphsNote = paragraphsNearImages.length > 0 
+        ? `\n\nIMPORTANT: There are already ${existingImageCount} images in the content. You MUST place this new image at least 2-3 paragraphs AWAY from any existing images to spread them evenly throughout the article. Avoid placing images near paragraphs ${paragraphsNearImages.join(', ')}.`
+        : '';
+
       const prompt = `You are an expert content editor. Analyze this HTML blog post content and determine the BEST location to insert an image.
 
 Image Description: ${imagePrompt || "Featured image for the article"}
+Image Style: This image will be ${currentStyle.description}
 
 Blog Content:
 ${content}
@@ -2216,6 +2248,7 @@ TASK: Find the most appropriate paragraph break to insert this image. The image 
 2. NOT be placed at the very beginning (after title is ok) or very end
 3. Break up long sections of text naturally
 4. Enhance the reader's understanding at that point in the article
+5. Be SPREAD OUT from other images - images should never be consecutive or within 2 paragraphs of each other${avoidParagraphsNote}
 
 Return a JSON object with:
 - "insertAfterText": The EXACT text of the paragraph (first 100 chars) AFTER which to insert the image
@@ -2253,10 +2286,39 @@ Example response:
       const altText = placement.altText || "Article image";
       const caption = placement.caption || "";
 
-      // Create the image HTML
-      const imageHtml = caption 
-        ? `<figure class="my-6"><img src="${imageUrl}" alt="${altText}" class="w-full rounded-md" /><figcaption class="text-center text-sm text-muted-foreground mt-2">${caption}</figcaption></figure>`
-        : `<p><img src="${imageUrl}" alt="${altText}" class="w-full rounded-md my-6" /></p>`;
+      // Create the image HTML with varied sizes and positions
+      // Size classes: full = w-full, large = max-w-3xl, medium = max-w-md, small = max-w-xs
+      // Alignment: center = mx-auto, left = float-left mr-6 mb-4, right = float-right ml-6 mb-4
+      const sizeClasses: Record<string, string> = {
+        full: "w-full",
+        large: "max-w-3xl w-full",
+        medium: "max-w-md w-full",
+        small: "max-w-xs w-full",
+      };
+      
+      const alignClasses: Record<string, string> = {
+        center: "mx-auto",
+        left: "float-left mr-6 mb-4",
+        right: "float-right ml-6 mb-4",
+      };
+
+      const sizeClass = sizeClasses[currentStyle.size] || sizeClasses.full;
+      const alignClass = alignClasses[currentStyle.align] || alignClasses.center;
+      
+      let imageHtml: string;
+      // All images use figure with overflow-auto to handle floats properly
+      if (currentStyle.align === "center") {
+        // Centered images - full block, no float issues
+        imageHtml = caption
+          ? `<figure class="my-6"><img src="${imageUrl}" alt="${altText}" class="${sizeClass} ${alignClass} rounded-md" /><figcaption class="text-center text-sm text-muted-foreground mt-2">${caption}</figcaption></figure>`
+          : `<figure class="my-6"><img src="${imageUrl}" alt="${altText}" class="${sizeClass} ${alignClass} rounded-md" /></figure>`;
+      } else {
+        // Floated images - use figure with overflow-auto and clearfix
+        const figCaption = caption 
+          ? `<figcaption class="text-sm text-muted-foreground mt-1">${caption}</figcaption>` 
+          : '';
+        imageHtml = `<figure class="my-4 ${sizeClass} ${alignClass} overflow-auto"><img src="${imageUrl}" alt="${altText}" class="w-full rounded-md" />${figCaption}</figure><div class="clear-both"></div>`;
+      }
 
       // Try to find and insert after the matching paragraph
       let updatedContent = content;

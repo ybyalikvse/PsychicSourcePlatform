@@ -549,6 +549,7 @@ export default function CreateWithAI() {
         content: generatedContent,
         imageUrl,
         imagePrompt: imageType === "featured" ? imagePrompt : blogImages[index || 0]?.prompt || "",
+        imageIndex: index ?? 0, // Pass index for varied sizing/positioning
       });
 
       const data = await response.json();
