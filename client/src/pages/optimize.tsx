@@ -829,76 +829,115 @@ export default function Optimize() {
         </CardContent>
       </Card>
 
-      {/* Quick Actions - shows after Quick Fetch without requiring full analysis */}
-      {quickFetchResult && directPrompts.length > 0 && !analysisResult && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wand2 className="h-5 w-5" />
-              Quick Actions
-            </CardTitle>
-            <CardDescription>
-              Apply direct prompts to your content - no analysis required
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {directPrompts.map((prompt) => (
-                <div 
-                  key={prompt.id}
-                  className="flex items-center justify-between p-3 border rounded-md"
-                >
-                  <div>
-                    <p className="font-medium">{prompt.name}</p>
-                    {prompt.description && (
-                      <p className="text-sm text-muted-foreground">{prompt.description}</p>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      const content = quickFetchResult.pageContent?.htmlContent || quickFetchResult.pageContent?.content || "";
-                      if (!content) {
-                        toast({
-                          title: "No Content",
-                          description: "Page content not available.",
-                          variant: "destructive",
+      {/* Quick Fetch Results - shows after Quick Fetch without requiring full analysis */}
+      {quickFetchResult && !analysisResult && (
+        <div className="space-y-4">
+          {/* Quick Actions Card */}
+          {directPrompts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wand2 className="h-5 w-5" />
+                  Quick Actions
+                </CardTitle>
+                <CardDescription>
+                  Apply direct prompts to your content - no analysis required
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {directPrompts.map((prompt) => (
+                    <Button
+                      key={prompt.id}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const content = quickFetchResult.pageContent?.htmlContent || quickFetchResult.pageContent?.content || "";
+                        if (!content) {
+                          toast({
+                            title: "No Content",
+                            description: "Page content not available.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        directApplyMutation.mutate({
+                          content,
+                          promptId: String(prompt.id),
+                          targetKeyword: form.getValues("targetKeyword") || "",
                         });
-                        return;
-                      }
-                      directApplyMutation.mutate({
-                        content,
-                        promptId: String(prompt.id),
-                        targetKeyword: form.getValues("targetKeyword"),
-                      });
-                    }}
-                    disabled={directApplyMutation.isPending}
-                    data-testid={`button-quick-apply-${prompt.id}`}
-                  >
-                    {directApplyMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Apply"
-                    )}
-                  </Button>
+                      }}
+                      disabled={directApplyMutation.isPending}
+                      data-testid={`button-quick-apply-${prompt.id}`}
+                    >
+                      {directApplyMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-4 w-4 mr-2" />
+                      )}
+                      {prompt.name}
+                    </Button>
+                  ))}
                 </div>
-              ))}
-            </div>
-            
-            {/* Show rewritten content editor */}
-            {showRewriteEditor && rewrittenContent && (
-              <div className="mt-4 pt-4 border-t">
-                <h3 className="font-medium mb-2">Rewritten Content</h3>
-                <ScrollArea className="h-[400px] border rounded-md p-2">
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Content Display Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    {quickFetchResult.pageContent?.title || "Page Content"}
+                  </CardTitle>
+                  <CardDescription>
+                    {quickFetchResult.pageContent?.wordCount || 0} words
+                    {quickFetchResult.pageContent?.metaDescription && (
+                      <span className="block mt-1 text-xs">
+                        Meta: {quickFetchResult.pageContent.metaDescription.substring(0, 100)}...
+                      </span>
+                    )}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Show rewritten content if available, otherwise show original */}
+              {showRewriteEditor && rewrittenContent ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="secondary">Rewritten Content</Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowRewriteEditor(false);
+                        setRewrittenContent(null);
+                      }}
+                    >
+                      Show Original
+                    </Button>
+                  </div>
+                  <ScrollArea className="h-[500px] border rounded-md p-4">
+                    <TiptapEditor 
+                      content={rewrittenContent}
+                      onChange={(content) => setRewrittenContent(content)}
+                    />
+                  </ScrollArea>
+                </div>
+              ) : (
+                <ScrollArea className="h-[500px] border rounded-md p-4">
                   <TiptapEditor 
-                    content={rewrittenContent}
-                    onChange={(content) => setRewrittenContent(content)}
+                    content={quickFetchResult.pageContent?.htmlContent || quickFetchResult.pageContent?.content || ""}
+                    onChange={() => {}}
                   />
                 </ScrollArea>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {analysisResult && (
