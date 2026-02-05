@@ -2777,6 +2777,8 @@ ${strikingDistanceFormatted}
 ${competitorsFormatted}
 
 === YOUR ANALYSIS TASK ===
+IMPORTANT: Ignore "Table of Contents" and "Key Takeaway" sections in both our content and competitor content during analysis. Focus only on the main body content.
+
 Compare our content against all competitor content and identify:
 
 1. **Content Gaps**: What topics, subtopics, or information do competitors cover that we're missing?
