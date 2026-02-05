@@ -55,6 +55,7 @@ interface OptimizationPromptFormData {
   name: string;
   description: string;
   prompt: string;
+  promptType: "analysis" | "direct";
   isDefault: boolean;
 }
 
@@ -111,6 +112,7 @@ export default function Settings() {
     name: "",
     description: "",
     prompt: "",
+    promptType: "analysis",
     isDefault: false,
   });
 
@@ -345,7 +347,7 @@ export default function Settings() {
   };
 
   const resetOptimizationPromptForm = () => {
-    setOptimizationPromptForm({ name: "", description: "", prompt: "", isDefault: false });
+    setOptimizationPromptForm({ name: "", description: "", prompt: "", promptType: "analysis", isDefault: false });
   };
 
   const handleEditOptimizationPrompt = (prompt: OptimizationPrompt) => {
@@ -354,6 +356,7 @@ export default function Settings() {
       name: prompt.name,
       description: prompt.description || "",
       prompt: prompt.prompt,
+      promptType: (prompt.promptType as "analysis" | "direct") || "analysis",
       isDefault: prompt.isDefault || false,
     });
     setOptimizationPromptDialogOpen(true);
@@ -1009,6 +1012,24 @@ export default function Settings() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="opt-prompt-type">Prompt Type</Label>
+                    <Select
+                      value={optimizationPromptForm.promptType}
+                      onValueChange={(value: "analysis" | "direct") => setOptimizationPromptForm({ ...optimizationPromptForm, promptType: value })}
+                    >
+                      <SelectTrigger data-testid="select-optimization-prompt-type">
+                        <SelectValue placeholder="Select prompt type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="analysis">Analysis Required - Needs competitor data and recommendations</SelectItem>
+                        <SelectItem value="direct">Direct Apply - Only needs page content, can apply immediately</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      "Analysis Required" prompts need the full GAP analysis first. "Direct Apply" prompts can be applied immediately to any page content.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="opt-prompt-text">Prompt Template</Label>
                     <Textarea
                       id="opt-prompt-text"
@@ -1087,6 +1108,9 @@ export default function Settings() {
                       {prompt.isDefault && (
                         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">Default</span>
                       )}
+                      <span className={`text-xs px-2 py-0.5 rounded ${prompt.promptType === "direct" ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-blue-500/10 text-blue-600 dark:text-blue-400"}`}>
+                        {prompt.promptType === "direct" ? "Direct Apply" : "Analysis Required"}
+                      </span>
                     </div>
                     {prompt.description && (
                       <p className="text-sm text-muted-foreground mt-1">{prompt.description}</p>

@@ -151,6 +151,7 @@ export const optimizationPrompts = pgTable("optimization_prompts", {
   name: text("name").notNull(),
   description: text("description"),
   prompt: text("prompt").notNull(),
+  promptType: text("prompt_type").notNull().default("analysis"),
   isDefault: boolean("is_default").default(false),
   createdAt: text("created_at").notNull().default(sql`now()`),
 });
