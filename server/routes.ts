@@ -3667,5 +3667,99 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
     }
   });
 
+  // Quick Fetch endpoint - only scrapes page content without GSC/competitors/recommendations
+  app.post("/api/optimize/quick-fetch", async (req, res) => {
+    try {
+      const { url, targetKeyword } = req.body;
+      
+      if (!url || !targetKeyword) {
+        return res.status(400).json({ error: "URL and target keyword are required" });
+      }
+
+      // Security: Validate URL is from allowed domain
+      let validatedUrl: URL;
+      try {
+        validatedUrl = new URL(url);
+        const allowedHosts = ['psychicsource.com', 'www.psychicsource.com'];
+        if (!allowedHosts.some(h => validatedUrl.hostname === h || validatedUrl.hostname.endsWith('.' + h))) {
+          return res.status(400).json({ 
+            error: "Invalid URL", 
+            message: "Only psychicsource.com URLs are allowed." 
+          });
+        }
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      console.log(`[Quick Fetch] Starting quick fetch for URL: ${url}`);
+
+      // Scrape the page using Firecrawl
+      let pageContent = {
+        title: "",
+        metaDescription: "",
+        headings: { h1: [] as string[], h2: [] as string[], h3: [] as string[] },
+        wordCount: 0,
+        content: "",
+        htmlContent: "",
+      };
+
+      const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+      
+      if (!firecrawlApiKey) {
+        return res.status(500).json({ error: "FIRECRAWL_API_KEY not configured" });
+      }
+
+      try {
+        console.log(`[Quick Fetch] Scraping page with Firecrawl: ${url}`);
+        const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey });
+        
+        const scrapeResult = await firecrawl.scrapeUrl(url, {
+          formats: ['markdown', 'html'],
+          onlyMainContent: true,
+        });
+        
+        if (scrapeResult.success) {
+          pageContent.title = scrapeResult.metadata?.title || "";
+          pageContent.metaDescription = scrapeResult.metadata?.description || "";
+          
+          const html = scrapeResult.html || "";
+          const h1Matches = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
+          const h2Matches = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
+          const h3Matches = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/gi) || [];
+          
+          pageContent.headings.h1 = h1Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+          pageContent.headings.h2 = h2Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+          pageContent.headings.h3 = h3Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+          
+          const markdown = scrapeResult.markdown || "";
+          pageContent.wordCount = markdown.split(/\s+/).filter(Boolean).length;
+          pageContent.content = markdown;
+          pageContent.htmlContent = scrapeResult.html || "";
+          
+          console.log(`[Quick Fetch] Scraped page: ${pageContent.wordCount} words`);
+        } else {
+          return res.status(500).json({ error: "Failed to scrape page" });
+        }
+      } catch (scrapeError) {
+        console.error("[Quick Fetch] Firecrawl scrape error:", scrapeError);
+        return res.status(500).json({ error: "Failed to scrape page: " + (scrapeError instanceof Error ? scrapeError.message : "Unknown error") });
+      }
+
+      // Return just the page content without saving to database
+      res.json({
+        success: true,
+        url,
+        targetKeyword,
+        pageContent,
+        keywords: [],
+        competitors: [],
+        recommendations: [],
+      });
+    } catch (error) {
+      console.error("Quick fetch failed:", error);
+      res.status(500).json({ error: "Quick fetch failed: " + (error instanceof Error ? error.message : "Unknown error") });
+    }
+  });
+
   return httpServer;
 }
