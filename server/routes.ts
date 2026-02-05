@@ -3677,6 +3677,18 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
       // Convert _italic_ to <em>
       rewrittenContent = rewrittenContent.replace(/(?<!<[^>]*)_([^_<>]+)_(?![^<]*>)/g, '<em>$1</em>');
       
+      // Remove stray markdown list markers that weren't converted
+      // Remove lines that are just a number followed by period (like "1.")
+      rewrittenContent = rewrittenContent.replace(/^\s*\d+\.\s*$/gm, '');
+      // Remove stray bullet points (•, *, -) on their own lines or with just whitespace
+      rewrittenContent = rewrittenContent.replace(/^\s*[•\*\-]\s*$/gm, '');
+      // Remove markdown list markers at start of lines that weren't converted to HTML lists
+      // This handles "1. " or "- " or "* " at the beginning of content not in list tags
+      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*\d+\.\s*/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*[•\*\-]\s*/g, '$1');
+      // Clean up empty paragraphs that might result from removal
+      rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
+      
       rewrittenContent = rewrittenContent.trim();
 
       console.log("[Optimize Implement] Rewritten content length:", rewrittenContent.length);
@@ -3784,6 +3796,13 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
       rewrittenContent = rewrittenContent.replace(/(?<!<[^>]*)\*([^*<>]+)\*(?![^<]*>)/g, '<em>$1</em>');
       rewrittenContent = rewrittenContent.replace(/__([^_]+)__/g, '<strong>$1</strong>');
       rewrittenContent = rewrittenContent.replace(/(?<!<[^>]*)_([^_<>]+)_(?![^<]*>)/g, '<em>$1</em>');
+      
+      // Remove stray markdown list markers that weren't converted
+      rewrittenContent = rewrittenContent.replace(/^\s*\d+\.\s*$/gm, '');
+      rewrittenContent = rewrittenContent.replace(/^\s*[•\*\-]\s*$/gm, '');
+      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*\d+\.\s*/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/(<p[^>]*>)\s*[•\*\-]\s*/g, '$1');
+      rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
       
       rewrittenContent = rewrittenContent.trim();
 
