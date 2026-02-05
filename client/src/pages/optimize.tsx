@@ -176,8 +176,12 @@ export default function Optimize() {
     queryKey: ["/api/optimization-prompts"],
   });
 
-  // State for selected optimization prompt
+  // State for selected optimization prompt (for analysis-type prompts only)
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+
+  // Filter prompts by type
+  const analysisPrompts = optimizationPrompts.filter(p => p.promptType !== "direct");
+  const directPrompts = optimizationPrompts.filter(p => p.promptType === "direct");
 
   // Debug state - shows what gets sent to AI
   const [debugInfo, setDebugInfo] = useState<{
@@ -194,12 +198,12 @@ export default function Optimize() {
     processedPrompt?: string; // Actual prompt sent to AI (after placeholder replacement)
   } | null>(null);
 
-  // Get the default prompt or first one
+  // Get the default prompt or first one (from analysis prompts only)
   const getSelectedPrompt = () => {
     if (selectedPromptId) {
-      return optimizationPrompts.find(p => p.id.toString() === selectedPromptId);
+      return analysisPrompts.find(p => p.id.toString() === selectedPromptId);
     }
-    return optimizationPrompts.find(p => p.isDefault) || optimizationPrompts[0];
+    return analysisPrompts.find(p => p.isDefault) || analysisPrompts[0];
   };
 
   const form = useForm<OptimizeFormData>({
@@ -336,6 +340,33 @@ export default function Optimize() {
     },
   });
 
+  // Direct Apply mutation - applies a direct prompt without requiring analysis
+  const directApplyMutation = useMutation({
+    mutationFn: async ({ content, promptId, targetKeyword }: { content: string; promptId: string; targetKeyword: string }) => {
+      const response = await apiRequest("POST", `/api/optimize/direct-apply`, {
+        content,
+        promptId,
+        targetKeyword,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setRewrittenContent(data.content);
+      setShowRewriteEditor(true);
+      toast({
+        title: "Content Updated",
+        description: "The direct prompt has been applied to your content.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Application Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleImplementRecommendations = () => {
     if (!analysisResult) return;
     
@@ -386,6 +417,23 @@ export default function Optimize() {
     } else {
       setSelectedRecommendations(analysisResult.recommendations.map((_, i) => i));
     }
+  };
+
+  // Handler for applying direct prompts without analysis
+  const handleDirectApply = (promptId: string) => {
+    if (!analysisResult?.pageContent) {
+      toast({
+        title: "No Content Available",
+        description: "Please analyze a page first to get the content.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const content = analysisResult.pageContent.htmlContent || analysisResult.pageContent.content;
+    const targetKeyword = form.getValues("targetKeyword");
+    
+    directApplyMutation.mutate({ content, promptId, targetKeyword });
   };
 
   const handleGenerateImage = async () => {
@@ -773,7 +821,7 @@ export default function Optimize() {
                   )}
                   {analysisResult.recommendations.length > 0 && (
                     <div className="flex items-center gap-2">
-                      {optimizationPrompts.length > 0 && (
+                      {analysisPrompts.length > 0 && (
                         <Select
                           value={selectedPromptId || (getSelectedPrompt()?.id?.toString() || "")}
                           onValueChange={setSelectedPromptId}
@@ -782,7 +830,7 @@ export default function Optimize() {
                             <SelectValue placeholder="Select prompt..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {optimizationPrompts.map((prompt) => (
+                            {analysisPrompts.map((prompt) => (
                               <SelectItem key={prompt.id} value={prompt.id.toString()}>
                                 {prompt.name} {prompt.isDefault && "(default)"}
                               </SelectItem>
@@ -884,6 +932,52 @@ export default function Optimize() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Direct Apply Prompts - Can be applied without full analysis */}
+            {directPrompts.length > 0 && analysisResult?.pageContent && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="h-5 w-5 text-green-500" />
+                    <CardTitle>Quick Actions</CardTitle>
+                  </div>
+                  <CardDescription>
+                    Apply these prompts directly to your content without requiring recommendations.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {directPrompts.map((prompt) => (
+                      <div
+                        key={prompt.id}
+                        className="flex items-center justify-between p-3 border rounded-md hover-elevate"
+                        data-testid={`direct-prompt-${prompt.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{prompt.name}</p>
+                          {prompt.description && (
+                            <p className="text-xs text-muted-foreground truncate">{prompt.description}</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDirectApply(prompt.id.toString())}
+                          disabled={directApplyMutation.isPending}
+                          data-testid={`button-apply-direct-${prompt.id}`}
+                        >
+                          {directApplyMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Apply"
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* DEBUG PANEL - Remove later */}
             {debugInfo && (

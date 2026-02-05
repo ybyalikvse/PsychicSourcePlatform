@@ -3566,5 +3566,106 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
     }
   });
 
+  // Direct Apply endpoint - applies a prompt directly to content without requiring recommendations
+  app.post("/api/optimize/direct-apply", async (req, res) => {
+    try {
+      const { content, promptId, targetKeyword } = req.body;
+      
+      if (!content || !promptId) {
+        return res.status(400).json({ error: "Content and promptId are required" });
+      }
+
+      console.log("[Direct Apply] Starting direct prompt application");
+      console.log("[Direct Apply] Content length:", content.length);
+      console.log("[Direct Apply] Prompt ID:", promptId);
+      console.log("[Direct Apply] Target keyword:", targetKeyword);
+
+      // Fetch the optimization prompt
+      const optimizationPrompt = await storage.getOptimizationPrompt(promptId);
+      if (!optimizationPrompt) {
+        return res.status(404).json({ error: "Prompt not found" });
+      }
+      
+      if (optimizationPrompt.promptType !== "direct") {
+        return res.status(400).json({ error: "This prompt requires full analysis, not direct application" });
+      }
+
+      console.log("[Direct Apply] Using prompt:", optimizationPrompt.name);
+      
+      // Use Gemini for content processing
+      const { GoogleGenAI } = await import("@google/genai");
+      const genAI = new GoogleGenAI({
+        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        httpOptions: {
+          apiVersion: "",
+          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        },
+      });
+
+      // Fetch internal links for placeholder replacement
+      const linkColumns = await storage.getLinkTableColumns();
+      const siteUrls = await storage.getSiteUrls();
+      
+      // Format internal links data for placeholders
+      const internalLinksData: Record<string, string[]> = {};
+      for (const col of linkColumns) {
+        internalLinksData[col.name] = siteUrls.map((row: any) => {
+          const data = row.data as Record<string, string> | null;
+          return data?.[col.id] || "";
+        }).filter((v: string) => v);
+      }
+
+      // Replace placeholders in prompt
+      let processedPrompt = optimizationPrompt.prompt
+        .replace(/\{targetKeyword\}/g, targetKeyword || "")
+        .replace(/\{pageContent\}/g, content);
+      
+      // Replace internal links placeholders
+      for (const [colName, values] of Object.entries(internalLinksData)) {
+        const placeholder = `{{${colName}}}`;
+        processedPrompt = processedPrompt.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), values.join("\n"));
+      }
+
+      // If the prompt doesn't reference pageContent, append it at the end
+      if (!optimizationPrompt.prompt.includes('{pageContent}')) {
+        processedPrompt = `${processedPrompt}
+
+=== ORIGINAL PAGE CONTENT TO MODIFY ===
+${content}
+
+=== YOUR TASK ===
+Apply the instructions above to modify the page content. Return ONLY the modified HTML content, no explanations.`;
+      }
+
+      console.log("[Direct Apply] Processed prompt length:", processedPrompt.length, "chars");
+      
+      const response = await genAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: processedPrompt,
+      });
+
+      let rewrittenContent = response.text || "";
+      
+      // Clean up the response - remove markdown code blocks if present
+      if (rewrittenContent.includes("```html")) {
+        rewrittenContent = rewrittenContent.replace(/```html\s*/g, "").replace(/```\s*/g, "");
+      } else if (rewrittenContent.includes("```")) {
+        rewrittenContent = rewrittenContent.replace(/```\s*/g, "");
+      }
+      
+      rewrittenContent = rewrittenContent.trim();
+
+      console.log("[Direct Apply] Result content length:", rewrittenContent.length);
+
+      res.json({
+        success: true,
+        content: rewrittenContent,
+      });
+    } catch (error) {
+      console.error("Failed to apply direct prompt:", error);
+      res.status(500).json({ error: "Failed to apply prompt: " + (error instanceof Error ? error.message : "Unknown error") });
+    }
+  });
+
   return httpServer;
 }
