@@ -145,6 +145,7 @@ interface SavedAnalysis {
 export default function Optimize() {
   const { toast } = useToast();
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [quickFetchResult, setQuickFetchResult] = useState<AnalysisResult | null>(null);
   const [analysisStep, setAnalysisStep] = useState<string>("");
   const [showHistory, setShowHistory] = useState(false);
   const [hasContentChanges, setHasContentChanges] = useState(false);
@@ -222,6 +223,7 @@ export default function Optimize() {
     },
     onSuccess: (data) => {
       setAnalysisResult(data);
+      setQuickFetchResult(null); // Clear quick fetch when full analysis completes
       setOriginalContent(data.pageContent?.htmlContent || "");
       setHasContentChanges(false);
       setAnalysisStep("");
@@ -361,6 +363,34 @@ export default function Optimize() {
     onError: (error: Error) => {
       toast({
         title: "Application Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Quick Fetch mutation - only scrapes page content without full analysis
+  const quickFetchMutation = useMutation({
+    mutationFn: async (data: OptimizeFormData) => {
+      const response = await apiRequest("POST", "/api/optimize/quick-fetch", {
+        url: data.url,
+        targetKeyword: data.targetKeyword,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setQuickFetchResult(data);
+      setAnalysisResult(null); // Clear any previous full analysis
+      setRewrittenContent(null);
+      setShowRewriteEditor(false);
+      toast({
+        title: "Page Loaded",
+        description: "Content is ready. Choose a quick action below.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Quick Fetch Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -745,27 +775,131 @@ export default function Optimize() {
                   </FormItem>
                 )}
               />
-              <Button
-                type="submit"
-                disabled={analyzeMutation.isPending}
-                data-testid="button-analyze"
-              >
-                {analyzeMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {analysisStep || "Analyzing..."}
-                  </>
-                ) : (
-                  <>
-                    <TrendingUp className="h-4 w-4 mr-2" />
-                    Analyze Article
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  disabled={analyzeMutation.isPending || quickFetchMutation.isPending}
+                  data-testid="button-analyze"
+                >
+                  {analyzeMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {analysisStep || "Analyzing..."}
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Analyze Article
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={analyzeMutation.isPending || quickFetchMutation.isPending}
+                  onClick={() => {
+                    const values = form.getValues();
+                    if (values.url && values.targetKeyword) {
+                      quickFetchMutation.mutate(values);
+                    } else {
+                      toast({
+                        title: "Missing Fields",
+                        description: "Please enter a URL and target keyword.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  data-testid="button-quick-fetch"
+                >
+                  {quickFetchMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      Quick Fetch
+                    </>
+                  )}
+                </Button>
+              </div>
             </form>
           </Form>
         </CardContent>
       </Card>
+
+      {/* Quick Actions - shows after Quick Fetch without requiring full analysis */}
+      {quickFetchResult && directPrompts.length > 0 && !analysisResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5" />
+              Quick Actions
+            </CardTitle>
+            <CardDescription>
+              Apply direct prompts to your content - no analysis required
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {directPrompts.map((prompt) => (
+                <div 
+                  key={prompt.id}
+                  className="flex items-center justify-between p-3 border rounded-md"
+                >
+                  <div>
+                    <p className="font-medium">{prompt.name}</p>
+                    {prompt.description && (
+                      <p className="text-sm text-muted-foreground">{prompt.description}</p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const content = quickFetchResult.pageContent?.htmlContent || quickFetchResult.pageContent?.content || "";
+                      if (!content) {
+                        toast({
+                          title: "No Content",
+                          description: "Page content not available.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      directApplyMutation.mutate({
+                        content,
+                        promptId: String(prompt.id),
+                        targetKeyword: form.getValues("targetKeyword"),
+                      });
+                    }}
+                    disabled={directApplyMutation.isPending}
+                    data-testid={`button-quick-apply-${prompt.id}`}
+                  >
+                    {directApplyMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Apply"
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
+            
+            {/* Show rewritten content editor */}
+            {showRewriteEditor && rewrittenContent && (
+              <div className="mt-4 pt-4 border-t">
+                <h3 className="font-medium mb-2">Rewritten Content</h3>
+                <ScrollArea className="h-[400px] border rounded-md p-2">
+                  <TiptapEditor 
+                    content={rewrittenContent}
+                    onChange={(content) => setRewrittenContent(content)}
+                  />
+                </ScrollArea>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {analysisResult && (
         <Tabs defaultValue="recommendations" className="space-y-4">
