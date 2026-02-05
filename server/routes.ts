@@ -3665,6 +3665,16 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
         rewrittenContent = rewrittenContent.replace(/```\s*/g, "");
       }
       
+      // Convert any remaining markdown formatting to HTML or strip it
+      // Convert **bold** to <strong>
+      rewrittenContent = rewrittenContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      // Convert *italic* to <em> (but not if it's already inside a tag)
+      rewrittenContent = rewrittenContent.replace(/(?<!<[^>]*)\*([^*<>]+)\*(?![^<]*>)/g, '<em>$1</em>');
+      // Convert __bold__ to <strong>
+      rewrittenContent = rewrittenContent.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      // Convert _italic_ to <em>
+      rewrittenContent = rewrittenContent.replace(/(?<!<[^>]*)_([^_<>]+)_(?![^<]*>)/g, '<em>$1</em>');
+      
       rewrittenContent = rewrittenContent.trim();
 
       console.log("[Optimize Implement] Rewritten content length:", rewrittenContent.length);
@@ -3766,6 +3776,12 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
       } else if (rewrittenContent.includes("```")) {
         rewrittenContent = rewrittenContent.replace(/```\s*/g, "");
       }
+      
+      // Convert any remaining markdown formatting to HTML or strip it
+      rewrittenContent = rewrittenContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      rewrittenContent = rewrittenContent.replace(/(?<!<[^>]*)\*([^*<>]+)\*(?![^<]*>)/g, '<em>$1</em>');
+      rewrittenContent = rewrittenContent.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      rewrittenContent = rewrittenContent.replace(/(?<!<[^>]*)_([^_<>]+)_(?![^<]*>)/g, '<em>$1</em>');
       
       rewrittenContent = rewrittenContent.trim();
 
