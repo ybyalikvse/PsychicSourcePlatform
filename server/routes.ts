@@ -2730,28 +2730,132 @@ Be extremely specific and actionable. Reference specific competitor content when
         try {
           // First try to find JSON code block
           const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+          let parsed: any = null;
+          
           if (codeBlockMatch) {
             console.log(`[Optimize] Found JSON in code block`);
-            const parsed = JSON.parse(codeBlockMatch[1].trim());
-            recommendations = parsed.recommendations || [];
+            parsed = JSON.parse(codeBlockMatch[1].trim());
           } else {
-            // Try to find raw JSON object - use a more flexible regex
-            const jsonMatch = responseText.match(/\{[\s\S]*"recommendations"[\s\S]*\}/);
+            // Try to find raw JSON object
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
               console.log(`[Optimize] Found raw JSON object`);
-              const parsed = JSON.parse(jsonMatch[0]);
-              recommendations = parsed.recommendations || [];
+              parsed = JSON.parse(jsonMatch[0]);
             } else {
               console.log(`[Optimize] No JSON found in response, attempting to parse entire text`);
-              // Try parsing the entire response as JSON
               try {
-                const parsed = JSON.parse(responseText);
-                recommendations = parsed.recommendations || [];
+                parsed = JSON.parse(responseText);
               } catch {
                 console.log(`[Optimize] Could not parse response as JSON`);
               }
             }
           }
+          
+          if (parsed) {
+            // Check if it's the standard recommendations format
+            if (parsed.recommendations && Array.isArray(parsed.recommendations)) {
+              recommendations = parsed.recommendations;
+              console.log(`[Optimize] Found ${recommendations.length} recommendations in standard format`);
+            } 
+            // Check for custom prompt format with contentGaps, depthImprovements, etc.
+            else if (parsed.contentGaps || parsed.depthImprovements || parsed.uniqueAngles || parsed.structureImprovements || parsed.keywordOpportunities || parsed.quickWins || parsed.strikingDistanceKeywords) {
+              console.log(`[Optimize] Converting custom format to recommendations`);
+              
+              // Convert contentGaps to recommendations
+              if (parsed.contentGaps && Array.isArray(parsed.contentGaps)) {
+                for (const gap of parsed.contentGaps) {
+                  recommendations.push({
+                    type: "content" as const,
+                    priority: (gap.priority || "medium") as "high" | "medium" | "low",
+                    current: `Missing topic: ${gap.topic}`,
+                    suggested: gap.recommendation || gap.implementation || gap.topic,
+                    reason: gap.foundInCompetitors ? `Found in competitors: ${Array.isArray(gap.foundInCompetitors) ? gap.foundInCompetitors.join(", ") : gap.foundInCompetitors}` : "Identified as a content gap",
+                  });
+                }
+              }
+              
+              // Convert depthImprovements to recommendations
+              if (parsed.depthImprovements && Array.isArray(parsed.depthImprovements)) {
+                for (const improvement of parsed.depthImprovements) {
+                  recommendations.push({
+                    type: "content" as const,
+                    priority: (improvement.priority || "medium") as "high" | "medium" | "low",
+                    current: improvement.currentState || improvement.area || "Current content",
+                    suggested: improvement.recommendation || improvement.improvement,
+                    reason: improvement.competitorExample ? `Competitor example: ${improvement.competitorExample}` : "Needs more depth",
+                  });
+                }
+              }
+              
+              // Convert uniqueAngles to recommendations
+              if (parsed.uniqueAngles && Array.isArray(parsed.uniqueAngles)) {
+                for (const angle of parsed.uniqueAngles) {
+                  recommendations.push({
+                    type: "content" as const,
+                    priority: "medium" as const,
+                    current: "Current approach",
+                    suggested: angle.implementation || angle.angle,
+                    reason: angle.benefit || "Adds unique value",
+                  });
+                }
+              }
+              
+              // Convert structureImprovements to recommendations
+              if (parsed.structureImprovements && Array.isArray(parsed.structureImprovements)) {
+                for (const structure of parsed.structureImprovements) {
+                  recommendations.push({
+                    type: "headings" as const,
+                    priority: "medium" as const,
+                    current: structure.currentIssue || "Current structure",
+                    suggested: structure.recommendation + (structure.example ? ` (Example: ${structure.example})` : ""),
+                    reason: "Improves content structure",
+                  });
+                }
+              }
+              
+              // Convert keywordOpportunities to recommendations
+              if (parsed.keywordOpportunities && Array.isArray(parsed.keywordOpportunities)) {
+                for (const keyword of parsed.keywordOpportunities) {
+                  recommendations.push({
+                    type: "keywords" as const,
+                    priority: "medium" as const,
+                    current: keyword.currentUsage || `Keyword: ${keyword.keyword}`,
+                    suggested: keyword.recommendation,
+                    reason: keyword.competitorInsight || "Keyword optimization opportunity",
+                  });
+                }
+              }
+              
+              // Convert strikingDistanceKeywords.integrate to recommendations
+              if (parsed.strikingDistanceKeywords?.integrate && Array.isArray(parsed.strikingDistanceKeywords.integrate)) {
+                for (const kw of parsed.strikingDistanceKeywords.integrate) {
+                  recommendations.push({
+                    type: "keywords" as const,
+                    priority: (kw.estimatedImpact === "high" ? "high" : kw.estimatedImpact === "low" ? "low" : "medium") as "high" | "medium" | "low",
+                    current: `"${kw.keyword}" at position ${kw.currentPosition || "10-100"}`,
+                    suggested: kw.implementation + (kw.targetSection ? ` (Target section: ${kw.targetSection})` : ""),
+                    reason: "Striking distance keyword - close to page 1",
+                  });
+                }
+              }
+              
+              // Convert quickWins to recommendations (prioritize these)
+              if (parsed.quickWins && Array.isArray(parsed.quickWins)) {
+                for (const win of parsed.quickWins) {
+                  recommendations.unshift({
+                    type: "content" as const,
+                    priority: (win.effort === "low" ? "high" : "medium") as "high" | "medium" | "low",
+                    current: "Quick win opportunity",
+                    suggested: win.action,
+                    reason: `Expected impact: ${win.impact || "Significant improvement"}`,
+                  });
+                }
+              }
+              
+              console.log(`[Optimize] Converted ${recommendations.length} recommendations from custom format`);
+            }
+          }
+          
           console.log(`[Optimize] Parsed ${recommendations.length} recommendations`);
         } catch (parseError) {
           console.error("[Optimize] JSON parse error:", parseError);
