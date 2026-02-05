@@ -2522,49 +2522,75 @@ Example response:
       };
 
       const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+      let contentFetchError: string | null = null;
       
       if (firecrawlApiKey) {
-        try {
-          console.log(`[Optimize] Scraping page with Firecrawl: ${url}`);
-          const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey });
-          
-          const scrapeResult = await firecrawl.scrapeUrl(url, {
-            formats: ['markdown', 'html'],
-            onlyMainContent: true,
-          });
-          
-          if (scrapeResult.success) {
-            // Extract metadata
-            pageContent.title = scrapeResult.metadata?.title || "";
-            pageContent.metaDescription = scrapeResult.metadata?.description || "";
+        const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey });
+        
+        // Retry logic - try up to 2 times
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            console.log(`[Optimize] Scraping page with Firecrawl (attempt ${attempt}): ${url}`);
             
-            // Extract headings from HTML
-            const html = scrapeResult.html || "";
-            const h1Matches = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
-            const h2Matches = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
-            const h3Matches = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/gi) || [];
+            const scrapeResult = await firecrawl.scrapeUrl(url, {
+              formats: ['markdown', 'html'],
+              onlyMainContent: true,
+            });
             
-            pageContent.headings.h1 = h1Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
-            pageContent.headings.h2 = h2Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
-            pageContent.headings.h3 = h3Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
-            
-            // Get word count from markdown - store FULL content without limits
-            const markdown = scrapeResult.markdown || "";
-            pageContent.wordCount = markdown.split(/\s+/).filter(Boolean).length;
-            pageContent.content = markdown; // No character limit
-            
-            // Store HTML for TipTap editor - no character limit
-            pageContent.htmlContent = scrapeResult.html || "";
-            
-            console.log(`[Optimize] Firecrawl scraped page: ${pageContent.wordCount} words`);
-          } else {
-            console.log(`[Optimize] Firecrawl scrape failed`);
+            if (scrapeResult.success) {
+              // Extract metadata
+              pageContent.title = scrapeResult.metadata?.title || "";
+              pageContent.metaDescription = scrapeResult.metadata?.description || "";
+              
+              // Extract headings from HTML
+              const html = scrapeResult.html || "";
+              const h1Matches = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
+              const h2Matches = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
+              const h3Matches = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/gi) || [];
+              
+              pageContent.headings.h1 = h1Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+              pageContent.headings.h2 = h2Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+              pageContent.headings.h3 = h3Matches.map((h: string) => h.replace(/<[^>]+>/g, '').trim());
+              
+              // Get word count from markdown - store FULL content without limits
+              const markdown = scrapeResult.markdown || "";
+              pageContent.wordCount = markdown.split(/\s+/).filter(Boolean).length;
+              pageContent.content = markdown; // No character limit
+              
+              // Store HTML for TipTap editor - no character limit
+              pageContent.htmlContent = scrapeResult.html || "";
+              
+              console.log(`[Optimize] Firecrawl scraped page: ${pageContent.wordCount} words`);
+              contentFetchError = null; // Clear any previous error
+              break; // Success, exit retry loop
+            } else {
+              contentFetchError = "Page scrape returned no content";
+              console.log(`[Optimize] Firecrawl scrape failed (attempt ${attempt})`);
+              if (attempt < 2) {
+                console.log(`[Optimize] Waiting 2 seconds before retry...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+            }
+          } catch (scrapeError: any) {
+            contentFetchError = scrapeError?.message || "Unknown scrape error";
+            console.error(`[Optimize] Firecrawl scrape error (attempt ${attempt}):`, scrapeError);
+            if (attempt < 2) {
+              console.log(`[Optimize] Waiting 2 seconds before retry...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
           }
-        } catch (scrapeError) {
-          console.error("[Optimize] Firecrawl scrape error:", scrapeError);
         }
       } else {
+        contentFetchError = "FIRECRAWL_API_KEY not configured";
         console.log("[Optimize] FIRECRAWL_API_KEY not set - cannot scrape page");
+      }
+      
+      // If content fetch failed completely, return an error
+      if (pageContent.wordCount === 0 && contentFetchError) {
+        console.error(`[Optimize] Content fetch failed after retries: ${contentFetchError}`);
+        return res.status(500).json({ 
+          error: `Failed to fetch page content: ${contentFetchError}. Please try again.` 
+        });
       }
 
       // Step 3: Search for competitors using Firecrawl
