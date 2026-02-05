@@ -61,14 +61,21 @@ export default function Content() {
     },
   });
 
-  const filteredArticles = articles.filter((article) => {
-    const matchesSearch =
-      !searchQuery ||
-      article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.slug.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || article.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredArticles = articles
+    .filter((article) => {
+      const matchesSearch =
+        !searchQuery ||
+        article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        article.slug.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === "all" || article.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      // Sort by most recent first (updatedAt, then createdAt)
+      const dateA = new Date(a.updatedAt || a.createdAt).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt).getTime();
+      return dateB - dateA;
+    });
 
   const handleSelectAll = (checked: boolean) => {
     setSelectedIds(checked ? filteredArticles.map((a) => a.id) : []);
