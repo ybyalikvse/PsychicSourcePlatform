@@ -3672,8 +3672,8 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
     try {
       const { url, targetKeyword } = req.body;
       
-      if (!url || !targetKeyword) {
-        return res.status(400).json({ error: "URL and target keyword are required" });
+      if (!url) {
+        return res.status(400).json({ error: "URL is required" });
       }
 
       // Security: Validate URL is from allowed domain

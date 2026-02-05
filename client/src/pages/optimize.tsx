@@ -799,12 +799,12 @@ export default function Optimize() {
                   disabled={analyzeMutation.isPending || quickFetchMutation.isPending}
                   onClick={() => {
                     const values = form.getValues();
-                    if (values.url && values.targetKeyword) {
+                    if (values.url) {
                       quickFetchMutation.mutate(values);
                     } else {
                       toast({
-                        title: "Missing Fields",
-                        description: "Please enter a URL and target keyword.",
+                        title: "Missing URL",
+                        description: "Please enter a URL to fetch.",
                         variant: "destructive",
                       });
                     }
