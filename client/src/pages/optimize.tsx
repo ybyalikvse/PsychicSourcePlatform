@@ -388,7 +388,7 @@ export default function Optimize() {
       saveToContentMutation.mutate({ content: data.content, targetKeyword });
       toast({
         title: "Content Rewritten",
-        description: "Your content has been updated and saved to drafts.",
+        description: "Saving to drafts...",
       });
     },
     onError: (error: Error) => {
@@ -418,7 +418,7 @@ export default function Optimize() {
       saveToContentMutation.mutate({ content: data.content, targetKeyword });
       toast({
         title: "Content Updated",
-        description: "The prompt has been applied and saved to drafts.",
+        description: "Saving to drafts...",
       });
     },
     onError: (error: Error) => {
