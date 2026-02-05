@@ -6,7 +6,8 @@ import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schem
 import crypto from "crypto";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
-import FirecrawlApp from "@mendable/firecrawl-js";
+import FirecrawlAppModule from "@mendable/firecrawl-js";
+const FirecrawlApp = (FirecrawlAppModule as any).default || FirecrawlAppModule;
 
 // OAuth state storage (in production, use Redis or similar)
 const oauthStates = new Map<string, { timestamp: number }>();
