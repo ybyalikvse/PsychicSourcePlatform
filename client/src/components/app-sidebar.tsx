@@ -6,7 +6,6 @@ import {
   Settings,
   Zap,
   TrendingUp,
-  RefreshCw,
   Sparkles,
   Wand2,
   Target,
@@ -78,11 +77,6 @@ const systemNavItems = [
     title: "Integrations",
     url: "/integrations",
     icon: Zap,
-  },
-  {
-    title: "Content Updates",
-    url: "/updates",
-    icon: RefreshCw,
   },
   {
     title: "Settings",

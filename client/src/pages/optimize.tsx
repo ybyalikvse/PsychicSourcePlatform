@@ -433,6 +433,8 @@ export default function Optimize() {
       setAnalysisResult(null); // Clear any previous full analysis
       setRewrittenContent(null);
       setShowRewriteEditor(false);
+      // Invalidate history so the new quick fetch shows up
+      queryClient.invalidateQueries({ queryKey: ["/api/optimize/analyses"] });
       toast({
         title: "Page Loaded",
         description: "Content is ready. Choose a quick action below.",

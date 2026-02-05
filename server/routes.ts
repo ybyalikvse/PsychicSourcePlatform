@@ -3770,9 +3770,26 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
         return res.status(500).json({ error: "Failed to scrape page: " + (scrapeError instanceof Error ? scrapeError.message : "Unknown error") });
       }
 
-      // Return just the page content without saving to database
+      // Save the quick fetch to database as history entry
+      const savedAnalysis = await storage.createOptimizationAnalysis({
+        url,
+        targetKeyword: targetKeyword || "",
+        dateRange: null,
+        pageTitle: pageContent.title,
+        pageMetaDescription: pageContent.metaDescription,
+        pageWordCount: pageContent.wordCount,
+        keywords: [],
+        competitors: [],
+        recommendations: [],
+        pageContent,
+      });
+
+      console.log(`[Quick Fetch] Saved to history with ID: ${savedAnalysis.id}`);
+
+      // Return the page content with the saved analysis ID
       res.json({
         success: true,
+        id: savedAnalysis.id,
         url,
         targetKeyword,
         pageContent,

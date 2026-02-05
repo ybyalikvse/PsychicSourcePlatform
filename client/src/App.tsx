@@ -16,7 +16,6 @@ import BulkCreate from "@/pages/bulk-create";
 import Performance from "@/pages/performance";
 import Analytics from "@/pages/analytics";
 import Integrations from "@/pages/integrations";
-import Updates from "@/pages/updates";
 import Optimize from "@/pages/optimize";
 import InternalLinks from "@/pages/internal-links";
 import Settings from "@/pages/settings";
@@ -35,7 +34,6 @@ function Router() {
       <Route path="/performance" component={Performance} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/integrations" component={Integrations} />
-      <Route path="/updates" component={Updates} />
       <Route path="/optimize" component={Optimize} />
       <Route path="/internal-links" component={InternalLinks} />
       <Route path="/settings" component={Settings} />
