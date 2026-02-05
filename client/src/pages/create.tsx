@@ -141,13 +141,15 @@ export default function CreateWithAI() {
       metaTitle: string;
       metaDescription: string;
       isAutoSave?: boolean;
+      forceNew?: boolean;  // When true, always create a new article instead of updating
     }) => {
       const slug = data.title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
       const wordCountNum = data.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
       
       const activeId = currentArticleId || articleId;
       
-      if (activeId) {
+      // If forceNew is true (regenerating), always create a new article
+      if (activeId && !data.forceNew) {
         const response = await apiRequest("PATCH", `/api/articles/${activeId}`, {
           title: data.title,
           content: data.content,
@@ -172,26 +174,39 @@ export default function CreateWithAI() {
           wordCount: wordCountNum,
         });
         const saved = await response.json();
-        return { ...saved, isAutoSave: data.isAutoSave };
+        return { ...saved, isAutoSave: data.isAutoSave, isNew: true };
       }
     },
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       
-      if (data.id && !currentArticleId) {
+      // If a new article was created (including regeneration), navigate to it
+      if (data.isNew && data.id) {
         setCurrentArticleId(data.id);
         window.history.replaceState(null, '', `/edit/${data.id}`);
-      }
-      
-      if (currentArticleId || articleId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/articles", currentArticleId || articleId] });
-      }
-      
-      if (data.isAutoSave) {
-        toast({ title: "Article auto-saved as draft" });
+        if (data.isAutoSave) {
+          toast({ title: "New article saved as draft" });
+        } else {
+          toast({ title: "New article created" });
+        }
+      } else if (data.id && !currentArticleId) {
+        setCurrentArticleId(data.id);
+        window.history.replaceState(null, '', `/edit/${data.id}`);
+        if (data.isAutoSave) {
+          toast({ title: "Article auto-saved as draft" });
+        } else {
+          toast({ title: "Article saved" });
+        }
       } else {
-        toast({ title: currentArticleId || articleId ? "Article updated" : "Article saved" });
+        if (currentArticleId || articleId) {
+          queryClient.invalidateQueries({ queryKey: ["/api/articles", currentArticleId || articleId] });
+        }
+        if (data.isAutoSave) {
+          toast({ title: "Article auto-saved" });
+        } else {
+          toast({ title: "Article updated" });
+        }
       }
     },
     onError: () => {
@@ -332,6 +347,7 @@ export default function CreateWithAI() {
       setGeneratedContent(cleanedContent);
       
       // Auto-save the article as draft
+      // When regenerating (isEditMode), always create a new article instead of updating
       const title = extractTitleFromContent(cleanedContent) || targetKeyword.trim();
       setIsAutoSaving(true);
       try {
@@ -342,6 +358,7 @@ export default function CreateWithAI() {
           metaTitle: "",
           metaDescription: "",
           isAutoSave: true,
+          forceNew: isEditMode, // When editing, regenerate creates a new article
         });
       } catch (saveError) {
         console.error("Auto-save error:", saveError);
@@ -349,7 +366,7 @@ export default function CreateWithAI() {
         setIsAutoSaving(false);
       }
       
-      toast({ title: "Content generated and saved as draft" });
+      toast({ title: isEditMode ? "New article created from regeneration" : "Content generated and saved as draft" });
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         console.error("Generation error:", error);
@@ -359,7 +376,7 @@ export default function CreateWithAI() {
       setIsGenerating(false);
       abortControllerRef.current = null;
     }
-  }, [targetKeyword, recommendedKeywords, selectedStyleId, wordCount, toast, saveArticleMutation]);
+  }, [targetKeyword, recommendedKeywords, selectedStyleId, wordCount, toast, saveArticleMutation, isEditMode]);
   
   const extractTitleFromContent = (content: string): string => {
     const h1Match = content.match(/<h1[^>]*>(.*?)<\/h1>/i);

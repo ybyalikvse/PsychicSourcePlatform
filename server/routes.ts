@@ -245,7 +245,32 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid article data", details: parsed.error });
       }
-      const article = await storage.createArticle(parsed.data);
+      
+      // Handle duplicate titles by adding timestamp suffix if needed
+      let title = parsed.data.title;
+      let slug = parsed.data.slug || title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      
+      // Check if an article with this title already exists
+      const existingArticles = await storage.getArticles();
+      const titleExists = existingArticles.some(a => a.title === title);
+      
+      if (titleExists) {
+        // Add timestamp to make title unique
+        const timestamp = new Date().toLocaleString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+        title = `${title} (${timestamp})`;
+        slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      }
+      
+      const article = await storage.createArticle({
+        ...parsed.data,
+        title,
+        slug,
+      });
       res.status(201).json(article);
     } catch (error) {
       res.status(500).json({ error: "Failed to create article" });

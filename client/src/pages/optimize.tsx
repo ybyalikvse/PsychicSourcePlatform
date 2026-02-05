@@ -311,6 +311,50 @@ export default function Optimize() {
     },
   });
 
+  // Helper to extract title from HTML content
+  const extractTitleFromContent = (html: string): string => {
+    const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    if (h1Match) {
+      return h1Match[1].replace(/<[^>]+>/g, '').trim();
+    }
+    // Fallback: use first 50 chars of text content
+    const textContent = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return textContent.substring(0, 50) || "Optimized Content";
+  };
+
+  // Save optimized content as new article
+  const saveToContentMutation = useMutation({
+    mutationFn: async ({ content, targetKeyword }: { content: string; targetKeyword: string }) => {
+      const title = extractTitleFromContent(content);
+      const slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      const wordCount = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+      
+      const response = await apiRequest("POST", "/api/articles", {
+        title,
+        content,
+        targetKeyword,
+        slug,
+        status: "draft",
+        wordCount,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      toast({
+        title: "Saved to Content",
+        description: `Article "${data.title}" has been saved as a draft.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Save Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const implementMutation = useMutation({
     mutationFn: async ({ content, recommendations, promptId }: { content: string; recommendations: Recommendation[]; promptId?: string }) => {
       const response = await apiRequest("POST", `/api/optimize/implement`, {
@@ -328,9 +372,12 @@ export default function Optimize() {
       if (data.processedPrompt && debugInfo) {
         setDebugInfo(prev => prev ? { ...prev, processedPrompt: data.processedPrompt } : null);
       }
+      // Auto-save to content
+      const targetKeyword = form.getValues("targetKeyword") || "";
+      saveToContentMutation.mutate({ content: data.content, targetKeyword });
       toast({
         title: "Content Rewritten",
-        description: "Your content has been updated with the selected recommendations.",
+        description: "Your content has been updated and saved to drafts.",
       });
     },
     onError: (error: Error) => {
@@ -355,9 +402,12 @@ export default function Optimize() {
     onSuccess: (data) => {
       setRewrittenContent(data.content);
       setShowRewriteEditor(true);
+      // Auto-save to content
+      const targetKeyword = form.getValues("targetKeyword") || "";
+      saveToContentMutation.mutate({ content: data.content, targetKeyword });
       toast({
         title: "Content Updated",
-        description: "The direct prompt has been applied to your content.",
+        description: "The prompt has been applied and saved to drafts.",
       });
     },
     onError: (error: Error) => {
