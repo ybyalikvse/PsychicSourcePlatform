@@ -2271,7 +2271,7 @@ Make the first suggestion suitable as a featured/hero image. The rest should be 
         { size: "large", align: "center", description: "large centered" },
         { size: "small", align: "right", description: "small floated right" },
       ];
-      const currentStyle = styleVariations[(imageIndex ?? existingImageCount) % styleVariations.length];
+      const currentStyle = styleVariations[existingImageCount % styleVariations.length];
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
