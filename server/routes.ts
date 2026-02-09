@@ -1558,6 +1558,46 @@ Create dedicated sections for each of these topics, using them as H2 headings wh
       }
 
       const targetWordCount = wordCount || 1500;
+
+      // Fetch internal links for placeholder replacement in style guidelines
+      const linkColumns = await storage.getLinkTableColumns();
+      const siteUrls = await storage.getSiteUrls();
+      
+      const internalLinksData: Record<string, string[]> = {};
+      for (const col of linkColumns) {
+        internalLinksData[col.name] = siteUrls.map((row: any) => {
+          const data = row.data as Record<string, string> | null;
+          return data?.[col.id] || "";
+        }).filter((v: string) => v);
+      }
+
+      // Replace internal link placeholders in style instructions
+      if (styleInstructions) {
+        for (const [colName, values] of Object.entries(internalLinksData)) {
+          const placeholder = `{{${colName}}}`;
+          styleInstructions = styleInstructions.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), values.join("\n"));
+          // Also handle common aliases like {{InternalLinkURL}} mapping to the column
+          const aliases = ["InternalLinkURL", "InternalLinks", "Internal_Links", "SiteURLs"];
+          for (const alias of aliases) {
+            const aliasPlaceholder = `{{${alias}}}`;
+            styleInstructions = styleInstructions.replace(new RegExp(aliasPlaceholder.replace(/[{}]/g, '\\$&'), 'g'), values.join("\n"));
+          }
+        }
+        // If no link columns found but aliases remain, replace with empty to avoid AI hallucinating
+        const remainingAliases = ["InternalLinkURL", "InternalLinks", "Internal_Links", "SiteURLs"];
+        for (const alias of remainingAliases) {
+          const aliasPlaceholder = `{{${alias}}}`;
+          if (styleInstructions.includes(aliasPlaceholder)) {
+            // Gather all available URLs from any column
+            const allUrls = Object.values(internalLinksData).flat();
+            if (allUrls.length > 0) {
+              styleInstructions = styleInstructions.replace(new RegExp(aliasPlaceholder.replace(/[{}]/g, '\\$&'), 'g'), allUrls.join("\n"));
+            } else {
+              styleInstructions = styleInstructions.replace(new RegExp(aliasPlaceholder.replace(/[{}]/g, '\\$&'), 'g'), "(No internal links available - do NOT invent or fabricate any URLs)");
+            }
+          }
+        }
+      }
       
       const systemPrompt = `You are an expert SEO content writer for Psychic Source, a spiritual wellness and psychic reading website.
 
@@ -1575,6 +1615,12 @@ ABSOLUTE RULES - VIOLATION OF THESE WILL RESULT IN REJECTION:
    - Plan your article structure to hit this target precisely
    - If I ask for 1500 words, write 1500 words - not 800, not 2500
    - Count words carefully as you write
+
+3. EM DASH RULE: NEVER use em dashes (—) or en dashes (–) anywhere in the content. Replace with commas, periods, colons, or parentheses instead. This is non-negotiable.
+
+4. INTERNAL LINKS: Only use URLs that are explicitly provided to you. NEVER fabricate, invent, or guess any URLs. If no URLs are provided, do not include any internal links.
+
+5. LINK ATTRIBUTES: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to any links. Links should be plain <a href="..."> tags with no rel or target attributes.
 ${styleInstructions}${audienceInstructions}`;
 
       const userPrompt = `Write a comprehensive SEO-optimized article about "${targetKeyword}".
