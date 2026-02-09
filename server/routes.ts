@@ -129,7 +129,7 @@ function enforceImageSpacing(content: string, minGap: number = 3): string {
     if (!hasImage[i]) continue;
     
     const gap = i - lastImageIdx;
-    if (lastImageIdx >= 0 && gap < minGap) {
+    if (lastImageIdx >= 0 && gap <= minGap) {
       // This image is too close — extract the img tag and mark for relocation
       const imgMatch = segments[i].match(/<img\s[^>]*\/?>/i);
       if (imgMatch) {
@@ -154,14 +154,14 @@ function enforceImageSpacing(content: string, minGap: number = 3): string {
       if (/<img\s/i.test(segments[i])) prevImageIdx = i;
     }
     
-    // Move forward until we have enough gap
-    insertAfter = Math.max(insertAfter, prevImageIdx + minGap);
+    // Move forward until we have enough gap (minGap + 1 because the image segment itself counts)
+    insertAfter = Math.max(insertAfter, prevImageIdx + minGap + 1);
     
     // Also check if there's an image right after where we want to insert
     // and push further if needed
-    for (let i = insertAfter + 1; i < Math.min(insertAfter + minGap, segments.length); i++) {
+    for (let i = insertAfter + 1; i < Math.min(insertAfter + minGap + 1, segments.length); i++) {
       if (/<img\s/i.test(segments[i])) {
-        insertAfter = i + minGap;
+        insertAfter = i + minGap + 1;
         break;
       }
     }
