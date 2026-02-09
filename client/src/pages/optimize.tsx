@@ -567,20 +567,34 @@ export default function Optimize() {
     }
   };
 
-  const handleInsertImageIntoContent = () => {
+  const handleInsertImageIntoContent = async () => {
     if (!generatedImageUrl || !rewrittenContent) return;
     
-    const imageHtml = `<figure class="my-4"><img src="${generatedImageUrl}" alt="${imagePrompt}" class="w-full rounded-lg" /><figcaption class="text-center text-sm text-gray-500 mt-2">${imagePrompt}</figcaption></figure>`;
-    
-    // Insert at the end of the content (user can move it in editor)
-    const updatedContent = rewrittenContent + imageHtml;
-    setRewrittenContent(updatedContent);
-    setGeneratedImageUrl(null);
-    setImagePrompt("");
-    toast({
-      title: "Image Inserted",
-      description: "The image has been added to your content. You can move it to the desired location in the editor.",
-    });
+    try {
+      const response = await apiRequest("POST", "/api/images/find-placement", {
+        content: rewrittenContent,
+        imageUrl: generatedImageUrl,
+        imagePrompt: imagePrompt || "Article image",
+        imageIndex: 0,
+      });
+
+      const data = await response.json();
+      
+      if (data.updatedContent) {
+        setRewrittenContent(data.updatedContent);
+        setGeneratedImageUrl(null);
+        setImagePrompt("");
+        toast({
+          title: "Image Inserted",
+          description: "The image has been placed at the best location with varied styling.",
+        });
+      } else {
+        toast({ title: "Could not find suitable placement", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Insert image error:", error);
+      toast({ title: "Failed to insert image", variant: "destructive" });
+    }
   };
 
   const loadSavedAnalysis = (analysis: SavedAnalysis) => {
