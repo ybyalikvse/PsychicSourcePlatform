@@ -3635,7 +3635,8 @@ Be extremely specific and actionable. Reference specific competitor content when
 ${content}
 
 === YOUR TASK ===
-Apply the instructions above to modify the page content. Return ONLY the modified HTML content, no explanations.`;
+Apply the instructions above to modify the page content. Return ONLY the modified HTML content, no explanations.
+IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to internal links. Internal links should be plain <a href="..."> tags with no rel or target attributes.`;
         } else {
           rewritePrompt = customPromptText;
         }
@@ -3698,6 +3699,10 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
       // Clean up multiple consecutive newlines/spaces
       rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
+      // Remove rel="noopener noreferrer nofollow" and target="_blank" from internal links
+      rewrittenContent = rewrittenContent.replace(/\s*rel="[^"]*nofollow[^"]*"/g, '');
+      rewrittenContent = rewrittenContent.replace(/\s*rel="noopener noreferrer"/g, '');
+      rewrittenContent = rewrittenContent.replace(/\s*target="_blank"/g, '');
       
       rewrittenContent = rewrittenContent.trim();
 
@@ -3782,7 +3787,8 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
 ${content}
 
 === YOUR TASK ===
-Apply the instructions above to modify the page content. Return ONLY the modified HTML content, no explanations.`;
+Apply the instructions above to modify the page content. Return ONLY the modified HTML content, no explanations.
+IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to internal links. Internal links should be plain <a href="..."> tags with no rel or target attributes.`;
       }
 
       console.log("[Direct Apply] Processed prompt length:", processedPrompt.length, "chars");
@@ -3818,6 +3824,10 @@ Apply the instructions above to modify the page content. Return ONLY the modifie
       rewrittenContent = rewrittenContent.replace(/>\s*\d+\.\s*</g, '><');
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
       rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
+      // Remove rel="noopener noreferrer nofollow" and target="_blank" from internal links
+      rewrittenContent = rewrittenContent.replace(/\s*rel="[^"]*nofollow[^"]*"/g, '');
+      rewrittenContent = rewrittenContent.replace(/\s*rel="noopener noreferrer"/g, '');
+      rewrittenContent = rewrittenContent.replace(/\s*target="_blank"/g, '');
       
       rewrittenContent = rewrittenContent.trim();
 
