@@ -6,8 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -17,11 +15,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Wand2, 
   Plus, 
@@ -32,12 +31,13 @@ import {
   Loader2, 
   FileText,
   Copy,
-  ChevronDown,
-  ChevronUp,
   Pause,
-  RotateCcw,
   Save,
-  Pencil
+  Pencil,
+  Eye,
+  Settings2,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -101,6 +101,50 @@ function parseKeywordsInput(input: string): { keywords: string[]; sections: stri
   return { keywords: uniqueKeywords, sections: uniqueSections };
 }
 
+function StatusBadge({ status, error }: { status: ArticleQueueItem["status"]; error?: string }) {
+  switch (status) {
+    case "pending":
+      return <Badge variant="secondary">Pending</Badge>;
+    case "generating":
+      return (
+        <Badge variant="default" className="bg-blue-600">
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          Generating
+        </Badge>
+      );
+    case "generating-meta":
+      return (
+        <Badge variant="default" className="bg-purple-600">
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          Meta Tags
+        </Badge>
+      );
+    case "saving":
+      return (
+        <Badge variant="default" className="bg-amber-600">
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          Saving
+        </Badge>
+      );
+    case "completed":
+      return (
+        <Badge variant="default" className="bg-green-600">
+          <Check className="h-3 w-3 mr-1" />
+          Complete
+        </Badge>
+      );
+    case "error":
+      return (
+        <Badge variant="destructive" title={error}>
+          <X className="h-3 w-3 mr-1" />
+          Error
+        </Badge>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function BulkCreate() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -120,6 +164,8 @@ export default function BulkCreate() {
   const [results, setResults] = useState<BulkResult[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [previewResult, setPreviewResult] = useState<BulkResult | null>(null);
   
   const abortControllerRef = useRef<AbortController | null>(null);
   const shouldStopRef = useRef(false);
@@ -165,6 +211,19 @@ export default function BulkCreate() {
     setResults([]);
     setShowResults(false);
   }, [isProcessing, toast]);
+
+  const moveItem = useCallback((id: string, direction: "up" | "down") => {
+    setArticleQueue(prev => {
+      const idx = prev.findIndex(item => item.id === id);
+      if (idx === -1) return prev;
+      if (direction === "up" && idx === 0) return prev;
+      if (direction === "down" && idx === prev.length - 1) return prev;
+      const next = [...prev];
+      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return next;
+    });
+  }, []);
 
   const processQueue = useCallback(async () => {
     if (articleQueue.length === 0) {
@@ -293,7 +352,6 @@ export default function BulkCreate() {
           } : a
         ));
 
-        // Auto-save article as draft
         const slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
         const wordCountNum = fullContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
         
@@ -364,7 +422,6 @@ export default function BulkCreate() {
     setIsProcessing(false);
     setShowResults(true);
     
-    // Invalidate articles query so they appear in content list
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
     queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
     
@@ -418,6 +475,8 @@ export default function BulkCreate() {
   const errorCount = articleQueue.filter(a => a.status === "error").length;
   const pendingCount = articleQueue.filter(a => a.status === "pending").length;
 
+  const selectedStyle = writingStyles.find(s => s.id === selectedStyleId);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -426,34 +485,40 @@ export default function BulkCreate() {
           <p className="text-muted-foreground">Generate multiple articles with AI and auto-generate meta tags</p>
         </div>
         
-        {articleQueue.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary" data-testid="badge-pending-count">
-              {pendingCount} Pending
-            </Badge>
-            <Badge variant="default" className="bg-green-600" data-testid="badge-completed-count">
-              {completedCount} Completed
-            </Badge>
-            {errorCount > 0 && (
-              <Badge variant="destructive" data-testid="badge-error-count">
-                {errorCount} Errors
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowSettings(!showSettings)}
+            data-testid="button-toggle-settings"
+          >
+            <Settings2 className="h-4 w-4 mr-2" />
+            Settings
+            {selectedStyle && <Badge variant="secondary" className="ml-2">{selectedStyle.name}</Badge>}
+          </Button>
+          
+          {articleQueue.length > 0 && (
+            <>
+              <Badge variant="secondary" data-testid="badge-pending-count">
+                {pendingCount} Pending
               </Badge>
-            )}
-          </div>
-        )}
+              <Badge variant="default" className="bg-green-600" data-testid="badge-completed-count">
+                {completedCount} Done
+              </Badge>
+              {errorCount > 0 && (
+                <Badge variant="destructive" data-testid="badge-error-count">
+                  {errorCount} Errors
+                </Badge>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-1 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wand2 className="h-5 w-5" />
-                Generation Settings
-              </CardTitle>
-              <CardDescription>Configure settings for all articles</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      {showSettings && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="writing-style">Writing Style</Label>
                 <Select value={selectedStyleId} onValueChange={setSelectedStyleId}>
@@ -495,372 +560,354 @@ export default function BulkCreate() {
                   </SelectContent>
                 </Select>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Plus className="h-5 w-5" />
-                Add Article
-              </CardTitle>
-              <CardDescription>Add articles to the generation queue</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="target-keyword">Target Keyword *</Label>
-                <Input
-                  id="target-keyword"
-                  value={newKeyword}
-                  onChange={(e) => setNewKeyword(e.target.value)}
-                  placeholder="e.g., 747 angel number meaning"
-                  data-testid="input-target-keyword"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      addToQueue();
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="recommended-keywords">Related Keywords (optional)</Label>
-                <Textarea
-                  id="recommended-keywords"
-                  value={newRecommendedKeywords}
-                  onChange={(e) => setNewRecommendedKeywords(e.target.value)}
-                  placeholder="Paste keywords, bullet lists, or structured content..."
-                  className="min-h-[100px]"
-                  data-testid="input-recommended-keywords"
-                />
-              </div>
-
-              <Button 
-                onClick={addToQueue} 
-                className="w-full"
-                disabled={!newKeyword.trim()}
-                data-testid="button-add-to-queue"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add to Queue
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Article Queue ({articleQueue.length})
-                  </CardTitle>
-                  <CardDescription>Articles waiting to be generated</CardDescription>
-                </div>
-                
-                <div className="flex items-center gap-2 flex-wrap">
-                  {!isProcessing ? (
-                    <>
-                      <Button
-                        onClick={processQueue}
-                        disabled={articleQueue.length === 0 || pendingCount === 0}
-                        data-testid="button-start-generation"
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        Generate All
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={clearQueue}
-                        disabled={articleQueue.length === 0}
-                        data-testid="button-clear-queue"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Clear
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="destructive"
-                      onClick={stopProcessing}
-                      data-testid="button-stop-generation"
-                    >
-                      <Pause className="h-4 w-4 mr-2" />
-                      Stop
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isProcessing && (
-                <div className="mb-4 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Overall Progress</span>
-                    <span className="font-medium">{Math.round(overallProgress)}%</span>
-                  </div>
-                  <Progress value={overallProgress} className="h-2" />
-                </div>
-              )}
-
-              {articleQueue.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No articles in queue</p>
-                  <p className="text-sm">Add articles using the form on the left</p>
-                </div>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Article Queue ({articleQueue.length})
+            </CardTitle>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              {!isProcessing ? (
+                <>
+                  <Button
+                    onClick={processQueue}
+                    disabled={articleQueue.length === 0 || pendingCount === 0}
+                    data-testid="button-start-generation"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Generate All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={clearQueue}
+                    disabled={articleQueue.length === 0}
+                    data-testid="button-clear-queue"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear
+                  </Button>
+                </>
               ) : (
-                <ScrollArea className="h-[400px] pr-4">
-                  <div className="space-y-3">
-                    {articleQueue.map((item, index) => (
-                      <div
-                        key={item.id}
-                        className="flex items-start gap-3 p-3 rounded-lg border bg-card"
-                        data-testid={`queue-item-${index}`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium truncate">{item.targetKeyword}</span>
-                            {item.status === "pending" && (
-                              <Badge variant="secondary">Pending</Badge>
-                            )}
-                            {item.status === "generating" && (
-                              <Badge variant="default" className="bg-blue-600">
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                Generating...
-                              </Badge>
-                            )}
-                            {item.status === "generating-meta" && (
-                              <Badge variant="default" className="bg-purple-600">
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                Meta Tags...
-                              </Badge>
-                            )}
-                            {item.status === "saving" && (
-                              <Badge variant="default" className="bg-amber-600">
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                Saving...
-                              </Badge>
-                            )}
-                            {item.status === "completed" && (
-                              <Badge variant="default" className="bg-green-600">
-                                <Check className="h-3 w-3 mr-1" />
-                                Complete
-                              </Badge>
-                            )}
-                            {item.status === "error" && (
-                              <Badge variant="destructive">
-                                <X className="h-3 w-3 mr-1" />
-                                Error
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          {item.recommendedKeywords && (
-                            <p className="text-sm text-muted-foreground mt-1 truncate">
-                              Keywords: {item.recommendedKeywords.substring(0, 50)}...
-                            </p>
-                          )}
-                          
-                          {item.progress !== undefined && item.progress > 0 && item.progress < 100 && (
-                            <Progress value={item.progress} className="h-1 mt-2" />
-                          )}
-                          
-                          {item.error && (
-                            <p className="text-sm text-destructive mt-1">{item.error}</p>
-                          )}
-                        </div>
-                        
-                        {item.status === "pending" && !isProcessing && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removeFromQueue(item.id)}
-                            data-testid={`button-remove-${index}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
+                <Button
+                  variant="destructive"
+                  onClick={stopProcessing}
+                  data-testid="button-stop-generation"
+                >
+                  <Pause className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isProcessing && (
+            <div className="mb-4 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Overall Progress</span>
+                <span className="font-medium">{Math.round(overallProgress)}%</span>
+              </div>
+              <Progress value={overallProgress} className="h-2" />
+            </div>
+          )}
 
-          {showResults && results.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Check className="h-5 w-5 text-green-600" />
-                  Generated Results ({results.length})
-                </CardTitle>
-                <CardDescription>Review and save your generated articles</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Accordion type="multiple" className="space-y-3">
-                  {results.map((result, index) => (
-                    <AccordionItem 
-                      key={result.id} 
-                      value={result.id}
-                      className="border rounded-lg px-4"
+          <div className="border rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left font-medium p-3 w-10">#</th>
+                    <th className="text-left font-medium p-3">Target Keyword</th>
+                    <th className="text-left font-medium p-3 hidden md:table-cell">Related Keywords</th>
+                    <th className="text-left font-medium p-3 w-28">Status</th>
+                    <th className="text-left font-medium p-3 w-24 hidden sm:table-cell">Progress</th>
+                    <th className="text-right font-medium p-3 w-24">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {articleQueue.map((item, index) => (
+                    <tr
+                      key={item.id}
+                      className="border-b last:border-b-0"
+                      data-testid={`queue-item-${index}`}
                     >
-                      <AccordionTrigger className="hover:no-underline" data-testid={`result-toggle-${index}`}>
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline">{index + 1}</Badge>
-                          <span className="font-medium text-left">{result.targetKeyword}</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="space-y-4 pt-4">
-                        <div className="space-y-3">
-                          <div>
-                            <Label className="text-sm font-medium">Meta Title Options</Label>
-                            <div className="mt-2 space-y-2">
-                              {result.metaTitles.map((title, i) => (
-                                <div
-                                  key={i}
-                                  className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
-                                    result.selectedTitle === title 
-                                      ? "border-primary bg-primary/5" 
-                                      : "hover-elevate"
-                                  }`}
-                                  onClick={() => updateResultMeta(result.id, "selectedTitle", title)}
-                                  data-testid={`meta-title-option-${index}-${i}`}
-                                >
-                                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                                    result.selectedTitle === title ? "border-primary" : "border-muted-foreground"
-                                  }`}>
-                                    {result.selectedTitle === title && (
-                                      <div className="w-2 h-2 rounded-full bg-primary" />
-                                    )}
-                                  </div>
-                                  <span className="flex-1 text-sm">{title}</span>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-6 w-6"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      copyToClipboard(title);
-                                    }}
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
+                      <td className="p-3 text-muted-foreground">{index + 1}</td>
+                      <td className="p-3">
+                        <div className="font-medium">{item.targetKeyword}</div>
+                        {item.error && (
+                          <p className="text-xs text-destructive mt-1">{item.error}</p>
+                        )}
+                      </td>
+                      <td className="p-3 hidden md:table-cell">
+                        <span className="text-muted-foreground text-xs truncate block max-w-[200px]">
+                          {item.recommendedKeywords 
+                            ? item.recommendedKeywords.substring(0, 60) + (item.recommendedKeywords.length > 60 ? "..." : "")
+                            : "-"}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <StatusBadge status={item.status} error={item.error} />
+                      </td>
+                      <td className="p-3 hidden sm:table-cell">
+                        {item.progress !== undefined && item.progress > 0 && item.progress < 100 ? (
+                          <div className="flex items-center gap-2">
+                            <Progress value={item.progress} className="h-1.5 flex-1" />
+                            <span className="text-xs text-muted-foreground w-8">{Math.round(item.progress)}%</span>
                           </div>
-
-                          <div>
-                            <Label className="text-sm font-medium">Meta Description Options</Label>
-                            <div className="mt-2 space-y-2">
-                              {result.metaDescriptions.map((desc, i) => (
-                                <div
-                                  key={i}
-                                  className={`flex items-start gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
-                                    result.selectedDescription === desc 
-                                      ? "border-primary bg-primary/5" 
-                                      : "hover-elevate"
-                                  }`}
-                                  onClick={() => updateResultMeta(result.id, "selectedDescription", desc)}
-                                  data-testid={`meta-desc-option-${index}-${i}`}
-                                >
-                                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                                    result.selectedDescription === desc ? "border-primary" : "border-muted-foreground"
-                                  }`}>
-                                    {result.selectedDescription === desc && (
-                                      <div className="w-2 h-2 rounded-full bg-primary" />
-                                    )}
-                                  </div>
-                                  <span className="flex-1 text-sm">{desc}</span>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-6 w-6"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      copyToClipboard(desc);
-                                    }}
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <Label className="text-sm font-medium">Article Content</Label>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => copyToClipboard(result.content)}
-                              data-testid={`button-copy-content-inline-${index}`}
-                            >
-                              <Copy className="h-3 w-3 mr-1" />
-                              Copy
-                            </Button>
-                          </div>
-                          <ScrollArea className="h-[300px] w-full rounded-md border p-4">
-                            <div 
-                              className="prose prose-sm dark:prose-invert max-w-none"
-                              dangerouslySetInnerHTML={{ __html: result.content }}
-                              data-testid={`content-preview-${index}`}
-                            />
-                          </ScrollArea>
-                        </div>
-
-                        <Separator />
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {result.savedArticleId && (
+                        ) : item.status === "completed" ? (
+                          <span className="text-xs text-muted-foreground">100%</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {item.status === "pending" && !isProcessing && (
                             <>
                               <Button
-                                onClick={() => setLocation(`/edit/${result.savedArticleId}`)}
-                                data-testid={`button-edit-article-${index}`}
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => moveItem(item.id, "up")}
+                                disabled={index === 0}
+                                data-testid={`button-move-up-${index}`}
                               >
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Edit Article
+                                <ChevronUp className="h-4 w-4" />
                               </Button>
                               <Button
-                                variant="secondary"
-                                onClick={() => handleUpdateMeta(result)}
-                                disabled={isSaving}
-                                data-testid={`button-update-meta-${index}`}
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => moveItem(item.id, "down")}
+                                disabled={index === articleQueue.length - 1}
+                                data-testid={`button-move-down-${index}`}
                               >
-                                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                <Save className="h-4 w-4 mr-2" />
-                                Update Meta
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => removeFromQueue(item.id)}
+                                data-testid={`button-remove-${index}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </>
                           )}
-                          <Button
-                            variant="outline"
-                            onClick={() => copyToClipboard(result.content)}
-                            data-testid={`button-copy-content-${index}`}
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy Content
-                          </Button>
+                          {item.status === "completed" && item.savedArticleId && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setLocation(`/edit/${item.savedArticleId}`)}
+                              data-testid={`button-edit-${index}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
-                      </AccordionContent>
-                    </AccordionItem>
+                      </td>
+                    </tr>
                   ))}
-                </Accordion>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+                  <tr className="bg-muted/30">
+                    <td className="p-3 text-muted-foreground">
+                      <Plus className="h-4 w-4" />
+                    </td>
+                    <td className="p-3">
+                      <Input
+                        value={newKeyword}
+                        onChange={(e) => setNewKeyword(e.target.value)}
+                        placeholder="Enter target keyword..."
+                        className="h-8"
+                        data-testid="input-target-keyword"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            addToQueue();
+                          }
+                        }}
+                      />
+                    </td>
+                    <td className="p-3 hidden md:table-cell">
+                      <Input
+                        value={newRecommendedKeywords}
+                        onChange={(e) => setNewRecommendedKeywords(e.target.value)}
+                        placeholder="Related keywords (optional)..."
+                        className="h-8"
+                        data-testid="input-recommended-keywords"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            addToQueue();
+                          }
+                        }}
+                      />
+                    </td>
+                    <td className="p-3" colSpan={2}>
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button
+                        size="sm"
+                        onClick={addToQueue}
+                        disabled={!newKeyword.trim()}
+                        data-testid="button-add-to-queue"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
+          {articleQueue.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+              <p className="text-sm">Type a keyword in the row above and press Enter or click Add</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {showResults && results.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-600" />
+              Generated Results ({results.length})
+            </CardTitle>
+            <CardDescription>Review meta tags and edit your generated articles</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-md overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left font-medium p-3 w-10">#</th>
+                      <th className="text-left font-medium p-3">Keyword</th>
+                      <th className="text-left font-medium p-3">Meta Title</th>
+                      <th className="text-left font-medium p-3 hidden lg:table-cell">Meta Description</th>
+                      <th className="text-right font-medium p-3 w-32">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map((result, index) => (
+                      <tr
+                        key={result.id}
+                        className="border-b last:border-b-0"
+                        data-testid={`result-row-${index}`}
+                      >
+                        <td className="p-3 text-muted-foreground">{index + 1}</td>
+                        <td className="p-3">
+                          <span className="font-medium">{result.targetKeyword}</span>
+                        </td>
+                        <td className="p-3">
+                          <Select
+                            value={result.selectedTitle}
+                            onValueChange={(v) => updateResultMeta(result.id, "selectedTitle", v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs" data-testid={`select-meta-title-${index}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {result.metaTitles.map((title, i) => (
+                                <SelectItem key={i} value={title}>
+                                  {title}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-3 hidden lg:table-cell">
+                          <Select
+                            value={result.selectedDescription}
+                            onValueChange={(v) => updateResultMeta(result.id, "selectedDescription", v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs" data-testid={`select-meta-desc-${index}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {result.metaDescriptions.map((desc, i) => (
+                                <SelectItem key={i} value={desc}>
+                                  {desc}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setPreviewResult(result)}
+                              data-testid={`button-preview-${index}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => copyToClipboard(result.content)}
+                              data-testid={`button-copy-content-${index}`}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            {result.savedArticleId && (
+                              <>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => setLocation(`/edit/${result.savedArticleId}`)}
+                                  data-testid={`button-edit-article-${index}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleUpdateMeta(result)}
+                                  disabled={isSaving}
+                                  data-testid={`button-update-meta-${index}`}
+                                >
+                                  <Save className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={!!previewResult} onOpenChange={() => setPreviewResult(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{previewResult?.targetKeyword}</DialogTitle>
+          </DialogHeader>
+          {previewResult && (
+            <ScrollArea className="h-[60vh]">
+              <div 
+                className="prose prose-sm dark:prose-invert max-w-none pr-4"
+                dangerouslySetInnerHTML={{ __html: previewResult.content }}
+              />
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
