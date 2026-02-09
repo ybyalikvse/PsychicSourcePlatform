@@ -2287,38 +2287,38 @@ Example response:
       const altText = placement.altText || "Article image";
       const caption = placement.caption || "";
 
-      // Create the image HTML with varied sizes and positions
-      // Size classes: full = w-full, large = max-w-3xl, medium = max-w-md, small = max-w-xs
-      // Alignment: center = mx-auto, left = float-left mr-6 mb-4, right = float-right ml-6 mb-4
-      const sizeClasses: Record<string, string> = {
-        full: "w-full",
-        large: "max-w-3xl w-full",
-        medium: "max-w-md w-full",
-        small: "max-w-xs w-full",
-      };
-      
-      const alignClasses: Record<string, string> = {
-        center: "mx-auto",
-        left: "float-left mr-6 mb-4",
-        right: "float-right ml-6 mb-4",
+      // Create the image HTML with varied sizes and positions using inline styles
+      // so it works on any site regardless of CSS framework
+      const sizeStyles: Record<string, string> = {
+        full: "width: 100%;",
+        large: "max-width: 768px; width: 100%;",
+        medium: "max-width: 448px; width: 100%;",
+        small: "max-width: 320px; width: 100%;",
       };
 
-      const sizeClass = sizeClasses[currentStyle.size] || sizeClasses.full;
-      const alignClass = alignClasses[currentStyle.align] || alignClasses.center;
+      const sizeStyle = sizeStyles[currentStyle.size] || sizeStyles.full;
       
       let imageHtml: string;
-      // All images use figure with overflow-auto to handle floats properly
       if (currentStyle.align === "center") {
-        // Centered images - full block, no float issues
+        const figureStyle = `margin: 1.5rem auto; text-align: center; ${sizeStyle}`;
+        const imgStyle = `${sizeStyle} border-radius: 6px; height: auto; display: block; margin: 0 auto;`;
         imageHtml = caption
-          ? `<figure class="my-6"><img src="${imageUrl}" alt="${altText}" class="${sizeClass} ${alignClass} rounded-md" /><figcaption class="text-center text-sm text-muted-foreground mt-2">${caption}</figcaption></figure>`
-          : `<figure class="my-6"><img src="${imageUrl}" alt="${altText}" class="${sizeClass} ${alignClass} rounded-md" /></figure>`;
-      } else {
-        // Floated images - use figure with overflow-auto and clearfix
+          ? `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /><figcaption style="text-align: center; font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">${caption}</figcaption></figure>`
+          : `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
+      } else if (currentStyle.align === "left") {
+        const figureStyle = `float: left; margin: 0.5rem 1.5rem 1rem 0; ${sizeStyle}`;
+        const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
         const figCaption = caption 
-          ? `<figcaption class="text-sm text-muted-foreground mt-1">${caption}</figcaption>` 
+          ? `<figcaption style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">${caption}</figcaption>` 
           : '';
-        imageHtml = `<figure class="my-4 ${sizeClass} ${alignClass} overflow-auto"><img src="${imageUrl}" alt="${altText}" class="w-full rounded-md" />${figCaption}</figure><div class="clear-both"></div>`;
+        imageHtml = `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />${figCaption}</figure>`;
+      } else {
+        const figureStyle = `float: right; margin: 0.5rem 0 1rem 1.5rem; ${sizeStyle}`;
+        const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
+        const figCaption = caption 
+          ? `<figcaption style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">${caption}</figcaption>` 
+          : '';
+        imageHtml = `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />${figCaption}</figure>`;
       }
 
       // Try to find and insert after the matching paragraph
