@@ -67,8 +67,8 @@ function applyImageStyles(content: string): string {
       continue;
     }
     
-    // Check if already has our sizing styles
-    if (imgTag.includes('max-width:') && (imgTag.includes('float:') || imgTag.includes('margin: 2rem auto'))) {
+    // Check if already has our latest !important sizing styles
+    if (imgTag.includes('!important') && imgTag.includes('max-width:')) {
       result += imgTag;
       totalImageIndex++;
       continue;
@@ -79,11 +79,11 @@ function applyImageStyles(content: string): string {
     
     let imgStyle: string;
     if (currentStyle.align === "center") {
-      imgStyle = `display: block; margin: 2rem auto; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+      imgStyle = `display: block !important; float: none !important; margin: 2rem auto !important; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
     } else if (currentStyle.align === "left") {
-      imgStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+      imgStyle = `display: inline !important; float: left !important; margin: 0.5rem 1.5rem 1.5rem 0 !important; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
     } else {
-      imgStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+      imgStyle = `display: inline !important; float: right !important; margin: 0.5rem 0 1.5rem 1.5rem !important; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
     }
     
     result += `<img src="${src}" alt="${alt}" style="${imgStyle}" />`;
@@ -2517,13 +2517,13 @@ Example response:
       
       let imageHtml: string;
       if (currentStyle.align === "center") {
-        const imgStyle = `display: block; margin: 2rem auto; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+        const imgStyle = `display: block !important; float: none !important; margin: 2rem auto !important; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
         imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
       } else if (currentStyle.align === "left") {
-        const imgStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+        const imgStyle = `display: inline !important; float: left !important; margin: 0.5rem 1.5rem 1.5rem 0 !important; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
         imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
       } else {
-        const imgStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+        const imgStyle = `display: inline !important; float: right !important; margin: 0.5rem 0 1.5rem 1.5rem !important; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
         imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
       }
 
