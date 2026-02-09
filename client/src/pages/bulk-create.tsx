@@ -3,8 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -22,7 +20,6 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
-  Wand2, 
   Plus, 
   Trash2, 
   Play, 
@@ -35,7 +32,6 @@ import {
   Save,
   Pencil,
   Eye,
-  Settings2,
   ChevronUp,
   ChevronDown
 } from "lucide-react";
@@ -48,6 +44,9 @@ interface ArticleQueueItem {
   id: string;
   targetKeyword: string;
   recommendedKeywords: string;
+  styleId: string;
+  wordCount: string;
+  provider: "anthropic" | "openai";
   status: "pending" | "generating" | "generating-meta" | "saving" | "completed" | "error";
   content?: string;
   metaTitles?: string[];
@@ -149,13 +148,16 @@ export default function BulkCreate() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
-  const [selectedStyleId, setSelectedStyleId] = useState<string>("default");
-  const [wordCount, setWordCount] = useState("1500");
-  const [contentProvider, setContentProvider] = useState<"anthropic" | "openai">("anthropic");
+  const [defaultStyleId, setDefaultStyleId] = useState<string>("default");
+  const [defaultWordCount, setDefaultWordCount] = useState("1500");
+  const [defaultProvider, setDefaultProvider] = useState<"anthropic" | "openai">("anthropic");
   
   const [articleQueue, setArticleQueue] = useState<ArticleQueueItem[]>([]);
   const [newKeyword, setNewKeyword] = useState("");
   const [newRecommendedKeywords, setNewRecommendedKeywords] = useState("");
+  const [newStyleId, setNewStyleId] = useState<string>("default");
+  const [newWordCount, setNewWordCount] = useState("1500");
+  const [newProvider, setNewProvider] = useState<"anthropic" | "openai">("anthropic");
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -164,7 +166,6 @@ export default function BulkCreate() {
   const [results, setResults] = useState<BulkResult[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [previewResult, setPreviewResult] = useState<BulkResult | null>(null);
   
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -188,6 +189,9 @@ export default function BulkCreate() {
       id: crypto.randomUUID(),
       targetKeyword: newKeyword.trim(),
       recommendedKeywords: newRecommendedKeywords.trim(),
+      styleId: newStyleId,
+      wordCount: newWordCount,
+      provider: newProvider,
       status: "pending",
     };
     
@@ -196,7 +200,13 @@ export default function BulkCreate() {
     setNewRecommendedKeywords("");
     
     toast({ title: "Article added to queue" });
-  }, [newKeyword, newRecommendedKeywords, toast]);
+  }, [newKeyword, newRecommendedKeywords, newStyleId, newWordCount, newProvider, toast]);
+
+  const updateQueueItem = useCallback((id: string, field: keyof ArticleQueueItem, value: string) => {
+    setArticleQueue(prev => prev.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  }, []);
 
   const removeFromQueue = useCallback((id: string) => {
     setArticleQueue(prev => prev.filter(item => item.id !== id));
@@ -224,6 +234,18 @@ export default function BulkCreate() {
       return next;
     });
   }, []);
+
+  const applyDefaultsToAll = useCallback(() => {
+    setArticleQueue(prev => prev.map(item => 
+      item.status === "pending" ? {
+        ...item,
+        styleId: defaultStyleId,
+        wordCount: defaultWordCount,
+        provider: defaultProvider,
+      } : item
+    ));
+    toast({ title: "Defaults applied to all pending articles" });
+  }, [defaultStyleId, defaultWordCount, defaultProvider, toast]);
 
   const processQueue = useCallback(async () => {
     if (articleQueue.length === 0) {
@@ -255,6 +277,9 @@ export default function BulkCreate() {
       const itemId = item.id;
       const itemKeyword = item.targetKeyword;
       const itemRecommendedKeywords = item.recommendedKeywords;
+      const itemWordCount = parseInt(item.wordCount) || 1500;
+      const itemStyleId = item.styleId;
+      const itemProvider = item.provider;
       
       setCurrentIndex(i);
       setOverallProgress((i / totalItems) * 100);
@@ -271,11 +296,11 @@ export default function BulkCreate() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             targetKeyword: itemKeyword,
-            wordCount: parseInt(wordCount) || 1500,
+            wordCount: itemWordCount,
             recommendedKeywords: parsed.keywords,
             suggestedSections: parsed.sections,
-            styleId: selectedStyleId !== "default" ? selectedStyleId : undefined,
-            provider: contentProvider,
+            styleId: itemStyleId !== "default" ? itemStyleId : undefined,
+            provider: itemProvider,
           }),
           signal: abortControllerRef.current?.signal,
         });
@@ -304,8 +329,7 @@ export default function BulkCreate() {
                 if (data.content) {
                   fullContent += data.content;
                   const wordsSoFar = fullContent.split(/\s+/).filter(Boolean).length;
-                  const targetWords = parseInt(wordCount) || 1500;
-                  const progress = Math.min(90, (wordsSoFar / targetWords) * 100);
+                  const progress = Math.min(90, (wordsSoFar / itemWordCount) * 100);
                   
                   setArticleQueue(prev => prev.map(a => 
                     a.id === itemId ? { ...a, progress } : a
@@ -429,7 +453,7 @@ export default function BulkCreate() {
       title: "Bulk generation complete", 
       description: `Generated and saved ${completedCount} article${completedCount !== 1 ? 's' : ''} as drafts` 
     });
-  }, [articleQueue, wordCount, selectedStyleId, contentProvider, toast]);
+  }, [articleQueue, toast]);
 
   const stopProcessing = useCallback(() => {
     shouldStopRef.current = true;
@@ -475,28 +499,26 @@ export default function BulkCreate() {
   const errorCount = articleQueue.filter(a => a.status === "error").length;
   const pendingCount = articleQueue.filter(a => a.status === "pending").length;
 
-  const selectedStyle = writingStyles.find(s => s.id === selectedStyleId);
+  const styleSelectOptions = (
+    <>
+      <SelectItem value="default">Default</SelectItem>
+      {writingStyles.map((style) => (
+        <SelectItem key={style.id} value={style.id}>
+          {style.name}
+        </SelectItem>
+      ))}
+    </>
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Bulk Content Creation</h1>
-          <p className="text-muted-foreground">Generate multiple articles with AI and auto-generate meta tags</p>
+          <p className="text-muted-foreground">Generate multiple articles - each with its own settings</p>
         </div>
         
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSettings(!showSettings)}
-            data-testid="button-toggle-settings"
-          >
-            <Settings2 className="h-4 w-4 mr-2" />
-            Settings
-            {selectedStyle && <Badge variant="secondary" className="ml-2">{selectedStyle.name}</Badge>}
-          </Button>
-          
           {articleQueue.length > 0 && (
             <>
               <Badge variant="secondary" data-testid="badge-pending-count">
@@ -515,65 +537,28 @@ export default function BulkCreate() {
         </div>
       </div>
 
-      {showSettings && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="writing-style">Writing Style</Label>
-                <Select value={selectedStyleId} onValueChange={setSelectedStyleId}>
-                  <SelectTrigger id="writing-style" data-testid="select-writing-style">
-                    <SelectValue placeholder="Select style" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Default Style</SelectItem>
-                    {writingStyles.map((style) => (
-                      <SelectItem key={style.id} value={style.id}>
-                        {style.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="word-count">Word Count</Label>
-                <Input
-                  id="word-count"
-                  type="number"
-                  value={wordCount}
-                  onChange={(e) => setWordCount(e.target.value)}
-                  placeholder="1500"
-                  data-testid="input-word-count"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="content-provider">AI Provider</Label>
-                <Select value={contentProvider} onValueChange={(v: "anthropic" | "openai") => setContentProvider(v)}>
-                  <SelectTrigger id="content-provider" data-testid="select-content-provider">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="anthropic">Claude (Anthropic)</SelectItem>
-                    <SelectItem value="openai">GPT-4o (OpenAI)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Article Queue ({articleQueue.length})
-            </CardTitle>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Article Queue ({articleQueue.length})
+              </CardTitle>
+              <CardDescription>Each article has its own writing style, word count, and AI provider</CardDescription>
+            </div>
             
             <div className="flex items-center gap-2 flex-wrap">
+              {articleQueue.length > 0 && pendingCount > 0 && !isProcessing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={applyDefaultsToAll}
+                  data-testid="button-apply-defaults"
+                >
+                  Apply Defaults to All
+                </Button>
+              )}
               {!isProcessing ? (
                 <>
                   <Button
@@ -624,95 +609,168 @@ export default function BulkCreate() {
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left font-medium p-3 w-10">#</th>
-                    <th className="text-left font-medium p-3">Target Keyword</th>
-                    <th className="text-left font-medium p-3 hidden md:table-cell">Related Keywords</th>
+                    <th className="text-left font-medium p-3 min-w-[180px]">Target Keyword</th>
+                    <th className="text-left font-medium p-3 min-w-[140px] hidden md:table-cell">Related Keywords</th>
+                    <th className="text-left font-medium p-3 min-w-[130px]">Writing Style</th>
+                    <th className="text-left font-medium p-3 w-24">Words</th>
+                    <th className="text-left font-medium p-3 min-w-[120px]">AI Provider</th>
                     <th className="text-left font-medium p-3 w-28">Status</th>
-                    <th className="text-left font-medium p-3 w-24 hidden sm:table-cell">Progress</th>
+                    <th className="text-left font-medium p-3 w-20 hidden sm:table-cell">Progress</th>
                     <th className="text-right font-medium p-3 w-24">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {articleQueue.map((item, index) => (
-                    <tr
-                      key={item.id}
-                      className="border-b last:border-b-0"
-                      data-testid={`queue-item-${index}`}
-                    >
-                      <td className="p-3 text-muted-foreground">{index + 1}</td>
-                      <td className="p-3">
-                        <div className="font-medium">{item.targetKeyword}</div>
-                        {item.error && (
-                          <p className="text-xs text-destructive mt-1">{item.error}</p>
-                        )}
-                      </td>
-                      <td className="p-3 hidden md:table-cell">
-                        <span className="text-muted-foreground text-xs truncate block max-w-[200px]">
-                          {item.recommendedKeywords 
-                            ? item.recommendedKeywords.substring(0, 60) + (item.recommendedKeywords.length > 60 ? "..." : "")
-                            : "-"}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <StatusBadge status={item.status} error={item.error} />
-                      </td>
-                      <td className="p-3 hidden sm:table-cell">
-                        {item.progress !== undefined && item.progress > 0 && item.progress < 100 ? (
-                          <div className="flex items-center gap-2">
-                            <Progress value={item.progress} className="h-1.5 flex-1" />
-                            <span className="text-xs text-muted-foreground w-8">{Math.round(item.progress)}%</span>
+                  {articleQueue.map((item, index) => {
+                    const isPending = item.status === "pending" && !isProcessing;
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-b last:border-b-0"
+                        data-testid={`queue-item-${index}`}
+                      >
+                        <td className="p-3 text-muted-foreground">{index + 1}</td>
+                        <td className="p-3">
+                          {isPending ? (
+                            <Input
+                              value={item.targetKeyword}
+                              onChange={(e) => updateQueueItem(item.id, "targetKeyword", e.target.value)}
+                              className="h-8"
+                              data-testid={`input-keyword-${index}`}
+                            />
+                          ) : (
+                            <div>
+                              <span className="font-medium">{item.targetKeyword}</span>
+                              {item.error && (
+                                <p className="text-xs text-destructive mt-1">{item.error}</p>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 hidden md:table-cell">
+                          {isPending ? (
+                            <Input
+                              value={item.recommendedKeywords}
+                              onChange={(e) => updateQueueItem(item.id, "recommendedKeywords", e.target.value)}
+                              placeholder="Optional..."
+                              className="h-8"
+                              data-testid={`input-keywords-${index}`}
+                            />
+                          ) : (
+                            <span className="text-muted-foreground text-xs truncate block max-w-[160px]">
+                              {item.recommendedKeywords 
+                                ? item.recommendedKeywords.substring(0, 40) + (item.recommendedKeywords.length > 40 ? "..." : "")
+                                : "-"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {isPending ? (
+                            <Select value={item.styleId} onValueChange={(v) => updateQueueItem(item.id, "styleId", v)}>
+                              <SelectTrigger className="h-8 text-xs" data-testid={`select-style-${index}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {styleSelectOptions}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              {item.styleId === "default" ? "Default" : writingStyles.find(s => s.id === item.styleId)?.name || item.styleId}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {isPending ? (
+                            <Input
+                              type="number"
+                              value={item.wordCount}
+                              onChange={(e) => updateQueueItem(item.id, "wordCount", e.target.value)}
+                              className="h-8 w-20"
+                              data-testid={`input-wordcount-${index}`}
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">{item.wordCount}</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {isPending ? (
+                            <Select value={item.provider} onValueChange={(v) => updateQueueItem(item.id, "provider", v)}>
+                              <SelectTrigger className="h-8 text-xs" data-testid={`select-provider-${index}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="anthropic">Claude</SelectItem>
+                                <SelectItem value="openai">GPT-4o</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              {item.provider === "anthropic" ? "Claude" : "GPT-4o"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <StatusBadge status={item.status} error={item.error} />
+                        </td>
+                        <td className="p-3 hidden sm:table-cell">
+                          {item.progress !== undefined && item.progress > 0 && item.progress < 100 ? (
+                            <div className="flex items-center gap-1">
+                              <Progress value={item.progress} className="h-1.5 flex-1" />
+                              <span className="text-xs text-muted-foreground w-7">{Math.round(item.progress)}%</span>
+                            </div>
+                          ) : item.status === "completed" ? (
+                            <span className="text-xs text-muted-foreground">100%</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-0.5">
+                            {isPending && (
+                              <>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => moveItem(item.id, "up")}
+                                  disabled={index === 0}
+                                  data-testid={`button-move-up-${index}`}
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => moveItem(item.id, "down")}
+                                  disabled={index === articleQueue.length - 1}
+                                  data-testid={`button-move-down-${index}`}
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => removeFromQueue(item.id)}
+                                  data-testid={`button-remove-${index}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            {item.status === "completed" && item.savedArticleId && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => setLocation(`/edit/${item.savedArticleId}`)}
+                                data-testid={`button-edit-${index}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
-                        ) : item.status === "completed" ? (
-                          <span className="text-xs text-muted-foreground">100%</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {item.status === "pending" && !isProcessing && (
-                            <>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => moveItem(item.id, "up")}
-                                disabled={index === 0}
-                                data-testid={`button-move-up-${index}`}
-                              >
-                                <ChevronUp className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => moveItem(item.id, "down")}
-                                disabled={index === articleQueue.length - 1}
-                                data-testid={`button-move-down-${index}`}
-                              >
-                                <ChevronDown className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => removeFromQueue(item.id)}
-                                data-testid={`button-remove-${index}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                          {item.status === "completed" && item.savedArticleId && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => setLocation(`/edit/${item.savedArticleId}`)}
-                              data-testid={`button-edit-${index}`}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   <tr className="bg-muted/30">
                     <td className="p-3 text-muted-foreground">
                       <Plus className="h-4 w-4" />
@@ -736,7 +794,7 @@ export default function BulkCreate() {
                       <Input
                         value={newRecommendedKeywords}
                         onChange={(e) => setNewRecommendedKeywords(e.target.value)}
-                        placeholder="Related keywords (optional)..."
+                        placeholder="Related keywords..."
                         className="h-8"
                         data-testid="input-recommended-keywords"
                         onKeyDown={(e) => {
@@ -746,6 +804,36 @@ export default function BulkCreate() {
                           }
                         }}
                       />
+                    </td>
+                    <td className="p-3">
+                      <Select value={newStyleId} onValueChange={setNewStyleId}>
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-new-style">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {styleSelectOptions}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="p-3">
+                      <Input
+                        type="number"
+                        value={newWordCount}
+                        onChange={(e) => setNewWordCount(e.target.value)}
+                        className="h-8 w-20"
+                        data-testid="input-new-wordcount"
+                      />
+                    </td>
+                    <td className="p-3">
+                      <Select value={newProvider} onValueChange={(v: "anthropic" | "openai") => setNewProvider(v)}>
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-new-provider">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="anthropic">Claude</SelectItem>
+                          <SelectItem value="openai">GPT-4o</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="p-3" colSpan={2}>
                     </td>
@@ -769,7 +857,7 @@ export default function BulkCreate() {
           {articleQueue.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Type a keyword in the row above and press Enter or click Add</p>
+              <p className="text-sm">Type a keyword in the row above, choose your settings, and press Enter or click Add</p>
             </div>
           )}
         </CardContent>
