@@ -2263,15 +2263,16 @@ Make the first suggestion suitable as a featured/hero image. The rest should be 
       });
 
       // Determine image style variation based on index
-      // Cycle through: full-width center, medium left float, medium right float
+      // Cycle through 5 varied styles - no full-width to keep images visually interesting
       const styleVariations = [
-        { size: "full", align: "center", description: "full-width centered" },
-        { size: "medium", align: "left", description: "medium size floated left with text wrapping" },
-        { size: "medium", align: "right", description: "medium size floated right with text wrapping" },
-        { size: "large", align: "center", description: "large centered" },
-        { size: "small", align: "right", description: "small floated right" },
+        { size: "large", align: "center", description: "large centered (max-width 768px)" },
+        { size: "medium", align: "left", description: "medium size floated left with text wrapping (max-width 448px)" },
+        { size: "medium", align: "right", description: "medium size floated right with text wrapping (max-width 448px)" },
+        { size: "large", align: "center", description: "large centered (max-width 768px)" },
+        { size: "small", align: "right", description: "small floated right with text wrapping (max-width 320px)" },
       ];
       const currentStyle = styleVariations[existingImageCount % styleVariations.length];
+      console.log(`[Image Placement] existingImageCount=${existingImageCount}, styleIndex=${existingImageCount % styleVariations.length}, size=${currentStyle.size}, align=${currentStyle.align}`);
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
