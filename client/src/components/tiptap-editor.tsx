@@ -248,7 +248,7 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
         {viewMode === 'wysiwyg' ? (
           <EditorContent 
             editor={editor} 
-            className="prose prose-sm dark:prose-invert max-w-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[400px] pb-8"
+            className="prose prose-sm dark:prose-invert max-w-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[400px] pb-8 [&_figure]:m-0 [&_figure]:p-0 [&_figure_img]:m-0 [&_figcaption]:hidden"
             data-testid="editor-wysiwyg"
           />
         ) : (

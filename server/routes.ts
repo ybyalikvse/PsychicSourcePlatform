@@ -27,6 +27,9 @@ function applyImageStyles(content: string): string {
     small: "max-width: 320px; width: 100%;",
   };
   
+  // Strip all existing figcaptions from the content
+  content = content.replace(/<figcaption[^>]*>.*?<\/figcaption>/gi, '');
+  
   // Count ALL images (styled and unstyled) to track total position
   let totalImageIndex = 0;
   
@@ -87,27 +90,19 @@ function applyImageStyles(content: string): string {
     const sizeStyle = sizeStyles[currentStyle.size] || sizeStyles.large;
     
     let styledHtml: string;
+    const clearDiv = `<div style="clear: both;"></div>`;
     if (currentStyle.align === "center") {
-      const figureStyle = `margin: 1.5rem auto; text-align: center; ${sizeStyle}`;
+      const figureStyle = `margin: 2rem auto; text-align: center; ${sizeStyle}`;
       const imgStyle = `${sizeStyle} border-radius: 6px; height: auto; display: block; margin: 0 auto;`;
-      styledHtml = `<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
+      styledHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
     } else if (currentStyle.align === "left") {
-      const figureStyle = `float: left; margin: 0.5rem 1.5rem 1rem 0; ${sizeStyle}`;
+      const figureStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; ${sizeStyle}`;
       const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-      styledHtml = `<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
+      styledHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
     } else {
-      const figureStyle = `float: right; margin: 0.5rem 0 1rem 1.5rem; ${sizeStyle}`;
+      const figureStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; ${sizeStyle}`;
       const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-      styledHtml = `<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
-    }
-    
-    // Check if next element is a short <p> that looks like a caption
-    const captionMatch = remaining.match(/^<p>([^<]{5,80})<\/p>/);
-    if (captionMatch) {
-      const captionText = captionMatch[1];
-      styledHtml = styledHtml.replace('</figure>', 
-        `<figcaption style="text-align: center; font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">${captionText}</figcaption></figure>`);
-      remaining = remaining.substring(captionMatch[0].length);
+      styledHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
     }
     
     result += styledHtml;
@@ -2418,13 +2413,10 @@ TASK: Find the most appropriate paragraph break to insert this image. The image 
 Return a JSON object with:
 - "insertAfterText": The EXACT text of the paragraph (first 100 chars) AFTER which to insert the image
 - "altText": A descriptive alt text for SEO and accessibility (15-25 words)
-- "caption": An optional short caption for the image (10-15 words, or empty string if not needed)
-
 Example response:
 {
   "insertAfterText": "The psychic reading revealed unexpected insights about...",
-  "altText": "A mystical crystal ball glowing with purple light on a velvet cloth surrounded by candles",
-  "caption": "Crystal ball readings can provide clarity and guidance."
+  "altText": "A mystical crystal ball glowing with purple light on a velvet cloth surrounded by candles"
 }`;
 
       const response = await openai.chat.completions.create({
@@ -2449,40 +2441,29 @@ Example response:
       // Find the paragraph and insert the image after it
       const insertAfterText = placement.insertAfterText;
       const altText = placement.altText || "Article image";
-      const caption = placement.caption || "";
 
-      // Create the image HTML with varied sizes and positions using inline styles
-      // so it works on any site regardless of CSS framework
       const sizeStyles: Record<string, string> = {
-        full: "width: 100%;",
         large: "max-width: 768px; width: 100%;",
         medium: "max-width: 448px; width: 100%;",
         small: "max-width: 320px; width: 100%;",
       };
 
-      const sizeStyle = sizeStyles[currentStyle.size] || sizeStyles.full;
+      const sizeStyle = sizeStyles[currentStyle.size] || sizeStyles.large;
       
       let imageHtml: string;
+      const clearDiv = `<div style="clear: both;"></div>`;
       if (currentStyle.align === "center") {
-        const figureStyle = `margin: 1.5rem auto; text-align: center; ${sizeStyle}`;
+        const figureStyle = `margin: 2rem auto; text-align: center; ${sizeStyle}`;
         const imgStyle = `${sizeStyle} border-radius: 6px; height: auto; display: block; margin: 0 auto;`;
-        imageHtml = caption
-          ? `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /><figcaption style="text-align: center; font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">${caption}</figcaption></figure>`
-          : `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
+        imageHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
       } else if (currentStyle.align === "left") {
-        const figureStyle = `float: left; margin: 0.5rem 1.5rem 1rem 0; ${sizeStyle}`;
+        const figureStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; ${sizeStyle}`;
         const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-        const figCaption = caption 
-          ? `<figcaption style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">${caption}</figcaption>` 
-          : '';
-        imageHtml = `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />${figCaption}</figure>`;
+        imageHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
       } else {
-        const figureStyle = `float: right; margin: 0.5rem 0 1rem 1.5rem; ${sizeStyle}`;
+        const figureStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; ${sizeStyle}`;
         const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-        const figCaption = caption 
-          ? `<figcaption style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">${caption}</figcaption>` 
-          : '';
-        imageHtml = `<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />${figCaption}</figure>`;
+        imageHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
       }
 
       // Try to find and insert after the matching paragraph
@@ -2516,7 +2497,7 @@ Example response:
         }
       }
 
-      res.json({ updatedContent, placement: { altText, caption } });
+      res.json({ updatedContent, placement: { altText } });
     } catch (error) {
       console.error("Image placement error:", error);
       res.status(500).json({ error: "Failed to find image placement" });

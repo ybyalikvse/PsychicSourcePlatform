@@ -202,6 +202,18 @@
     @apply hidden;
   }
 
+  /* Allow inline styles on figure/img to override prose defaults */
+  .prose figure[style] {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .prose figure[style] img {
+    margin: 0 !important;
+  }
+  .prose figcaption {
+    display: none !important;
+  }
+
   /* Placeholder styling for contentEditable div */
   [contenteditable][data-placeholder]:empty::before {
     content: attr(data-placeholder);

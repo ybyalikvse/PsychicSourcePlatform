@@ -989,7 +989,7 @@ export default function BulkCreate() {
           {previewResult && (
             <ScrollArea className="h-[60vh]">
               <div 
-                className="prose prose-sm dark:prose-invert max-w-none pr-4"
+                className="prose prose-sm dark:prose-invert max-w-none pr-4 [&_figure]:m-0 [&_figure]:p-0 [&_figure_img]:m-0 [&_figcaption]:hidden"
                 dangerouslySetInnerHTML={{ __html: previewResult.content }}
               />
             </ScrollArea>
