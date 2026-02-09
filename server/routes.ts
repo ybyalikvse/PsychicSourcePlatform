@@ -9,32 +9,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import FirecrawlAppModule from "@mendable/firecrawl-js";
 const FirecrawlApp = (FirecrawlAppModule as any).default || FirecrawlAppModule;
 
-// Helper: Re-apply varied image styles to bare <img> tags that lack styling.
-// Uses inline styles directly on <img> (no <figure> wrappers) for maximum CMS compatibility.
-function applyImageStyles(content: string): string {
+// Helper: Strip all inline styles from <img> tags, outputting plain HTML only.
+// Removes figure wrappers, figcaptions, and clear divs for clean CMS-compatible output.
+function cleanImageTags(content: string): string {
   if (!content) return content;
   
-  const styleVariations = [
-    { size: "large", align: "center" },
-    { size: "medium", align: "left" },
-    { size: "medium", align: "right" },
-    { size: "large", align: "center" },
-    { size: "small", align: "right" },
-  ];
-  
-  const sizeMap: Record<string, { maxWidth: string }> = {
-    large: { maxWidth: "768px" },
-    medium: { maxWidth: "448px" },
-    small: { maxWidth: "320px" },
-  };
-  
-  // Strip any existing <figure>, </figure>, <figcaption>...</figcaption> wrappers
   content = content.replace(/<\/?figure[^>]*>/gi, '');
   content = content.replace(/<figcaption[^>]*>.*?<\/figcaption>/gi, '');
-  // Strip any clear divs we previously inserted
   content = content.replace(/<div style="clear: both;"><\/div>/gi, '');
   
-  let totalImageIndex = 0;
   let result = "";
   let remaining = content;
   
@@ -63,34 +46,12 @@ function applyImageStyles(content: string): string {
     
     if (!src) {
       result += imgTag;
-      totalImageIndex++;
       continue;
     }
     
-    // Check if already has our latest !important sizing styles
-    if (imgTag.includes('!important') && imgTag.includes('max-width:')) {
-      result += imgTag;
-      totalImageIndex++;
-      continue;
-    }
-    
-    const currentStyle = styleVariations[totalImageIndex % styleVariations.length];
-    const size = sizeMap[currentStyle.size] || sizeMap.large;
-    
-    let imgStyle: string;
-    if (currentStyle.align === "center") {
-      imgStyle = `display: block !important; float: none !important; margin: 2rem auto !important; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
-    } else if (currentStyle.align === "left") {
-      imgStyle = `display: inline !important; float: left !important; margin: 0.5rem 1.5rem 1.5rem 0 !important; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
-    } else {
-      imgStyle = `display: inline !important; float: right !important; margin: 0.5rem 0 1.5rem 1.5rem !important; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
-    }
-    
-    result += `<img src="${src}" alt="${alt}" style="${imgStyle}" />`;
-    totalImageIndex++;
+    result += `<img src="${src}" alt="${alt}" />`;
   }
   
-  console.log(`[applyImageStyles] Processed ${totalImageIndex} images in content`);
   return result;
 }
 
@@ -442,7 +403,7 @@ export async function registerRoutes(
         slug,
       };
       if (articleData.content) {
-        articleData.content = enforceImageSpacing(applyImageStyles(articleData.content));
+        articleData.content = enforceImageSpacing(cleanImageTags(articleData.content));
       }
       const article = await storage.createArticle(articleData);
       res.status(201).json(article);
@@ -455,7 +416,7 @@ export async function registerRoutes(
     try {
       const body = { ...req.body };
       if (body.content) {
-        body.content = enforceImageSpacing(applyImageStyles(body.content));
+        body.content = enforceImageSpacing(cleanImageTags(body.content));
       }
       const article = await storage.updateArticle(req.params.id, body);
       if (!article) {
@@ -2439,17 +2400,7 @@ Make the first suggestion suitable as a featured/hero image. The rest should be 
         }
       });
 
-      // Determine image style variation based on index
-      // Cycle through 5 varied styles - no full-width to keep images visually interesting
-      const styleVariations = [
-        { size: "large", align: "center", description: "large centered (max-width 768px)" },
-        { size: "medium", align: "left", description: "medium size floated left with text wrapping (max-width 448px)" },
-        { size: "medium", align: "right", description: "medium size floated right with text wrapping (max-width 448px)" },
-        { size: "large", align: "center", description: "large centered (max-width 768px)" },
-        { size: "small", align: "right", description: "small floated right with text wrapping (max-width 320px)" },
-      ];
-      const currentStyle = styleVariations[existingImageCount % styleVariations.length];
-      console.log(`[Image Placement] existingImageCount=${existingImageCount}, styleIndex=${existingImageCount % styleVariations.length}, size=${currentStyle.size}, align=${currentStyle.align}`);
+      console.log(`[Image Placement] existingImageCount=${existingImageCount}`);
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -2463,7 +2414,6 @@ Make the first suggestion suitable as a featured/hero image. The rest should be 
       const prompt = `You are an expert content editor. Analyze this HTML blog post content and determine the BEST location to insert an image.
 
 Image Description: ${imagePrompt || "Featured image for the article"}
-Image Style: This image will be ${currentStyle.description}
 
 Blog Content:
 ${content}
@@ -2507,25 +2457,7 @@ Example response:
       const insertAfterText = placement.insertAfterText;
       const altText = placement.altText || "Article image";
 
-      const sizeMap: Record<string, string> = {
-        large: "768px",
-        medium: "448px",
-        small: "320px",
-      };
-
-      const maxWidth = sizeMap[currentStyle.size] || sizeMap.large;
-      
-      let imageHtml: string;
-      if (currentStyle.align === "center") {
-        const imgStyle = `display: block !important; float: none !important; margin: 2rem auto !important; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
-        imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
-      } else if (currentStyle.align === "left") {
-        const imgStyle = `display: inline !important; float: left !important; margin: 0.5rem 1.5rem 1.5rem 0 !important; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
-        imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
-      } else {
-        const imgStyle = `display: inline !important; float: right !important; margin: 0.5rem 0 1.5rem 1.5rem !important; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
-        imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
-      }
+      const imageHtml = `<img src="${imageUrl}" alt="${altText}" />`;
 
       // Try to find and insert after the matching paragraph
       let updatedContent = content;
