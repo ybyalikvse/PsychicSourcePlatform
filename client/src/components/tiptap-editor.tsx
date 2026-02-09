@@ -5,7 +5,8 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
-import { useState, useEffect } from 'react';
+import { Node, mergeAttributes } from '@tiptap/core';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,6 +24,54 @@ import {
   Code
 } from 'lucide-react';
 
+const Figure = Node.create({
+  name: 'figure',
+  group: 'block',
+  content: 'inline*',
+  draggable: true,
+  isolating: true,
+  addAttributes() {
+    return {
+      style: { default: null },
+      class: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'figure' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['figure', mergeAttributes(HTMLAttributes), 0];
+  },
+});
+
+const Figcaption = Node.create({
+  name: 'figcaption',
+  group: 'block',
+  content: 'inline*',
+  addAttributes() {
+    return {
+      style: { default: null },
+      class: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'figcaption' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['figcaption', mergeAttributes(HTMLAttributes), 0];
+  },
+});
+
+const StyledImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      style: { default: null },
+      class: { default: null },
+    };
+  },
+});
+
 interface TiptapEditorProps {
   content: string;
   onChange?: (html: string) => void;
@@ -32,14 +81,17 @@ interface TiptapEditorProps {
 export function TiptapEditor({ content, onChange, editable = true }: TiptapEditorProps) {
   const [viewMode, setViewMode] = useState<'wysiwyg' | 'html'>('wysiwyg');
   const [htmlSource, setHtmlSource] = useState(content);
+  const suppressUpdateRef = useRef(false);
 
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Image.configure({
+      StyledImage.configure({
         inline: false,
         allowBase64: true,
       }),
+      Figure,
+      Figcaption,
       Table.configure({
         resizable: true,
         HTMLAttributes: {
@@ -61,6 +113,7 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
     content: content,
     editable: editable,
     onUpdate: ({ editor }) => {
+      if (suppressUpdateRef.current) return;
       const html = editor.getHTML();
       setHtmlSource(html);
       onChange?.(html);
@@ -69,8 +122,10 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
 
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
+      suppressUpdateRef.current = true;
       editor.commands.setContent(content);
       setHtmlSource(content);
+      setTimeout(() => { suppressUpdateRef.current = false; }, 50);
     }
   }, [content, editor]);
 

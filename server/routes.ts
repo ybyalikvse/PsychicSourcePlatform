@@ -9,6 +9,115 @@ import Anthropic from "@anthropic-ai/sdk";
 import FirecrawlAppModule from "@mendable/firecrawl-js";
 const FirecrawlApp = (FirecrawlAppModule as any).default || FirecrawlAppModule;
 
+// Helper: Re-apply varied image styles to bare <img> tags that lack styling
+function applyImageStyles(content: string): string {
+  if (!content) return content;
+  
+  const styleVariations = [
+    { size: "large", align: "center" },
+    { size: "medium", align: "left" },
+    { size: "medium", align: "right" },
+    { size: "large", align: "center" },
+    { size: "small", align: "right" },
+  ];
+  
+  const sizeStyles: Record<string, string> = {
+    large: "max-width: 768px; width: 100%;",
+    medium: "max-width: 448px; width: 100%;",
+    small: "max-width: 320px; width: 100%;",
+  };
+  
+  // Count ALL images (styled and unstyled) to track total position
+  let totalImageIndex = 0;
+  
+  // Process the content: find bare <img> tags not already inside <figure>
+  // Use a sequential scan approach to avoid index-shifting issues
+  let result = "";
+  let remaining = content;
+  
+  while (remaining.length > 0) {
+    // Find next <img tag
+    const imgStart = remaining.indexOf('<img ');
+    if (imgStart === -1) {
+      result += remaining;
+      break;
+    }
+    
+    // Add everything before this img
+    result += remaining.substring(0, imgStart);
+    
+    // Find the end of this img tag
+    const imgEnd = remaining.indexOf('>', imgStart);
+    if (imgEnd === -1) {
+      result += remaining.substring(imgStart);
+      break;
+    }
+    
+    const imgTag = remaining.substring(imgStart, imgEnd + 1);
+    remaining = remaining.substring(imgEnd + 1);
+    
+    // Check if this img is already inside a <figure> (look back in result)
+    const lastFigureOpen = result.lastIndexOf('<figure');
+    const lastFigureClose = result.lastIndexOf('</figure>');
+    const insideFigure = lastFigureOpen > lastFigureClose;
+    
+    // Check if img already has inline styles with sizing
+    const hasStyles = imgTag.includes('max-width:') || imgTag.includes('float:');
+    
+    if (insideFigure || hasStyles) {
+      // Already styled, keep as-is
+      result += imgTag;
+      totalImageIndex++;
+      continue;
+    }
+    
+    // This is a bare <img> — needs styling
+    const srcMatch = imgTag.match(/src="([^"]*)"/);
+    const altMatch = imgTag.match(/alt="([^"]*)"/);
+    const src = srcMatch ? srcMatch[1] : "";
+    const alt = altMatch ? altMatch[1] : "Article image";
+    
+    if (!src) {
+      result += imgTag;
+      totalImageIndex++;
+      continue;
+    }
+    
+    const currentStyle = styleVariations[totalImageIndex % styleVariations.length];
+    const sizeStyle = sizeStyles[currentStyle.size] || sizeStyles.large;
+    
+    let styledHtml: string;
+    if (currentStyle.align === "center") {
+      const figureStyle = `margin: 1.5rem auto; text-align: center; ${sizeStyle}`;
+      const imgStyle = `${sizeStyle} border-radius: 6px; height: auto; display: block; margin: 0 auto;`;
+      styledHtml = `<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
+    } else if (currentStyle.align === "left") {
+      const figureStyle = `float: left; margin: 0.5rem 1.5rem 1rem 0; ${sizeStyle}`;
+      const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
+      styledHtml = `<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
+    } else {
+      const figureStyle = `float: right; margin: 0.5rem 0 1rem 1.5rem; ${sizeStyle}`;
+      const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
+      styledHtml = `<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
+    }
+    
+    // Check if next element is a short <p> that looks like a caption
+    const captionMatch = remaining.match(/^<p>([^<]{5,80})<\/p>/);
+    if (captionMatch) {
+      const captionText = captionMatch[1];
+      styledHtml = styledHtml.replace('</figure>', 
+        `<figcaption style="text-align: center; font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">${captionText}</figcaption></figure>`);
+      remaining = remaining.substring(captionMatch[0].length);
+    }
+    
+    result += styledHtml;
+    totalImageIndex++;
+  }
+  
+  console.log(`[applyImageStyles] Processed ${totalImageIndex} images in content`);
+  return result;
+}
+
 // OAuth state storage (in production, use Redis or similar)
 const oauthStates = new Map<string, { timestamp: number }>();
 
@@ -267,11 +376,15 @@ export async function registerRoutes(
         slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
       }
       
-      const article = await storage.createArticle({
+      const articleData = {
         ...parsed.data,
         title,
         slug,
-      });
+      };
+      if (articleData.content) {
+        articleData.content = applyImageStyles(articleData.content);
+      }
+      const article = await storage.createArticle(articleData);
       res.status(201).json(article);
     } catch (error) {
       res.status(500).json({ error: "Failed to create article" });
@@ -280,7 +393,11 @@ export async function registerRoutes(
 
   app.patch("/api/articles/:id", async (req, res) => {
     try {
-      const article = await storage.updateArticle(req.params.id, req.body);
+      const body = { ...req.body };
+      if (body.content) {
+        body.content = applyImageStyles(body.content);
+      }
+      const article = await storage.updateArticle(req.params.id, body);
       if (!article) {
         return res.status(404).json({ error: "Article not found" });
       }
