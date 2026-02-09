@@ -202,16 +202,10 @@
     @apply hidden;
   }
 
-  /* Allow inline styles on figure/img to override prose defaults */
-  .prose figure[style] {
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  .prose figure[style] img {
-    margin: 0 !important;
-  }
-  .prose figcaption {
-    display: none !important;
+  /* Let inline styles on images override prose defaults */
+  .prose img[style] {
+    margin: unset !important;
+    max-width: unset !important;
   }
 
   /* Placeholder styling for contentEditable div */

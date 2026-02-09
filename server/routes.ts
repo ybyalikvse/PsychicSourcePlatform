@@ -9,7 +9,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import FirecrawlAppModule from "@mendable/firecrawl-js";
 const FirecrawlApp = (FirecrawlAppModule as any).default || FirecrawlAppModule;
 
-// Helper: Re-apply varied image styles to bare <img> tags that lack styling
+// Helper: Re-apply varied image styles to bare <img> tags that lack styling.
+// Uses inline styles directly on <img> (no <figure> wrappers) for maximum CMS compatibility.
 function applyImageStyles(content: string): string {
   if (!content) return content;
   
@@ -21,35 +22,31 @@ function applyImageStyles(content: string): string {
     { size: "small", align: "right" },
   ];
   
-  const sizeStyles: Record<string, string> = {
-    large: "max-width: 768px; width: 100%;",
-    medium: "max-width: 448px; width: 100%;",
-    small: "max-width: 320px; width: 100%;",
+  const sizeMap: Record<string, { maxWidth: string }> = {
+    large: { maxWidth: "768px" },
+    medium: { maxWidth: "448px" },
+    small: { maxWidth: "320px" },
   };
   
-  // Strip all existing figcaptions from the content
+  // Strip any existing <figure>, </figure>, <figcaption>...</figcaption> wrappers
+  content = content.replace(/<\/?figure[^>]*>/gi, '');
   content = content.replace(/<figcaption[^>]*>.*?<\/figcaption>/gi, '');
+  // Strip any clear divs we previously inserted
+  content = content.replace(/<div style="clear: both;"><\/div>/gi, '');
   
-  // Count ALL images (styled and unstyled) to track total position
   let totalImageIndex = 0;
-  
-  // Process the content: find bare <img> tags not already inside <figure>
-  // Use a sequential scan approach to avoid index-shifting issues
   let result = "";
   let remaining = content;
   
   while (remaining.length > 0) {
-    // Find next <img tag
     const imgStart = remaining.indexOf('<img ');
     if (imgStart === -1) {
       result += remaining;
       break;
     }
     
-    // Add everything before this img
     result += remaining.substring(0, imgStart);
     
-    // Find the end of this img tag
     const imgEnd = remaining.indexOf('>', imgStart);
     if (imgEnd === -1) {
       result += remaining.substring(imgStart);
@@ -59,22 +56,6 @@ function applyImageStyles(content: string): string {
     const imgTag = remaining.substring(imgStart, imgEnd + 1);
     remaining = remaining.substring(imgEnd + 1);
     
-    // Check if this img is already inside a <figure> (look back in result)
-    const lastFigureOpen = result.lastIndexOf('<figure');
-    const lastFigureClose = result.lastIndexOf('</figure>');
-    const insideFigure = lastFigureOpen > lastFigureClose;
-    
-    // Check if img already has inline styles with sizing
-    const hasStyles = imgTag.includes('max-width:') || imgTag.includes('float:');
-    
-    if (insideFigure || hasStyles) {
-      // Already styled, keep as-is
-      result += imgTag;
-      totalImageIndex++;
-      continue;
-    }
-    
-    // This is a bare <img> — needs styling
     const srcMatch = imgTag.match(/src="([^"]*)"/);
     const altMatch = imgTag.match(/alt="([^"]*)"/);
     const src = srcMatch ? srcMatch[1] : "";
@@ -86,31 +67,115 @@ function applyImageStyles(content: string): string {
       continue;
     }
     
-    const currentStyle = styleVariations[totalImageIndex % styleVariations.length];
-    const sizeStyle = sizeStyles[currentStyle.size] || sizeStyles.large;
-    
-    let styledHtml: string;
-    const clearDiv = `<div style="clear: both;"></div>`;
-    if (currentStyle.align === "center") {
-      const figureStyle = `margin: 2rem auto; text-align: center; ${sizeStyle}`;
-      const imgStyle = `${sizeStyle} border-radius: 6px; height: auto; display: block; margin: 0 auto;`;
-      styledHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
-    } else if (currentStyle.align === "left") {
-      const figureStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; ${sizeStyle}`;
-      const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-      styledHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
-    } else {
-      const figureStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; ${sizeStyle}`;
-      const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-      styledHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${src}" alt="${alt}" style="${imgStyle}" /></figure>`;
+    // Check if already has our sizing styles
+    if (imgTag.includes('max-width:') && (imgTag.includes('float:') || imgTag.includes('margin: 2rem auto'))) {
+      result += imgTag;
+      totalImageIndex++;
+      continue;
     }
     
-    result += styledHtml;
+    const currentStyle = styleVariations[totalImageIndex % styleVariations.length];
+    const size = sizeMap[currentStyle.size] || sizeMap.large;
+    
+    let imgStyle: string;
+    if (currentStyle.align === "center") {
+      imgStyle = `display: block; margin: 2rem auto; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+    } else if (currentStyle.align === "left") {
+      imgStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+    } else {
+      imgStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; max-width: ${size.maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+    }
+    
+    result += `<img src="${src}" alt="${alt}" style="${imgStyle}" />`;
     totalImageIndex++;
   }
   
   console.log(`[applyImageStyles] Processed ${totalImageIndex} images in content`);
   return result;
+}
+
+// Helper: Enforce minimum paragraph spacing between images.
+// Splits content by closing paragraph/heading tags, counts gaps between images,
+// and moves images that are too close together further down in the content.
+function enforceImageSpacing(content: string, minGap: number = 3): string {
+  if (!content) return content;
+  
+  // Split content into segments at paragraph/heading boundaries
+  // Each segment ends with a </p>, </h1-6>, </ul>, </ol>, </blockquote>, or is an img tag
+  const segmentRegex = /([\s\S]*?(?:<\/(?:p|h[1-6]|ul|ol|blockquote|table)>|<img\s[^>]*\/?>))/gi;
+  const segments: string[] = [];
+  let lastIdx = 0;
+  let m;
+  
+  while ((m = segmentRegex.exec(content)) !== null) {
+    segments.push(m[1]);
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < content.length) {
+    segments.push(content.substring(lastIdx));
+  }
+  
+  if (segments.length === 0) return content;
+  
+  // Identify which segments contain an <img tag
+  const hasImage = segments.map(s => /<img\s/i.test(s));
+  
+  // Track positions and enforce spacing
+  let lastImageIdx = -100;
+  const toRemove: number[] = [];
+  const displaced: { html: string; originalIdx: number }[] = [];
+  
+  for (let i = 0; i < segments.length; i++) {
+    if (!hasImage[i]) continue;
+    
+    const gap = i - lastImageIdx;
+    if (lastImageIdx >= 0 && gap < minGap) {
+      // This image is too close — extract the img tag and mark for relocation
+      const imgMatch = segments[i].match(/<img\s[^>]*\/?>/i);
+      if (imgMatch) {
+        displaced.push({ html: imgMatch[0], originalIdx: i });
+        // Remove the img from this segment
+        segments[i] = segments[i].replace(imgMatch[0], '');
+        continue; // Don't update lastImageIdx
+      }
+    }
+    lastImageIdx = i;
+  }
+  
+  // Re-insert displaced images at valid positions (at least minGap from previous image)
+  for (const img of displaced) {
+    // Find the next valid position
+    let insertAfter = img.originalIdx;
+    
+    // Recalculate: find the nearest image before this position
+    let prevImageIdx = -100;
+    for (let i = 0; i < segments.length; i++) {
+      if (i >= insertAfter) break;
+      if (/<img\s/i.test(segments[i])) prevImageIdx = i;
+    }
+    
+    // Move forward until we have enough gap
+    insertAfter = Math.max(insertAfter, prevImageIdx + minGap);
+    
+    // Also check if there's an image right after where we want to insert
+    // and push further if needed
+    for (let i = insertAfter + 1; i < Math.min(insertAfter + minGap, segments.length); i++) {
+      if (/<img\s/i.test(segments[i])) {
+        insertAfter = i + minGap;
+        break;
+      }
+    }
+    
+    // Clamp to valid range
+    if (insertAfter >= segments.length) {
+      insertAfter = segments.length - 1;
+    }
+    
+    // Insert the image after the target segment
+    segments[insertAfter] = segments[insertAfter] + img.html;
+  }
+  
+  return segments.join('');
 }
 
 // OAuth state storage (in production, use Redis or similar)
@@ -377,7 +442,7 @@ export async function registerRoutes(
         slug,
       };
       if (articleData.content) {
-        articleData.content = applyImageStyles(articleData.content);
+        articleData.content = enforceImageSpacing(applyImageStyles(articleData.content));
       }
       const article = await storage.createArticle(articleData);
       res.status(201).json(article);
@@ -390,7 +455,7 @@ export async function registerRoutes(
     try {
       const body = { ...req.body };
       if (body.content) {
-        body.content = applyImageStyles(body.content);
+        body.content = enforceImageSpacing(applyImageStyles(body.content));
       }
       const article = await storage.updateArticle(req.params.id, body);
       if (!article) {
@@ -2442,28 +2507,24 @@ Example response:
       const insertAfterText = placement.insertAfterText;
       const altText = placement.altText || "Article image";
 
-      const sizeStyles: Record<string, string> = {
-        large: "max-width: 768px; width: 100%;",
-        medium: "max-width: 448px; width: 100%;",
-        small: "max-width: 320px; width: 100%;",
+      const sizeMap: Record<string, string> = {
+        large: "768px",
+        medium: "448px",
+        small: "320px",
       };
 
-      const sizeStyle = sizeStyles[currentStyle.size] || sizeStyles.large;
+      const maxWidth = sizeMap[currentStyle.size] || sizeMap.large;
       
       let imageHtml: string;
-      const clearDiv = `<div style="clear: both;"></div>`;
       if (currentStyle.align === "center") {
-        const figureStyle = `margin: 2rem auto; text-align: center; ${sizeStyle}`;
-        const imgStyle = `${sizeStyle} border-radius: 6px; height: auto; display: block; margin: 0 auto;`;
-        imageHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
+        const imgStyle = `display: block; margin: 2rem auto; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+        imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
       } else if (currentStyle.align === "left") {
-        const figureStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; ${sizeStyle}`;
-        const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-        imageHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
+        const imgStyle = `float: left; margin: 0.5rem 1.5rem 1.5rem 0; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+        imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
       } else {
-        const figureStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; ${sizeStyle}`;
-        const imgStyle = `width: 100%; border-radius: 6px; height: auto; display: block;`;
-        imageHtml = `${clearDiv}<figure style="${figureStyle}"><img src="${imageUrl}" alt="${altText}" style="${imgStyle}" /></figure>`;
+        const imgStyle = `float: right; margin: 0.5rem 0 1.5rem 1.5rem; max-width: ${maxWidth}; width: 100%; height: auto; border-radius: 6px;`;
+        imageHtml = `<img src="${imageUrl}" alt="${altText}" style="${imgStyle}" />`;
       }
 
       // Try to find and insert after the matching paragraph
