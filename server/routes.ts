@@ -3900,10 +3900,16 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
       // Clean up multiple consecutive newlines/spaces
       rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
-      // Remove rel="noopener noreferrer nofollow" and target="_blank" from internal links
-      rewrittenContent = rewrittenContent.replace(/\s*rel="[^"]*nofollow[^"]*"/g, '');
-      rewrittenContent = rewrittenContent.replace(/\s*rel="noopener noreferrer"/g, '');
-      rewrittenContent = rewrittenContent.replace(/\s*target="_blank"/g, '');
+      // Strip ALL rel and target attributes from <a> tags
+      rewrittenContent = rewrittenContent.replace(/<a\s([^>]*?)>/g, (match, attrs) => {
+        const cleaned = attrs
+          .replace(/\s*rel\s*=\s*"[^"]*"/gi, '')
+          .replace(/\s*rel\s*=\s*'[^']*'/gi, '')
+          .replace(/\s*target\s*=\s*"[^"]*"/gi, '')
+          .replace(/\s*target\s*=\s*'[^']*'/gi, '')
+          .trim();
+        return `<a ${cleaned}>`;
+      });
       
       rewrittenContent = rewrittenContent.trim();
 
@@ -4025,10 +4031,16 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       rewrittenContent = rewrittenContent.replace(/>\s*\d+\.\s*</g, '><');
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
       rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
-      // Remove rel="noopener noreferrer nofollow" and target="_blank" from internal links
-      rewrittenContent = rewrittenContent.replace(/\s*rel="[^"]*nofollow[^"]*"/g, '');
-      rewrittenContent = rewrittenContent.replace(/\s*rel="noopener noreferrer"/g, '');
-      rewrittenContent = rewrittenContent.replace(/\s*target="_blank"/g, '');
+      // Strip ALL rel and target attributes from <a> tags
+      rewrittenContent = rewrittenContent.replace(/<a\s([^>]*?)>/g, (match, attrs) => {
+        const cleaned = attrs
+          .replace(/\s*rel\s*=\s*"[^"]*"/gi, '')
+          .replace(/\s*rel\s*=\s*'[^']*'/gi, '')
+          .replace(/\s*target\s*=\s*"[^"]*"/gi, '')
+          .replace(/\s*target\s*=\s*'[^']*'/gi, '')
+          .trim();
+        return `<a ${cleaned}>`;
+      });
       
       rewrittenContent = rewrittenContent.trim();
 
