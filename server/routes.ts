@@ -1787,8 +1787,8 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      // Calculate max tokens based on word count (roughly 1.5 tokens per word + buffer for HTML tags)
-      const maxTokens = Math.min(16000, Math.max(4096, Math.ceil(targetWordCount * 2)));
+      // Calculate max tokens: ~1.3 tokens per word + heavy buffer for HTML tags and markup
+      const maxTokens = Math.min(32000, Math.max(8192, Math.ceil(targetWordCount * 3.5)));
       let fullContent = "";
 
       if (provider === "openai") {
