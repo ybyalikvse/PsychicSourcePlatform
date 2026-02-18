@@ -1,5 +1,6 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
@@ -72,6 +73,14 @@ const StyledImage = Image.extend({
   },
 });
 
+function cleanLinkAttrs(html: string): string {
+  return html
+    .replace(/\s+target\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+target\s*=\s*'[^']*'/gi, '')
+    .replace(/\s+rel\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+rel\s*=\s*'[^']*'/gi, '');
+}
+
 interface TiptapEditorProps {
   content: string;
   onChange?: (html: string) => void;
@@ -80,12 +89,28 @@ interface TiptapEditorProps {
 
 export function TiptapEditor({ content, onChange, editable = true }: TiptapEditorProps) {
   const [viewMode, setViewMode] = useState<'wysiwyg' | 'html'>('wysiwyg');
-  const [htmlSource, setHtmlSource] = useState(content);
+  const [htmlSource, setHtmlSource] = useState(cleanLinkAttrs(content));
   const suppressUpdateRef = useRef(false);
 
   const editor = useEditor({
     extensions: [
       StarterKit,
+      Link.configure({
+        openOnClick: false,
+        autolink: false,
+        HTMLAttributes: {},
+        protocols: ['http', 'https'],
+      }).extend({
+        addAttributes() {
+          return {
+            href: { default: null },
+            class: { default: null },
+          };
+        },
+        renderHTML({ HTMLAttributes }) {
+          return ['a', { href: HTMLAttributes.href, ...(HTMLAttributes.class ? { class: HTMLAttributes.class } : {}) }, 0];
+        },
+      }),
       StyledImage.configure({
         inline: false,
         allowBase64: true,
@@ -114,18 +139,22 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
     editable: editable,
     onUpdate: ({ editor }) => {
       if (suppressUpdateRef.current) return;
-      const html = editor.getHTML();
+      const html = cleanLinkAttrs(editor.getHTML());
       setHtmlSource(html);
       onChange?.(html);
     },
   });
 
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      suppressUpdateRef.current = true;
-      editor.commands.setContent(content);
-      setHtmlSource(content);
-      setTimeout(() => { suppressUpdateRef.current = false; }, 50);
+    if (editor) {
+      const currentHtml = cleanLinkAttrs(editor.getHTML());
+      const incomingHtml = cleanLinkAttrs(content);
+      if (incomingHtml !== currentHtml) {
+        suppressUpdateRef.current = true;
+        editor.commands.setContent(incomingHtml);
+        setHtmlSource(incomingHtml);
+        setTimeout(() => { suppressUpdateRef.current = false; }, 50);
+      }
     }
   }, [content, editor]);
 
