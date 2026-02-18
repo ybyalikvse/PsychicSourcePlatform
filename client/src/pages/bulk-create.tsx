@@ -391,6 +391,8 @@ export default function BulkCreate() {
             slug,
             status: "draft",
             wordCount: wordCountNum,
+            recommendedKeywords: parsed.keywords,
+            writingStyleId: itemStyleId !== "default" ? itemStyleId : null,
           }),
           signal: abortControllerRef.current?.signal,
         });

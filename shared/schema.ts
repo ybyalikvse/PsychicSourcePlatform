@@ -35,6 +35,8 @@ export const articles = pgTable("articles", {
   wordCount: integer("word_count").default(0),
   readabilityScore: integer("readability_score"),
   seoScore: integer("seo_score"),
+  recommendedKeywords: text("recommended_keywords").array(),
+  writingStyleId: text("writing_style_id"),
   createdAt: text("created_at").notNull().default(sql`now()`),
   updatedAt: text("updated_at").notNull().default(sql`now()`),
 });

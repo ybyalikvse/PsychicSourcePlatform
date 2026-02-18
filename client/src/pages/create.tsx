@@ -91,6 +91,12 @@ export default function CreateWithAI() {
       setSelectedTitle(existingArticle.metaTitle || "");
       setSelectedDescription(existingArticle.metaDescription || "");
       setArticleStatus(existingArticle.status || "draft");
+      if (existingArticle.recommendedKeywords?.length) {
+        setRecommendedKeywords(existingArticle.recommendedKeywords.join(", "));
+      }
+      if (existingArticle.writingStyleId) {
+        setSelectedStyleId(existingArticle.writingStyleId);
+      }
       setIsInitialized(true);
     }
   }, [isEditMode, existingArticle, isInitialized]);
@@ -149,6 +155,9 @@ export default function CreateWithAI() {
       const activeId = currentArticleId || articleId;
       
       // If forceNew is true (regenerating), always create a new article
+      const parsedKw = recommendedKeywords ? recommendedKeywords.split(",").map(k => k.trim()).filter(Boolean) : [];
+      const styleToSave = selectedStyleId !== "default" ? selectedStyleId : null;
+
       if (activeId && !data.forceNew) {
         const response = await apiRequest("PATCH", `/api/articles/${activeId}`, {
           title: data.title,
@@ -159,6 +168,8 @@ export default function CreateWithAI() {
           slug,
           status: articleStatus,
           wordCount: wordCountNum,
+          recommendedKeywords: parsedKw,
+          writingStyleId: styleToSave,
         });
         const saved = await response.json();
         return { ...saved, isAutoSave: data.isAutoSave };
@@ -172,6 +183,8 @@ export default function CreateWithAI() {
           slug,
           status: "draft",
           wordCount: wordCountNum,
+          recommendedKeywords: parsedKw,
+          writingStyleId: styleToSave,
         });
         const saved = await response.json();
         return { ...saved, isAutoSave: data.isAutoSave, isNew: true };
