@@ -99,6 +99,14 @@ interface KeywordData {
   ctr: number;
 }
 
+function stripLinkAttrs(html: string): string {
+  return html
+    .replace(/\s+target\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+target\s*=\s*'[^']*'/gi, '')
+    .replace(/\s+rel\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+rel\s*=\s*'[^']*'/gi, '');
+}
+
 interface CompetitorData {
   url: string;
   title: string;
@@ -377,15 +385,14 @@ export default function Optimize() {
       return response.json();
     },
     onSuccess: (data) => {
-      setRewrittenContent(data.content);
+      const cleaned = stripLinkAttrs(data.content);
+      setRewrittenContent(cleaned);
       setShowRewriteEditor(true);
-      // Update debug info with the actual processed prompt from the API
       if (data.processedPrompt && debugInfo) {
         setDebugInfo(prev => prev ? { ...prev, processedPrompt: data.processedPrompt } : null);
       }
-      // Auto-save to content
       const targetKeyword = form.getValues("targetKeyword") || "";
-      saveToContentMutation.mutate({ content: data.content, targetKeyword });
+      saveToContentMutation.mutate({ content: cleaned, targetKeyword });
       toast({
         title: "Content Rewritten",
         description: "Saving to drafts...",
@@ -411,11 +418,11 @@ export default function Optimize() {
       return response.json();
     },
     onSuccess: (data) => {
-      setRewrittenContent(data.content);
+      const cleaned = stripLinkAttrs(data.content);
+      setRewrittenContent(cleaned);
       setShowRewriteEditor(true);
-      // Auto-save to content
       const targetKeyword = form.getValues("targetKeyword") || "";
-      saveToContentMutation.mutate({ content: data.content, targetKeyword });
+      saveToContentMutation.mutate({ content: cleaned, targetKeyword });
       toast({
         title: "Content Updated",
         description: "Saving to drafts...",
