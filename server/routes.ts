@@ -1905,6 +1905,13 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
         }
       }
 
+      // Strip ALL target and rel attributes from any HTML tag in the final content
+      fullContent = fullContent
+        .replace(/\s+target\s*=\s*"[^"]*"/gi, '')
+        .replace(/\s+target\s*=\s*'[^']*'/gi, '')
+        .replace(/\s+rel\s*=\s*"[^"]*"/gi, '')
+        .replace(/\s+rel\s*=\s*'[^']*'/gi, '');
+
       res.write(`data: ${JSON.stringify({ done: true, fullContent })}\n\n`);
       res.end();
     } catch (error) {
@@ -3900,16 +3907,12 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
       // Clean up multiple consecutive newlines/spaces
       rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
-      // Strip ALL rel and target attributes from <a> tags
-      rewrittenContent = rewrittenContent.replace(/<a\s([^>]*?)>/g, (match, attrs) => {
-        const cleaned = attrs
-          .replace(/\s*rel\s*=\s*"[^"]*"/gi, '')
-          .replace(/\s*rel\s*=\s*'[^']*'/gi, '')
-          .replace(/\s*target\s*=\s*"[^"]*"/gi, '')
-          .replace(/\s*target\s*=\s*'[^']*'/gi, '')
-          .trim();
-        return `<a ${cleaned}>`;
-      });
+      // Strip ALL target and rel attributes from any HTML tag in the entire output
+      rewrittenContent = rewrittenContent
+        .replace(/\s+target\s*=\s*"[^"]*"/gi, '')
+        .replace(/\s+target\s*=\s*'[^']*'/gi, '')
+        .replace(/\s+rel\s*=\s*"[^"]*"/gi, '')
+        .replace(/\s+rel\s*=\s*'[^']*'/gi, '');
       
       rewrittenContent = rewrittenContent.trim();
 
@@ -4031,16 +4034,12 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       rewrittenContent = rewrittenContent.replace(/>\s*\d+\.\s*</g, '><');
       rewrittenContent = rewrittenContent.replace(/<p[^>]*>\s*<\/p>/g, '');
       rewrittenContent = rewrittenContent.replace(/\n{3,}/g, '\n\n');
-      // Strip ALL rel and target attributes from <a> tags
-      rewrittenContent = rewrittenContent.replace(/<a\s([^>]*?)>/g, (match, attrs) => {
-        const cleaned = attrs
-          .replace(/\s*rel\s*=\s*"[^"]*"/gi, '')
-          .replace(/\s*rel\s*=\s*'[^']*'/gi, '')
-          .replace(/\s*target\s*=\s*"[^"]*"/gi, '')
-          .replace(/\s*target\s*=\s*'[^']*'/gi, '')
-          .trim();
-        return `<a ${cleaned}>`;
-      });
+      // Strip ALL target and rel attributes from any HTML tag in the entire output
+      rewrittenContent = rewrittenContent
+        .replace(/\s+target\s*=\s*"[^"]*"/gi, '')
+        .replace(/\s+target\s*=\s*'[^']*'/gi, '')
+        .replace(/\s+rel\s*=\s*"[^"]*"/gi, '')
+        .replace(/\s+rel\s*=\s*'[^']*'/gi, '');
       
       rewrittenContent = rewrittenContent.trim();
 
