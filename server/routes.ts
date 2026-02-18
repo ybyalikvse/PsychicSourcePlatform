@@ -1736,22 +1736,67 @@ Create dedicated sections for each of these topics, using them as H2 headings wh
         }
       }
 
-      // Build internal links instruction - always included regardless of writing style
+      // Pre-filter internal links to only the most relevant ones for this topic
       let internalLinksInstruction = "";
       if (allInternalUrls.length > 0) {
+        let relevantUrls = allInternalUrls;
+        
+        if (allInternalUrls.length > 15) {
+          try {
+            const openai = new OpenAI({
+              apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+              baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+            });
+            
+            const filterResponse = await openai.chat.completions.create({
+              model: "gpt-4o-mini",
+              messages: [
+                {
+                  role: "system",
+                  content: "You select the most topically relevant URLs for an article. Return ONLY a JSON array of URL strings. No explanation."
+                },
+                {
+                  role: "user",
+                  content: `Article topic: "${targetKeyword}"${recommendedKeywords?.length ? `\nRelated keywords: ${recommendedKeywords.join(", ")}` : ""}
+
+Pick the 10-15 most relevant URLs from this list. Choose URLs whose slug/path indicates topical relevance to the article subject. Return a JSON array of the selected URLs only.
+
+URLs:
+${allInternalUrls.join("\n")}`
+                }
+              ],
+              response_format: { type: "json_object" },
+              max_completion_tokens: 2048,
+            });
+
+            const parsed = JSON.parse(filterResponse.choices[0]?.message?.content || '{}');
+            const filtered = parsed.urls || parsed.links || parsed.selectedUrls || parsed.selected || [];
+            if (Array.isArray(filtered) && filtered.length > 0) {
+              relevantUrls = filtered.filter((u: string) => allInternalUrls.includes(u));
+              if (relevantUrls.length < 3) {
+                relevantUrls = allInternalUrls.slice(0, 15);
+              }
+              console.log(`[Internal Links] Filtered ${allInternalUrls.length} URLs down to ${relevantUrls.length} relevant ones for "${targetKeyword}"`);
+            }
+          } catch (filterError) {
+            console.error("[Internal Links] Pre-filter failed, using first 15 URLs:", filterError);
+            relevantUrls = allInternalUrls.slice(0, 15);
+          }
+        }
+
         internalLinksInstruction = `
 
 6. INTERNAL LINKS REQUIREMENT (MANDATORY):
    You MUST include 2-3 internal links from the list below. This is NOT optional.
-   - Pick URLs whose slug/topic is most relevant to the article subject
+   - These URLs have been pre-selected as relevant to your article topic
    - Convert existing phrases in your text into anchor text linking to these URLs
    - Spread links across different sections (not clustered together)
    - Links must be inline within sentences, NOT in FAQ sections, bullet lists, or footnotes
    - Use plain <a href="..."> tags with no rel or target attributes
    - NEVER invent URLs. ONLY use URLs from this list.
    
-   AVAILABLE INTERNAL URLS:
-${allInternalUrls.join("\n")}`;
+   RELEVANT INTERNAL URLS FOR THIS ARTICLE:
+${relevantUrls.join("\n")}`;
       }
       
       const systemPrompt = `You are an expert SEO content writer for Psychic Source, a spiritual wellness and psychic reading website.
