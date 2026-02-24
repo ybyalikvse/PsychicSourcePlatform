@@ -77,7 +77,7 @@ Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no
       baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
     });
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-5",
       max_tokens: type === "daily" ? 300 : type === "weekly" ? 600 : 1000,
       messages: [{ role: "user", content: fullPrompt }],
     });
