@@ -19,6 +19,7 @@ import Integrations from "@/pages/integrations";
 import Optimize from "@/pages/optimize";
 import InternalLinks from "@/pages/internal-links";
 import Settings from "@/pages/settings";
+import Horoscopes from "@/pages/horoscopes";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/optimize" component={Optimize} />
       <Route path="/internal-links" component={InternalLinks} />
       <Route path="/settings" component={Settings} />
+      <Route path="/horoscopes" component={Horoscopes} />
       <Route component={NotFound} />
     </Switch>
   );

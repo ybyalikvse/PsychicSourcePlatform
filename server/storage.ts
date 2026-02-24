@@ -13,8 +13,11 @@ import {
   type LinkTableColumn, type InsertLinkTableColumn,
   type SiteUrl, type InsertSiteUrl,
   type OptimizationAnalysis, type InsertOptimizationAnalysis,
+  type HoroscopePrompt, type InsertHoroscopePrompt,
+  type HoroscopeEntry, type InsertHoroscopeEntry,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
   writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
+  horoscopePrompts, horoscopeEntries,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -105,6 +108,23 @@ export interface IStorage {
   createOptimizationAnalysis(analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis>;
   updateOptimizationAnalysisContent(id: string, htmlContent: string): Promise<OptimizationAnalysis | undefined>;
   deleteOptimizationAnalysis(id: string): Promise<boolean>;
+
+  // Horoscope Prompts
+  getHoroscopePrompts(): Promise<HoroscopePrompt[]>;
+  getHoroscopePrompt(id: string): Promise<HoroscopePrompt | undefined>;
+  getHoroscopePromptByTypeAndLanguage(type: string, language: string): Promise<HoroscopePrompt | undefined>;
+  createHoroscopePrompt(prompt: InsertHoroscopePrompt): Promise<HoroscopePrompt>;
+  updateHoroscopePrompt(id: string, prompt: Partial<InsertHoroscopePrompt>): Promise<HoroscopePrompt | undefined>;
+  deleteHoroscopePrompt(id: string): Promise<boolean>;
+
+  // Horoscope Entries
+  getHoroscopeEntries(type?: string, language?: string): Promise<HoroscopeEntry[]>;
+  getHoroscopeEntry(id: string): Promise<HoroscopeEntry | undefined>;
+  getHoroscopeEntriesByPeriod(type: string, language: string, periodStart: string): Promise<HoroscopeEntry[]>;
+  createHoroscopeEntry(entry: InsertHoroscopeEntry): Promise<HoroscopeEntry>;
+  updateHoroscopeEntry(id: string, entry: Partial<InsertHoroscopeEntry>): Promise<HoroscopeEntry | undefined>;
+  deleteHoroscopeEntry(id: string): Promise<boolean>;
+  deleteHoroscopeEntriesByPeriod(type: string, language: string, periodStart: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -328,6 +348,19 @@ export class MemStorage implements IStorage {
   async createOptimizationAnalysis(_analysis: InsertOptimizationAnalysis): Promise<OptimizationAnalysis> { throw new Error("Not implemented"); }
   async updateOptimizationAnalysisContent(_id: string, _htmlContent: string): Promise<OptimizationAnalysis | undefined> { return undefined; }
   async deleteOptimizationAnalysis(_id: string): Promise<boolean> { return false; }
+  async getHoroscopePrompts(): Promise<HoroscopePrompt[]> { return []; }
+  async getHoroscopePrompt(_id: string): Promise<HoroscopePrompt | undefined> { return undefined; }
+  async getHoroscopePromptByTypeAndLanguage(_type: string, _language: string): Promise<HoroscopePrompt | undefined> { return undefined; }
+  async createHoroscopePrompt(_prompt: InsertHoroscopePrompt): Promise<HoroscopePrompt> { throw new Error("Not implemented"); }
+  async updateHoroscopePrompt(_id: string, _prompt: Partial<InsertHoroscopePrompt>): Promise<HoroscopePrompt | undefined> { return undefined; }
+  async deleteHoroscopePrompt(_id: string): Promise<boolean> { return false; }
+  async getHoroscopeEntries(_type?: string, _language?: string): Promise<HoroscopeEntry[]> { return []; }
+  async getHoroscopeEntry(_id: string): Promise<HoroscopeEntry | undefined> { return undefined; }
+  async getHoroscopeEntriesByPeriod(_type: string, _language: string, _periodStart: string): Promise<HoroscopeEntry[]> { return []; }
+  async createHoroscopeEntry(_entry: InsertHoroscopeEntry): Promise<HoroscopeEntry> { throw new Error("Not implemented"); }
+  async updateHoroscopeEntry(_id: string, _entry: Partial<InsertHoroscopeEntry>): Promise<HoroscopeEntry | undefined> { return undefined; }
+  async deleteHoroscopeEntry(_id: string): Promise<boolean> { return false; }
+  async deleteHoroscopeEntriesByPeriod(_type: string, _language: string, _periodStart: string): Promise<boolean> { return false; }
 }
 
 // Database storage implementation - uses PostgreSQL for persistence
@@ -677,6 +710,85 @@ export class DatabaseStorage implements IStorage {
       .where(eq(optimizationAnalyses.id, id))
       .returning();
     return analysis;
+  }
+
+  // Horoscope Prompts
+  async getHoroscopePrompts(): Promise<HoroscopePrompt[]> {
+    return db.select().from(horoscopePrompts).orderBy(horoscopePrompts.type);
+  }
+
+  async getHoroscopePrompt(id: string): Promise<HoroscopePrompt | undefined> {
+    const [prompt] = await db.select().from(horoscopePrompts).where(eq(horoscopePrompts.id, id));
+    return prompt;
+  }
+
+  async getHoroscopePromptByTypeAndLanguage(type: string, language: string): Promise<HoroscopePrompt | undefined> {
+    const results = await db.select().from(horoscopePrompts);
+    return results.find(p => p.type === type && p.language === language && p.isActive);
+  }
+
+  async createHoroscopePrompt(prompt: InsertHoroscopePrompt): Promise<HoroscopePrompt> {
+    const [created] = await db.insert(horoscopePrompts).values(prompt).returning();
+    return created;
+  }
+
+  async updateHoroscopePrompt(id: string, updates: Partial<InsertHoroscopePrompt>): Promise<HoroscopePrompt | undefined> {
+    const [updated] = await db.update(horoscopePrompts)
+      .set({ ...updates, updatedAt: new Date().toISOString() })
+      .where(eq(horoscopePrompts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteHoroscopePrompt(id: string): Promise<boolean> {
+    await db.delete(horoscopePrompts).where(eq(horoscopePrompts.id, id));
+    return true;
+  }
+
+  // Horoscope Entries
+  async getHoroscopeEntries(type?: string, language?: string): Promise<HoroscopeEntry[]> {
+    const all = await db.select().from(horoscopeEntries).orderBy(desc(horoscopeEntries.createdAt));
+    return all.filter(e => {
+      if (type && e.type !== type) return false;
+      if (language && e.language !== language) return false;
+      return true;
+    });
+  }
+
+  async getHoroscopeEntry(id: string): Promise<HoroscopeEntry | undefined> {
+    const [entry] = await db.select().from(horoscopeEntries).where(eq(horoscopeEntries.id, id));
+    return entry;
+  }
+
+  async getHoroscopeEntriesByPeriod(type: string, language: string, periodStart: string): Promise<HoroscopeEntry[]> {
+    const all = await db.select().from(horoscopeEntries);
+    return all.filter(e => e.type === type && e.language === language && e.periodStart === periodStart);
+  }
+
+  async createHoroscopeEntry(entry: InsertHoroscopeEntry): Promise<HoroscopeEntry> {
+    const [created] = await db.insert(horoscopeEntries).values(entry).returning();
+    return created;
+  }
+
+  async updateHoroscopeEntry(id: string, updates: Partial<InsertHoroscopeEntry>): Promise<HoroscopeEntry | undefined> {
+    const [updated] = await db.update(horoscopeEntries)
+      .set(updates)
+      .where(eq(horoscopeEntries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteHoroscopeEntry(id: string): Promise<boolean> {
+    await db.delete(horoscopeEntries).where(eq(horoscopeEntries.id, id));
+    return true;
+  }
+
+  async deleteHoroscopeEntriesByPeriod(type: string, language: string, periodStart: string): Promise<boolean> {
+    const entries = await this.getHoroscopeEntriesByPeriod(type, language, periodStart);
+    for (const entry of entries) {
+      await db.delete(horoscopeEntries).where(eq(horoscopeEntries.id, entry.id));
+    }
+    return true;
   }
 }
 

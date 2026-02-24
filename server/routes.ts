@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertLinkTableColumnSchema, insertSiteUrlSchema } from "@shared/schema";
+import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertLinkTableColumnSchema, insertSiteUrlSchema, insertHoroscopePromptSchema, insertHoroscopeEntrySchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
@@ -4163,6 +4163,331 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
     } catch (error) {
       console.error("Quick fetch failed:", error);
       res.status(500).json({ error: "Quick fetch failed: " + (error instanceof Error ? error.message : "Unknown error") });
+    }
+  });
+
+  // ============ HOROSCOPE PROMPTS ============
+  app.get("/api/horoscope-prompts", async (_req, res) => {
+    try {
+      const prompts = await storage.getHoroscopePrompts();
+      res.json(prompts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch horoscope prompts" });
+    }
+  });
+
+  app.get("/api/horoscope-prompts/:id", async (req, res) => {
+    try {
+      const prompt = await storage.getHoroscopePrompt(req.params.id);
+      if (!prompt) return res.status(404).json({ error: "Prompt not found" });
+      res.json(prompt);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch horoscope prompt" });
+    }
+  });
+
+  app.post("/api/horoscope-prompts", async (req, res) => {
+    try {
+      const parsed = insertHoroscopePromptSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      const prompt = await storage.createHoroscopePrompt(parsed.data);
+      res.status(201).json(prompt);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create horoscope prompt" });
+    }
+  });
+
+  app.patch("/api/horoscope-prompts/:id", async (req, res) => {
+    try {
+      const prompt = await storage.updateHoroscopePrompt(req.params.id, req.body);
+      if (!prompt) return res.status(404).json({ error: "Prompt not found" });
+      res.json(prompt);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update horoscope prompt" });
+    }
+  });
+
+  app.delete("/api/horoscope-prompts/:id", async (req, res) => {
+    try {
+      await storage.deleteHoroscopePrompt(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete horoscope prompt" });
+    }
+  });
+
+  // ============ HOROSCOPE ENTRIES ============
+  app.get("/api/horoscope-entries", async (req, res) => {
+    try {
+      const { type, language } = req.query;
+      const entries = await storage.getHoroscopeEntries(
+        type as string | undefined,
+        language as string | undefined
+      );
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch horoscope entries" });
+    }
+  });
+
+  app.get("/api/horoscope-entries/:id", async (req, res) => {
+    try {
+      const entry = await storage.getHoroscopeEntry(req.params.id);
+      if (!entry) return res.status(404).json({ error: "Entry not found" });
+      res.json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch horoscope entry" });
+    }
+  });
+
+  app.patch("/api/horoscope-entries/:id", async (req, res) => {
+    try {
+      const entry = await storage.updateHoroscopeEntry(req.params.id, req.body);
+      if (!entry) return res.status(404).json({ error: "Entry not found" });
+      res.json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update horoscope entry" });
+    }
+  });
+
+  app.delete("/api/horoscope-entries/:id", async (req, res) => {
+    try {
+      await storage.deleteHoroscopeEntry(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete horoscope entry" });
+    }
+  });
+
+  // ============ HOROSCOPE GENERATION ============
+  const ZODIAC_SIGNS = [
+    "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+    "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+  ];
+
+  function getHoroscopePeriod(type: string, date?: Date): { start: string; end: string; label: string } {
+    const d = date || new Date();
+    const formatDate = (dt: Date) => dt.toISOString().split('T')[0];
+
+    if (type === "daily") {
+      const dateStr = formatDate(d);
+      return { start: dateStr, end: dateStr, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }) };
+    } else if (type === "weekly") {
+      const dayOfWeek = d.getDay();
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      return {
+        start: formatDate(monday),
+        end: formatDate(sunday),
+        label: `week beginning ${monday.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}`
+      };
+    } else {
+      const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      return {
+        start: formatDate(firstDay),
+        end: formatDate(lastDay),
+        label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      };
+    }
+  }
+
+  async function generateHoroscopeContent(
+    sign: string,
+    type: string,
+    language: string,
+    periodLabel: string,
+    promptTemplate: string,
+    aiModel: string
+  ): Promise<string> {
+    const languageInstruction = language === "es"
+      ? "Write the horoscope entirely in Spanish."
+      : "Write the horoscope in English.";
+
+    const typeLabel = type === "daily" ? "daily" : type === "weekly" ? "weekly" : "monthly";
+    const fullPrompt = `${promptTemplate}
+
+Zodiac Sign: ${sign}
+Horoscope Type: ${typeLabel}
+Period: ${periodLabel}
+${languageInstruction}
+
+Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.`;
+
+    if (aiModel === "gpt") {
+      const openai = new OpenAI();
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: fullPrompt }],
+        max_tokens: type === "daily" ? 300 : type === "weekly" ? 600 : 1000,
+        temperature: 0.85,
+      });
+      return response.choices[0]?.message?.content?.trim() || "";
+    } else {
+      const anthropic = new Anthropic();
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: type === "daily" ? 300 : type === "weekly" ? 600 : 1000,
+        messages: [{ role: "user", content: fullPrompt }],
+      });
+      const block = response.content[0];
+      return block.type === "text" ? block.text.trim() : "";
+    }
+  }
+
+  app.post("/api/horoscopes/generate", async (req, res) => {
+    try {
+      const { type, language, force } = req.body;
+
+      if (!type || !["daily", "weekly", "monthly"].includes(type)) {
+        return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
+      }
+      const lang = language || "en";
+
+      const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang);
+      if (!prompt) {
+        return res.status(400).json({
+          error: `No active horoscope prompt found for type="${type}" language="${lang}". Please add one in Settings.`
+        });
+      }
+
+      const period = getHoroscopePeriod(type);
+
+      const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start);
+      if (existing.length > 0 && !force) {
+        return res.status(409).json({
+          error: "Horoscopes already exist for this period. Use force=true to regenerate.",
+          entries: existing
+        });
+      }
+
+      if (existing.length > 0 && force) {
+        await storage.deleteHoroscopeEntriesByPeriod(type, lang, period.start);
+      }
+
+      console.log(`[Horoscope] Generating ${type} horoscopes in ${lang} for ${period.label}...`);
+
+      const entries = [];
+      for (const sign of ZODIAC_SIGNS) {
+        console.log(`[Horoscope] Generating ${sign}...`);
+        const content = await generateHoroscopeContent(
+          sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+        );
+
+        const entry = await storage.createHoroscopeEntry({
+          type,
+          language: lang,
+          sign,
+          content,
+          periodStart: period.start,
+          periodEnd: period.end,
+          status: "published",
+        });
+        entries.push(entry);
+      }
+
+      console.log(`[Horoscope] Generated ${entries.length} ${type} horoscopes in ${lang}`);
+      res.json({ success: true, entries });
+    } catch (error) {
+      console.error("[Horoscope] Generation error:", error);
+      res.status(500).json({ error: "Failed to generate horoscopes: " + (error instanceof Error ? error.message : "Unknown error") });
+    }
+  });
+
+  // ============ HOROSCOPE XML FEEDS ============
+  function escapeXml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  app.get("/api/horoscopes/feed/:type/:language", async (req, res) => {
+    try {
+      const { type, language } = req.params;
+
+      if (!["daily", "weekly", "monthly"].includes(type)) {
+        return res.status(400).send("Invalid type");
+      }
+
+      const period = getHoroscopePeriod(type);
+      const entries = await storage.getHoroscopeEntriesByPeriod(type, language, period.start);
+
+      if (entries.length === 0) {
+        return res.status(404).type("application/xml").send(
+          `<?xml version="1.0" encoding="UTF-8"?>\n<rss><channel><title>No horoscopes found</title></channel></rss>`
+        );
+      }
+
+      const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+      const pubDate = new Date(period.start + "T00:00:00Z").toUTCString();
+
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n`;
+      xml += `<title>${typeLabel} Horoscopes</title>\n`;
+      xml += `<description>Horoscopes for ${period.label}</description>\n`;
+      xml += `<pubDate>${pubDate}</pubDate>\n`;
+      xml += `<link>https://www.psychicsource.com</link>\n`;
+
+      const signOrder = ZODIAC_SIGNS;
+      const sortedEntries = signOrder.map(s => entries.find(e => e.sign === s)).filter(Boolean);
+
+      for (const entry of sortedEntries) {
+        if (!entry) continue;
+        xml += `<item>\n`;
+        xml += `<title>${escapeXml(entry.sign)}</title>\n`;
+        xml += `<pubDate>${pubDate}</pubDate>\n`;
+        xml += `<description>${escapeXml(entry.content)}</description>\n`;
+        xml += `</item>\n`;
+      }
+
+      xml += `</channel>\n</rss>`;
+
+      res.type("application/xml").send(xml);
+    } catch (error) {
+      console.error("[Horoscope Feed] Error:", error);
+      res.status(500).type("application/xml").send(
+        `<?xml version="1.0" encoding="UTF-8"?>\n<rss><channel><title>Error</title></channel></rss>`
+      );
+    }
+  });
+
+  // ============ HOROSCOPE CRON STATUS ============
+  app.get("/api/horoscopes/cron-status", async (_req, res) => {
+    try {
+      const now = new Date();
+      const dailyPeriod = getHoroscopePeriod("daily", now);
+      const weeklyPeriod = getHoroscopePeriod("weekly", now);
+      const monthlyPeriod = getHoroscopePeriod("monthly", now);
+
+      const [dailyEn, dailyEs, weeklyEn, weeklyEs, monthlyEn, monthlyEs] = await Promise.all([
+        storage.getHoroscopeEntriesByPeriod("daily", "en", dailyPeriod.start),
+        storage.getHoroscopeEntriesByPeriod("daily", "es", dailyPeriod.start),
+        storage.getHoroscopeEntriesByPeriod("weekly", "en", weeklyPeriod.start),
+        storage.getHoroscopeEntriesByPeriod("weekly", "es", weeklyPeriod.start),
+        storage.getHoroscopeEntriesByPeriod("monthly", "en", monthlyPeriod.start),
+        storage.getHoroscopeEntriesByPeriod("monthly", "es", monthlyPeriod.start),
+      ]);
+
+      res.json({
+        daily: {
+          en: { generated: dailyEn.length > 0, count: dailyEn.length, period: dailyPeriod },
+          es: { generated: dailyEs.length > 0, count: dailyEs.length, period: dailyPeriod },
+        },
+        weekly: {
+          en: { generated: weeklyEn.length > 0, count: weeklyEn.length, period: weeklyPeriod },
+          es: { generated: weeklyEs.length > 0, count: weeklyEs.length, period: weeklyPeriod },
+        },
+        monthly: {
+          en: { generated: monthlyEn.length > 0, count: monthlyEn.length, period: monthlyPeriod },
+          es: { generated: monthlyEs.length > 0, count: monthlyEs.length, period: monthlyPeriod },
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch cron status" });
     }
   });
 

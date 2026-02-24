@@ -1,0 +1,34 @@
+I want to be able to generate daily, weekly, and monthly horoscopes for our website, including in English and Spanish. I want a flexible system where I can add a prompt in the settings for this that will determine how the content is generated. It needs to run on a cron job because, for example, for the Daily Horoscope, I need it to run every day for each sign. For weekly, it's once a week, and for monthly, once a month. I need the output as a feed in this format:
+
+
+<title>Daily Horoscopes</title>
+<description>Horoscopes for 24 February 2026</description>
+<pubDate>Tue, 24 Feb 2026 00:00:00 GMT</pubDate>
+<link>http://www.horoscopeservices.co.uk</link>
+<item>
+<title>Aries</title>
+<pubDate>Tue, 24 Feb 2026 00:00:00 GMT</pubDate>
+<description>A comment could poke your ego, and you may gear up for battle like someone just challenged your throne. Relax, warrior. You could hear the point without turning it into a duel, and that move will make you look powerful instead of fragile. Not every critique equals disrespect; sometimes, it's 'free upgrade info', understand? Show you can take a hit without throwing a tantrum.</description>
+</item>
+<item>
+<title>Taurus</title>
+<pubDate>Tue, 24 Feb 2026 00:00:00 GMT</pubDate>
+<description>You'll act unbothered while secretly replaying one person's opinion on loop, and may hate how much it gets under your skin. Instead of pretending you don't care, ask what they meant and use it to tighten your game. You won't enjoy the sting, but you'll likely love the results. This tense or confusing situation will feel annoying before it feels worth it, so don't bail early.</description>
+</item>
+<item>
+
+
+<title>Weekly Horoscopes</title>
+<description>Horoscopes for week beginning 20 February 2026</description>
+<pubDate>Fri, 20 Feb 2026 00:00:00 GMT</pubDate>
+<link>http://www.horoscopeservices.co.uk</link>
+<item>
+<title>Aries</title>
+<pubDate>Fri, 20 Feb 2026 00:00:00 GMT</pubDate>
+<description>Emotional honesty hits hard this week. Venus teams up with Jupiter, turning you into a walking open heart. You'll feel everything, and that includes a friend's drama, your ex's playlist, and that dog or cat TikTok video that wrecks you at 2 a.m. Instead of hiding, lean in. Deep, open talks beat small talk. Let people show up for you. They want to, and vulnerability is your ticket to relief and release. Say what you feel, and let connection heal in ways that only true connection can.</description>
+</item>
+<item>
+<title>Taurus</title>
+<pubDate>Fri, 20 Feb 2026 00:00:00 GMT</pubDate>
+<description>This week, Venus and Jupiter flood your social life with warm, fuzzy, ride-or-die energy. Say yes to group hangs, collabs and even random invites that sound slightly chaotic. Someone you meet through a friend could open a door you did not even know existed. Be open, kind, and ditch any 'leave me alone' vibe. Real bonds form when you show the messy, excited, human side. Build your circle like your future depends on it - because it kinda does.</description>
+</item>

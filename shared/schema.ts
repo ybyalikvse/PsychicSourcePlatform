@@ -344,4 +344,44 @@ export interface MetaSuggestions {
   descriptions: string[];
 }
 
+// Horoscope prompts table - configurable templates per type/language
+export const horoscopePrompts = pgTable("horoscope_prompts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // daily, weekly, monthly
+  language: text("language").notNull().default("en"), // en, es
+  prompt: text("prompt").notNull(),
+  aiModel: text("ai_model").default("claude"), // claude, gpt
+  isActive: boolean("is_active").default(true),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertHoroscopePromptSchema = createInsertSchema(horoscopePrompts).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertHoroscopePrompt = z.infer<typeof insertHoroscopePromptSchema>;
+export type HoroscopePrompt = typeof horoscopePrompts.$inferSelect;
+
+// Horoscope entries table - generated horoscope content
+export const horoscopeEntries = pgTable("horoscope_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // daily, weekly, monthly
+  language: text("language").notNull().default("en"),
+  sign: text("sign").notNull(), // aries, taurus, etc.
+  content: text("content").notNull(),
+  periodStart: text("period_start").notNull(), // date string YYYY-MM-DD
+  periodEnd: text("period_end").notNull(),
+  status: text("status").notNull().default("published"), // draft, published
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertHoroscopeEntrySchema = createInsertSchema(horoscopeEntries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertHoroscopeEntry = z.infer<typeof insertHoroscopeEntrySchema>;
+export type HoroscopeEntry = typeof horoscopeEntries.$inferSelect;
+
 export * from "./models/chat";

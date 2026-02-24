@@ -11,6 +11,7 @@ import {
   Target,
   Layers,
   Link as LinkIcon,
+  Star,
 } from "lucide-react";
 import {
   Sidebar,
@@ -56,6 +57,11 @@ const mainNavItems = [
     title: "Internal Links",
     url: "/internal-links",
     icon: LinkIcon,
+  },
+  {
+    title: "Horoscopes",
+    url: "/horoscopes",
+    icon: Star,
   },
 ];
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,13 +23,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2, Image, Users } from "lucide-react";
+import { Save, Globe, Bell, Shield, Palette, PenTool, Search, Plus, Edit2, Trash2, Image as ImageIcon, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience, LinkTableColumn, OptimizationPrompt } from "@shared/schema";
-import { Copy, Target } from "lucide-react";
+import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience, LinkTableColumn, OptimizationPrompt, HoroscopePrompt } from "@shared/schema";
+import { Copy, Target, Star } from "lucide-react";
 
 interface WritingStyleFormData {
   name: string;
@@ -116,6 +117,16 @@ export default function Settings() {
     isDefault: false,
   });
 
+  const [horoscopePromptDialogOpen, setHoroscopePromptDialogOpen] = useState(false);
+  const [editingHoroscopePrompt, setEditingHoroscopePrompt] = useState<HoroscopePrompt | null>(null);
+  const [horoscopePromptForm, setHoroscopePromptForm] = useState({
+    type: "daily" as string,
+    language: "en" as string,
+    prompt: "",
+    aiModel: "claude" as string,
+    isActive: true,
+  });
+
   const { data: writingStyles = [], isLoading: stylesLoading } = useQuery<WritingStyle[]>({
     queryKey: ["/api/writing-styles"],
   });
@@ -134,6 +145,10 @@ export default function Settings() {
 
   const { data: optimizationPrompts = [], isLoading: optimizationPromptsLoading } = useQuery<OptimizationPrompt[]>({
     queryKey: ["/api/optimization-prompts"],
+  });
+
+  const { data: horoscopePrompts = [], isLoading: horoscopePromptsLoading } = useQuery<HoroscopePrompt[]>({
+    queryKey: ["/api/horoscope-prompts"],
   });
 
   const { data: seoSettings, isLoading: seoLoading } = useQuery<SeoSettingsType>({
@@ -348,6 +363,74 @@ export default function Settings() {
 
   const resetOptimizationPromptForm = () => {
     setOptimizationPromptForm({ name: "", description: "", prompt: "", promptType: "analysis", isDefault: false });
+  };
+
+  const createHoroscopePromptMutation = useMutation({
+    mutationFn: (data: typeof horoscopePromptForm) =>
+      apiRequest("POST", "/api/horoscope-prompts", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscope-prompts"] });
+      setHoroscopePromptDialogOpen(false);
+      resetHoroscopePromptForm();
+      toast({ title: "Horoscope prompt created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create horoscope prompt", variant: "destructive" });
+    },
+  });
+
+  const updateHoroscopePromptMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<typeof horoscopePromptForm> }) =>
+      apiRequest("PATCH", `/api/horoscope-prompts/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscope-prompts"] });
+      setHoroscopePromptDialogOpen(false);
+      setEditingHoroscopePrompt(null);
+      resetHoroscopePromptForm();
+      toast({ title: "Horoscope prompt updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update horoscope prompt", variant: "destructive" });
+    },
+  });
+
+  const deleteHoroscopePromptMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/horoscope-prompts/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscope-prompts"] });
+      toast({ title: "Horoscope prompt deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete horoscope prompt", variant: "destructive" });
+    },
+  });
+
+  const resetHoroscopePromptForm = () => {
+    setHoroscopePromptForm({ type: "daily", language: "en", prompt: "", aiModel: "claude", isActive: true });
+  };
+
+  const handleEditHoroscopePrompt = (prompt: HoroscopePrompt) => {
+    setEditingHoroscopePrompt(prompt);
+    setHoroscopePromptForm({
+      type: prompt.type,
+      language: prompt.language,
+      prompt: prompt.prompt,
+      aiModel: prompt.aiModel || "claude",
+      isActive: prompt.isActive ?? true,
+    });
+    setHoroscopePromptDialogOpen(true);
+  };
+
+  const handleSaveHoroscopePrompt = () => {
+    if (editingHoroscopePrompt) {
+      updateHoroscopePromptMutation.mutate({
+        id: editingHoroscopePrompt.id,
+        data: horoscopePromptForm,
+      });
+    } else {
+      createHoroscopePromptMutation.mutate(horoscopePromptForm);
+    }
   };
 
   const handleEditOptimizationPrompt = (prompt: OptimizationPrompt) => {
@@ -603,7 +686,7 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Image className="h-5 w-5 text-muted-foreground" />
+            <ImageIcon className="h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-lg">Image Styles</CardTitle>
           </div>
           <CardDescription>
@@ -1150,6 +1233,155 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-lg">Horoscope Prompts</CardTitle>
+                <CardDescription>Configure AI prompts for horoscope generation by type and language</CardDescription>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEditingHoroscopePrompt(null);
+                resetHoroscopePromptForm();
+                setHoroscopePromptDialogOpen(true);
+              }}
+              data-testid="button-add-horoscope-prompt"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Prompt
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {horoscopePromptsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : horoscopePrompts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No horoscope prompts configured. Add prompts for daily, weekly, and monthly horoscopes in English and Spanish.</p>
+          ) : (
+            <div className="space-y-3">
+              {horoscopePrompts.map((prompt) => (
+                <div key={prompt.id} className="flex items-start justify-between p-3 rounded-lg border" data-testid={`horoscope-prompt-${prompt.id}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline">{prompt.type}</Badge>
+                      <Badge variant="secondary">{prompt.language === "en" ? "English" : "Spanish"}</Badge>
+                      <Badge variant={prompt.isActive ? "default" : "outline"}>
+                        {prompt.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                      <Badge variant="outline">{prompt.aiModel === "gpt" ? "GPT-4o" : "Claude"}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{prompt.prompt}</p>
+                  </div>
+                  <div className="flex gap-1 ml-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => handleEditHoroscopePrompt(prompt)}
+                      data-testid={`button-edit-horoscope-prompt-${prompt.id}`}
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive"
+                      onClick={() => deleteHoroscopePromptMutation.mutate(prompt.id)}
+                      data-testid={`button-delete-horoscope-prompt-${prompt.id}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={horoscopePromptDialogOpen} onOpenChange={setHoroscopePromptDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingHoroscopePrompt ? "Edit" : "Add"} Horoscope Prompt</DialogTitle>
+            <DialogDescription>Configure the AI prompt used to generate horoscopes</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select value={horoscopePromptForm.type} onValueChange={(v) => setHoroscopePromptForm({ ...horoscopePromptForm, type: v })}>
+                  <SelectTrigger data-testid="select-horoscope-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Language</Label>
+                <Select value={horoscopePromptForm.language} onValueChange={(v) => setHoroscopePromptForm({ ...horoscopePromptForm, language: v })}>
+                  <SelectTrigger data-testid="select-horoscope-language">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">Spanish</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>AI Model</Label>
+              <Select value={horoscopePromptForm.aiModel} onValueChange={(v) => setHoroscopePromptForm({ ...horoscopePromptForm, aiModel: v })}>
+                <SelectTrigger data-testid="select-horoscope-ai-model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="claude">Claude (Sonnet 4)</SelectItem>
+                  <SelectItem value="gpt">GPT-4o</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Prompt Template</Label>
+              <Textarea
+                value={horoscopePromptForm.prompt}
+                onChange={(e) => setHoroscopePromptForm({ ...horoscopePromptForm, prompt: e.target.value })}
+                rows={8}
+                placeholder="Write a horoscope that is engaging, personal, and specific to each zodiac sign's traits. Keep the tone conversational and modern..."
+                data-testid="textarea-horoscope-prompt"
+              />
+              <p className="text-xs text-muted-foreground">
+                The sign name, type, period, and language will be automatically appended. Write your general instructions here.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={horoscopePromptForm.isActive}
+                onCheckedChange={(v) => setHoroscopePromptForm({ ...horoscopePromptForm, isActive: v })}
+                data-testid="switch-horoscope-active"
+              />
+              <Label>Active</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHoroscopePromptDialogOpen(false)} data-testid="button-cancel-horoscope-prompt">Cancel</Button>
+            <Button onClick={handleSaveHoroscopePrompt} data-testid="button-save-horoscope-prompt">
+              {editingHoroscopePrompt ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
