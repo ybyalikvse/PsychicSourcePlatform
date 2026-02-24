@@ -60,7 +60,10 @@ ${languageInstruction}
 Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.`;
 
   if (aiModel === "gpt") {
-    const openai = new OpenAI();
+    const openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: fullPrompt }],
@@ -69,7 +72,10 @@ Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no
     });
     return response.choices[0]?.message?.content?.trim() || "";
   } else {
-    const anthropic = new Anthropic();
+    const anthropic = new Anthropic({
+      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+    });
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: type === "daily" ? 300 : type === "weekly" ? 600 : 1000,
