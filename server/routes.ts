@@ -4226,6 +4226,7 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       );
       res.json(entries);
     } catch (error) {
+      console.error("[Horoscope] Error fetching entries:", error);
       res.status(500).json({ error: "Failed to fetch horoscope entries" });
     }
   });
@@ -4236,6 +4237,7 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       if (!entry) return res.status(404).json({ error: "Entry not found" });
       res.json(entry);
     } catch (error) {
+      console.error("[Horoscope] Error fetching entry:", error);
       res.status(500).json({ error: "Failed to fetch horoscope entry" });
     }
   });
@@ -4246,6 +4248,7 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       if (!entry) return res.status(404).json({ error: "Entry not found" });
       res.json(entry);
     } catch (error) {
+      console.error("[Horoscope] Error updating entry:", error);
       res.status(500).json({ error: "Failed to update horoscope entry" });
     }
   });
@@ -4255,6 +4258,7 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       await storage.deleteHoroscopeEntry(req.params.id);
       res.status(204).send();
     } catch (error) {
+      console.error("[Horoscope] Error deleting entry:", error);
       res.status(500).json({ error: "Failed to delete horoscope entry" });
     }
   });
@@ -4493,6 +4497,7 @@ Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no
         },
       });
     } catch (error) {
+      console.error("[Horoscope] Error fetching cron status:", error);
       res.status(500).json({ error: "Failed to fetch cron status" });
     }
   });

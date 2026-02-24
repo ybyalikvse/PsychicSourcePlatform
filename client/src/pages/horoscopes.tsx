@@ -44,16 +44,19 @@ export default function Horoscopes() {
   const [editingEntry, setEditingEntry] = useState<HoroscopeEntry | null>(null);
   const [editContent, setEditContent] = useState("");
 
-  const { data: entries = [], isLoading: entriesLoading } = useQuery<HoroscopeEntry[]>({
+  const { data: entries = [], isLoading: entriesLoading, isError: entriesError } = useQuery<HoroscopeEntry[]>({
     queryKey: ["/api/horoscope-entries", activeType, language],
     queryFn: async () => {
       const res = await fetch(`/api/horoscope-entries?type=${activeType}&language=${language}`);
+      if (!res.ok) return [];
       return res.json();
     },
+    retry: 1,
   });
 
   const { data: cronStatus } = useQuery({
     queryKey: ["/api/horoscopes/cron-status"],
+    retry: 1,
   });
 
   const generateMutation = useMutation({
