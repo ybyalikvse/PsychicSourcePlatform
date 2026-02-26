@@ -4319,7 +4319,7 @@ Period: ${periodLabel}
 ${languageInstruction}
 
 Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.
-Wrap each paragraph in <p> tags. Output clean HTML with no CSS, no classes, no inline styles. Only use <p> tags for paragraphs.`;
+Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if the prompt requests them. Output clean HTML with no CSS, no classes, no inline styles. Only use <p> and <h3> tags.`;
 
     if (aiModel === "gpt") {
       const openai = new OpenAI({
