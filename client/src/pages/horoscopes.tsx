@@ -65,7 +65,7 @@ export default function Horoscopes() {
     retry: 1,
   });
 
-  async function generateAllSigns(type: string, lang: string, force: boolean) {
+  async function generateAllSigns(type: string, lang: string, existingEntries: HoroscopeEntry[], forceAll: boolean) {
     setIsGenerating(true);
     setGeneratedCount(0);
     setFailedSigns([]);
@@ -73,16 +73,25 @@ export default function Horoscopes() {
     stopRef.current = false;
 
     try {
-      if (force) {
+      const existingSigns = forceAll ? [] : existingEntries.map(e => e.sign);
+      const signsToGenerate = ZODIAC_SIGNS.filter(s => !existingSigns.includes(s));
+
+      if (forceAll) {
         await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang });
       }
 
-      for (let i = 0; i < ZODIAC_SIGNS.length; i++) {
+      if (signsToGenerate.length === 0) {
+        toast({ title: "All 12 signs already generated", description: "Use the regenerate button on individual signs to redo specific ones." });
+        setIsGenerating(false);
+        return;
+      }
+
+      for (let i = 0; i < signsToGenerate.length; i++) {
         if (stopRef.current) {
-          toast({ title: "Generation stopped", description: `Completed ${i} of 12 signs before stopping.` });
+          toast({ title: "Generation stopped", description: `Completed ${i} of ${signsToGenerate.length} remaining signs before stopping.` });
           break;
         }
-        const sign = ZODIAC_SIGNS[i];
+        const sign = signsToGenerate[i];
         setGeneratingSign(sign);
         try {
           await apiRequest("POST", "/api/horoscopes/generate-sign", {
@@ -188,17 +197,32 @@ export default function Horoscopes() {
               <SelectItem value="es" data-testid="option-language-es">Spanish</SelectItem>
             </SelectContent>
           </Select>
+          {sortedEntries.length > 0 && sortedEntries.length < 12 && (
+            <Button
+              onClick={() => generateAllSigns(activeType, language, sortedEntries, false)}
+              disabled={isGenerating || !!regeneratingSign}
+              data-testid="button-continue-generate"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Continue ({12 - sortedEntries.length} remaining)
+            </Button>
+          )}
           <Button
-            onClick={() => generateAllSigns(activeType, language, sortedEntries.length > 0)}
-            disabled={isGenerating}
+            variant={sortedEntries.length > 0 && sortedEntries.length < 12 ? "outline" : "default"}
+            onClick={() => generateAllSigns(activeType, language, sortedEntries, sortedEntries.length > 0)}
+            disabled={isGenerating || !!regeneratingSign}
             data-testid="button-generate"
           >
-            {isGenerating ? (
+            {isGenerating && sortedEntries.length === 0 ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4 mr-2" />
             )}
-            {sortedEntries.length > 0 ? "Regenerate" : "Generate"} {activeType.charAt(0).toUpperCase() + activeType.slice(1)}
+            {sortedEntries.length > 0 ? "Regenerate All" : "Generate"} {activeType.charAt(0).toUpperCase() + activeType.slice(1)}
           </Button>
         </div>
       </div>
