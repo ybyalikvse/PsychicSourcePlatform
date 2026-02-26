@@ -43,6 +43,10 @@ export default function Horoscopes() {
   const [language, setLanguage] = useState("en");
   const [editingEntry, setEditingEntry] = useState<HoroscopeEntry | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingSign, setGeneratingSign] = useState<string | null>(null);
+  const [generatedCount, setGeneratedCount] = useState(0);
+  const [failedSigns, setFailedSigns] = useState<string[]>([]);
 
   const { data: entries = [], isLoading: entriesLoading, isError: entriesError } = useQuery<HoroscopeEntry[]>({
     queryKey: ["/api/horoscope-entries", activeType, language],
@@ -59,24 +63,44 @@ export default function Horoscopes() {
     retry: 1,
   });
 
-  const generateMutation = useMutation({
-    mutationFn: async ({ type, lang, force }: { type: string; lang: string; force?: boolean }) => {
-      const res = await apiRequest("POST", "/api/horoscopes/generate", {
-        type,
-        language: lang,
-        force,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
+  async function generateAllSigns(type: string, lang: string, force: boolean) {
+    setIsGenerating(true);
+    setGeneratedCount(0);
+    setFailedSigns([]);
+    setGeneratingSign(null);
+
+    try {
+      if (force) {
+        await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang });
+      }
+
+      for (let i = 0; i < ZODIAC_SIGNS.length; i++) {
+        const sign = ZODIAC_SIGNS[i];
+        setGeneratingSign(sign);
+        try {
+          await apiRequest("POST", "/api/horoscopes/generate-sign", {
+            type,
+            language: lang,
+            sign,
+          });
+          setGeneratedCount(i + 1);
+          queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang] });
+        } catch (err: any) {
+          console.error(`Failed to generate ${sign}:`, err);
+          setFailedSigns(prev => [...prev, sign]);
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/horoscopes/cron-status"] });
-      toast({ title: "Horoscopes generated successfully" });
-    },
-    onError: (error: any) => {
+      toast({ title: "Horoscope generation complete" });
+    } catch (error: any) {
       toast({ title: "Generation failed", description: error.message, variant: "destructive" });
-    },
-  });
+    } finally {
+      setIsGenerating(false);
+      setGeneratingSign(null);
+    }
+  }
 
   const updateEntryMutation = useMutation({
     mutationFn: async ({ id, content }: { id: string; content: string }) => {
@@ -134,11 +158,11 @@ export default function Horoscopes() {
             </SelectContent>
           </Select>
           <Button
-            onClick={() => generateMutation.mutate({ type: activeType, lang: language, force: sortedEntries.length > 0 })}
-            disabled={generateMutation.isPending}
+            onClick={() => generateAllSigns(activeType, language, sortedEntries.length > 0)}
+            disabled={isGenerating}
             data-testid="button-generate"
           >
-            {generateMutation.isPending ? (
+            {isGenerating ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -226,12 +250,41 @@ export default function Horoscopes() {
 
         {["daily", "weekly", "monthly"].map(type => (
           <TabsContent key={type} value={type} className="space-y-4">
-            {generateMutation.isPending && (
+            {isGenerating && (
               <Card>
                 <CardContent className="pt-6">
-                  <div className="flex items-center justify-center gap-3 py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    <p className="text-muted-foreground">Generating horoscopes for all 12 signs... This may take a minute.</p>
+                  <div className="space-y-4 py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        <p className="font-medium">
+                          Generating {generatingSign ? `${ZODIAC_SYMBOLS[generatingSign]} ${generatingSign}` : "..."}
+                        </p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{generatedCount} / 12 complete</p>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${(generatedCount / 12) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {ZODIAC_SIGNS.map((sign, idx) => (
+                        <Badge
+                          key={sign}
+                          variant={idx < generatedCount ? "default" : generatingSign === sign ? "outline" : "secondary"}
+                          className={
+                            failedSigns.includes(sign) ? "bg-destructive text-destructive-foreground" :
+                            idx < generatedCount + failedSigns.filter(f => ZODIAC_SIGNS.indexOf(f) < idx).length ? "bg-green-600 text-white" :
+                            generatingSign === sign ? "border-primary animate-pulse" : ""
+                          }
+                          data-testid={`badge-progress-${sign.toLowerCase()}`}
+                        >
+                          {ZODIAC_SYMBOLS[sign]} {sign}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -247,7 +300,7 @@ export default function Horoscopes() {
               </Card>
             )}
 
-            {!entriesLoading && sortedEntries.length === 0 && !generateMutation.isPending && (
+            {!entriesLoading && sortedEntries.length === 0 && !isGenerating && (
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center py-8">

@@ -4347,12 +4347,15 @@ Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no
     }
   }
 
-  app.post("/api/horoscopes/generate", async (req, res) => {
+  app.post("/api/horoscopes/generate-sign", async (req, res) => {
     try {
-      const { type, language, force } = req.body;
+      const { type, language, sign } = req.body;
 
       if (!type || !["daily", "weekly", "monthly"].includes(type)) {
         return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
+      }
+      if (!sign || !ZODIAC_SIGNS.includes(sign)) {
+        return res.status(400).json({ error: "Invalid zodiac sign." });
       }
       const lang = language || "en";
 
@@ -4365,44 +4368,42 @@ Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no
 
       const period = getHoroscopePeriod(type);
 
-      const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start);
-      if (existing.length > 0 && !force) {
-        return res.status(409).json({
-          error: "Horoscopes already exist for this period. Use force=true to regenerate.",
-          entries: existing
-        });
-      }
+      console.log(`[Horoscope] Generating ${sign} (${type}/${lang}) for ${period.label}...`);
+      const content = await generateHoroscopeContent(
+        sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+      );
 
-      if (existing.length > 0 && force) {
-        await storage.deleteHoroscopeEntriesByPeriod(type, lang, period.start);
-      }
+      const entry = await storage.createHoroscopeEntry({
+        type,
+        language: lang,
+        sign,
+        content,
+        periodStart: period.start,
+        periodEnd: period.end,
+        status: "published",
+      });
 
-      console.log(`[Horoscope] Generating ${type} horoscopes in ${lang} for ${period.label}...`);
-
-      const entries = [];
-      for (const sign of ZODIAC_SIGNS) {
-        console.log(`[Horoscope] Generating ${sign}...`);
-        const content = await generateHoroscopeContent(
-          sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
-        );
-
-        const entry = await storage.createHoroscopeEntry({
-          type,
-          language: lang,
-          sign,
-          content,
-          periodStart: period.start,
-          periodEnd: period.end,
-          status: "published",
-        });
-        entries.push(entry);
-      }
-
-      console.log(`[Horoscope] Generated ${entries.length} ${type} horoscopes in ${lang}`);
-      res.json({ success: true, entries });
+      console.log(`[Horoscope] Generated ${sign} (${type}/${lang}) - ${content.length} chars`);
+      res.json({ success: true, entry });
     } catch (error) {
-      console.error("[Horoscope] Generation error:", error);
-      res.status(500).json({ error: "Failed to generate horoscopes: " + (error instanceof Error ? error.message : "Unknown error") });
+      console.error(`[Horoscope] Generation error for sign:`, error);
+      res.status(500).json({ error: "Failed to generate horoscope: " + (error instanceof Error ? error.message : "Unknown error") });
+    }
+  });
+
+  app.post("/api/horoscopes/clear-period", async (req, res) => {
+    try {
+      const { type, language } = req.body;
+      if (!type || !["daily", "weekly", "monthly"].includes(type)) {
+        return res.status(400).json({ error: "Invalid type." });
+      }
+      const lang = language || "en";
+      const period = getHoroscopePeriod(type);
+      await storage.deleteHoroscopeEntriesByPeriod(type, lang, period.start);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[Horoscope] Clear period error:", error);
+      res.status(500).json({ error: "Failed to clear period" });
     }
   });
 
