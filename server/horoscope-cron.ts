@@ -67,7 +67,7 @@ Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: fullPrompt }],
-      max_tokens: type === "daily" ? 1500 : type === "weekly" ? 3000 : 4000,
+      max_tokens: type === "daily" ? 4096 : type === "weekly" ? 8192 : 8192,
       temperature: 0.85,
     });
     return response.choices[0]?.message?.content?.trim() || "";
@@ -78,7 +78,7 @@ Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no
     });
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: type === "daily" ? 1500 : type === "weekly" ? 3000 : 4000,
+      max_tokens: type === "daily" ? 4096 : type === "weekly" ? 8192 : 8192,
       messages: [{ role: "user", content: fullPrompt }],
     });
     const block = response.content[0];
