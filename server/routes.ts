@@ -4311,12 +4311,18 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       : "Write the horoscope in English.";
 
     const typeLabel = type === "daily" ? "daily" : type === "weekly" ? "weekly" : "monthly";
+
+    const wordCountMatch = promptTemplate.match(/(?:minimum|at least|around|approximately|about|exactly)?\s*(\d{2,})\s*words/i);
+    const wordCountInstruction = wordCountMatch
+      ? `\n\nIMPORTANT: Your response must be between ${wordCountMatch[1]} and ${Math.round(parseInt(wordCountMatch[1]) * 1.15)} words. Do not exceed ${Math.round(parseInt(wordCountMatch[1]) * 1.15)} words. Do not write less than ${wordCountMatch[1]} words.`
+      : "";
+
     const fullPrompt = `${promptTemplate}
 
 Zodiac Sign: ${sign}
 Horoscope Type: ${typeLabel}
 Period: ${periodLabel}
-${languageInstruction}
+${languageInstruction}${wordCountInstruction}
 
 Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.`;
 
