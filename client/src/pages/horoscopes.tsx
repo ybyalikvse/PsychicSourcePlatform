@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Star, RefreshCw, Rss, Globe, Copy, Edit2, Trash2, Loader2, CheckCircle, Clock } from "lucide-react";
+import { Star, RefreshCw, Rss, Globe, Copy, Edit2, Trash2, Loader2, CheckCircle, Clock, Square, RotateCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -47,6 +47,8 @@ export default function Horoscopes() {
   const [generatingSign, setGeneratingSign] = useState<string | null>(null);
   const [generatedCount, setGeneratedCount] = useState(0);
   const [failedSigns, setFailedSigns] = useState<string[]>([]);
+  const [regeneratingSign, setRegeneratingSign] = useState<string | null>(null);
+  const stopRef = useRef(false);
 
   const { data: entries = [], isLoading: entriesLoading, isError: entriesError } = useQuery<HoroscopeEntry[]>({
     queryKey: ["/api/horoscope-entries", activeType, language],
@@ -68,6 +70,7 @@ export default function Horoscopes() {
     setGeneratedCount(0);
     setFailedSigns([]);
     setGeneratingSign(null);
+    stopRef.current = false;
 
     try {
       if (force) {
@@ -75,6 +78,10 @@ export default function Horoscopes() {
       }
 
       for (let i = 0; i < ZODIAC_SIGNS.length; i++) {
+        if (stopRef.current) {
+          toast({ title: "Generation stopped", description: `Completed ${i} of 12 signs before stopping.` });
+          break;
+        }
         const sign = ZODIAC_SIGNS[i];
         setGeneratingSign(sign);
         try {
@@ -93,12 +100,36 @@ export default function Horoscopes() {
 
       queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/horoscopes/cron-status"] });
-      toast({ title: "Horoscope generation complete" });
+      if (!stopRef.current) {
+        toast({ title: "Horoscope generation complete" });
+      }
     } catch (error: any) {
       toast({ title: "Generation failed", description: error.message, variant: "destructive" });
     } finally {
       setIsGenerating(false);
       setGeneratingSign(null);
+      stopRef.current = false;
+    }
+  }
+
+  async function regenerateSingleSign(sign: string, existingEntryId?: string) {
+    setRegeneratingSign(sign);
+    try {
+      if (existingEntryId) {
+        await apiRequest("DELETE", `/api/horoscope-entries/${existingEntryId}`);
+      }
+      await apiRequest("POST", "/api/horoscopes/generate-sign", {
+        type: activeType,
+        language,
+        sign,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", activeType, language] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscopes/cron-status"] });
+      toast({ title: `${sign} horoscope regenerated` });
+    } catch (error: any) {
+      toast({ title: `Failed to regenerate ${sign}`, description: error.message, variant: "destructive" });
+    } finally {
+      setRegeneratingSign(null);
     }
   }
 
@@ -261,7 +292,18 @@ export default function Horoscopes() {
                           Generating {generatingSign ? `${ZODIAC_SYMBOLS[generatingSign]} ${generatingSign}` : "..."}
                         </p>
                       </div>
-                      <p className="text-sm text-muted-foreground">{generatedCount} / 12 complete</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-sm text-muted-foreground">{generatedCount} / 12 complete</p>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => { stopRef.current = true; }}
+                          data-testid="button-stop-generation"
+                        >
+                          <Square className="h-3 w-3 mr-1" />
+                          Stop
+                        </Button>
+                      </div>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div
@@ -349,6 +391,21 @@ export default function Horoscopes() {
                             {entry.sign}
                           </CardTitle>
                           <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => regenerateSingleSign(entry.sign, entry.id)}
+                              disabled={regeneratingSign === entry.sign || isGenerating}
+                              title={`Regenerate ${entry.sign}`}
+                              data-testid={`button-regenerate-${entry.sign.toLowerCase()}`}
+                            >
+                              {regeneratingSign === entry.sign ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RotateCw className="h-3 w-3" />
+                              )}
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
