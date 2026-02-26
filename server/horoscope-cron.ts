@@ -57,7 +57,8 @@ Horoscope Type: ${typeLabel}
 Period: ${periodLabel}
 ${languageInstruction}
 
-Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.`;
+Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.
+Wrap each paragraph in <p> tags. Output clean HTML with no CSS, no classes, no inline styles. Only use <p> tags for paragraphs.`;
 
   if (aiModel === "gpt") {
     const openai = new OpenAI({

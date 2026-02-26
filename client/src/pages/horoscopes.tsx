@@ -443,7 +443,7 @@ export default function Horoscopes() {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-sm text-muted-foreground leading-relaxed">{entry.content}</p>
+                        <div className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: entry.content }} />
                       </CardContent>
                     </Card>
                   ))}
