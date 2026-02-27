@@ -140,6 +140,60 @@ async function runHoroscopeGeneration(type: string) {
   }
 }
 
+async function runStartupCatchup() {
+  console.log("[Horoscope Cron] Running startup catchup check...");
+
+  for (const type of ["daily", "weekly", "monthly"] as const) {
+    const languages = ["en", "es"];
+    const daysToCheck = type === "daily" ? [0, 1, 2, 3] : [0];
+
+    for (const lang of languages) {
+      const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang);
+      if (!prompt) continue;
+
+      for (const dayOffset of daysToCheck) {
+        let targetDate: Date | undefined;
+        if (dayOffset > 0) {
+          targetDate = new Date();
+          targetDate.setDate(targetDate.getDate() + dayOffset);
+        }
+
+        const period = getHoroscopePeriod(type, targetDate);
+        const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start);
+
+        if (existing.length === 0) {
+          console.log(`[Horoscope Cron] Catchup: generating ${type}/${lang} for ${period.start}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
+
+          try {
+            for (const sign of ZODIAC_SIGNS) {
+              const content = await generateHoroscopeContent(
+                sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+              );
+              await storage.createHoroscopeEntry({
+                type,
+                language: lang,
+                sign,
+                content,
+                periodStart: period.start,
+                periodEnd: period.end,
+                status: "published",
+              });
+              console.log(`[Horoscope Cron] Catchup: generated ${sign} (${type}/${lang}) for ${period.start}`);
+            }
+            console.log(`[Horoscope Cron] Catchup: completed ${type}/${lang} for ${period.start}`);
+          } catch (error) {
+            console.error(`[Horoscope Cron] Catchup error for ${type}/${lang}:`, error);
+          }
+        } else {
+          console.log(`[Horoscope Cron] Catchup: ${type}/${lang} for ${period.start} already exists (${existing.length} entries), skipping`);
+        }
+      }
+    }
+  }
+
+  console.log("[Horoscope Cron] Startup catchup check complete.");
+}
+
 export function startHoroscopeCrons() {
   console.log("[Horoscope Cron] Initializing cron jobs...");
 
@@ -162,4 +216,10 @@ export function startHoroscopeCrons() {
   console.log("  - Daily: Every day at 5:00 AM ET");
   console.log("  - Weekly: Every Monday at 5:00 AM ET");
   console.log("  - Monthly: 1st of each month at 5:00 AM ET");
+
+  setTimeout(() => {
+    runStartupCatchup().catch(err => {
+      console.error("[Horoscope Cron] Startup catchup failed:", err);
+    });
+  }, 5000);
 }
