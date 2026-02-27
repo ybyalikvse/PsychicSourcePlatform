@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Star, RefreshCw, Rss, Globe, Copy, Edit2, Trash2, Loader2, CheckCircle, Clock, Square, RotateCw } from "lucide-react";
+import { Star, RefreshCw, Rss, Globe, Copy, Edit2, Trash2, Loader2, CheckCircle, Clock, Square, RotateCw, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -37,20 +37,31 @@ const ZODIAC_SYMBOLS: Record<string, string> = {
   Sagittarius: "\u2650", Capricorn: "\u2651", Aquarius: "\u2652", Pisces: "\u2653"
 };
 
+const DAILY_DAY_LABELS = ["Today", "Tomorrow", "+2 Days", "+3 Days"];
+
+function getDayDateLabel(daysAhead: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 export default function Horoscopes() {
   const { toast } = useToast();
   const [activeType, setActiveType] = useState("daily");
   const [language, setLanguage] = useState("en");
+  const [dailyDaysAhead, setDailyDaysAhead] = useState(0);
   const [editingEntry, setEditingEntry] = useState<HoroscopeEntry | null>(null);
   const [editContent, setEditContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingSign, setGeneratingSign] = useState<string | null>(null);
+  const [generatingDay, setGeneratingDay] = useState<number | null>(null);
   const [generatedCount, setGeneratedCount] = useState(0);
+  const [totalToGenerate, setTotalToGenerate] = useState(12);
   const [failedSigns, setFailedSigns] = useState<string[]>([]);
   const [regeneratingSign, setRegeneratingSign] = useState<string | null>(null);
   const stopRef = useRef(false);
 
-  const { data: entries = [], isLoading: entriesLoading, isError: entriesError } = useQuery<HoroscopeEntry[]>({
+  const { data: entries = [], isLoading: entriesLoading } = useQuery<HoroscopeEntry[]>({
     queryKey: ["/api/horoscope-entries", activeType, language],
     queryFn: async () => {
       const res = await fetch(`/api/horoscope-entries?type=${activeType}&language=${language}`);
@@ -65,45 +76,130 @@ export default function Horoscopes() {
     retry: 1,
   });
 
+  const status = cronStatus as any;
+
+  const dailyPeriodStart = useMemo(() => {
+    if (!status?.daily) return null;
+    const dayKey = `day${dailyDaysAhead}`;
+    return status.daily[dayKey]?.[language]?.period?.start || status.daily[dayKey]?.en?.period?.start || null;
+  }, [status, dailyDaysAhead, language]);
+
+  const currentEntries = useMemo(() => {
+    if (activeType === "daily") {
+      if (!dailyPeriodStart) return [];
+      return entries.filter(e => e.type === activeType && e.language === language && e.periodStart === dailyPeriodStart);
+    }
+    const filtered = entries.filter(e => e.type === activeType && e.language === language);
+    const latestPeriod = filtered.length > 0 ? filtered[0].periodStart : null;
+    return latestPeriod ? filtered.filter(e => e.periodStart === latestPeriod) : [];
+  }, [entries, activeType, language, dailyDaysAhead, dailyPeriodStart]);
+
+  const sortedEntries = useMemo(() => {
+    return ZODIAC_SIGNS.map(s => currentEntries.find(e => e.sign === s)).filter(Boolean) as HoroscopeEntry[];
+  }, [currentEntries]);
+
   async function generateAllSigns(type: string, lang: string, existingEntries: HoroscopeEntry[], forceAll: boolean) {
     setIsGenerating(true);
     setGeneratedCount(0);
     setFailedSigns([]);
     setGeneratingSign(null);
+    setGeneratingDay(null);
     stopRef.current = false;
 
     try {
-      const existingSigns = forceAll ? [] : existingEntries.map(e => e.sign);
-      const signsToGenerate = ZODIAC_SIGNS.filter(s => !existingSigns.includes(s));
+      if (type === "daily") {
+        const daysToGen = [0, 1, 2, 3];
+        let totalCount = 0;
+        let completedCount = 0;
 
-      if (forceAll) {
-        await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang });
-      }
-
-      if (signsToGenerate.length === 0) {
-        toast({ title: "All 12 signs already generated", description: "Use the regenerate button on individual signs to redo specific ones." });
-        setIsGenerating(false);
-        return;
-      }
-
-      for (let i = 0; i < signsToGenerate.length; i++) {
-        if (stopRef.current) {
-          toast({ title: "Generation stopped", description: `Completed ${i} of ${signsToGenerate.length} remaining signs before stopping.` });
-          break;
+        const dayPeriodStarts: Record<number, string | null> = {};
+        for (const dayOffset of daysToGen) {
+          const dayKey = `day${dayOffset}`;
+          dayPeriodStarts[dayOffset] = status?.daily?.[dayKey]?.[lang]?.period?.start || status?.daily?.[dayKey]?.en?.period?.start || null;
         }
-        const sign = signsToGenerate[i];
-        setGeneratingSign(sign);
-        try {
-          await apiRequest("POST", "/api/horoscopes/generate-sign", {
-            type,
-            language: lang,
-            sign,
-          });
-          setGeneratedCount(i + 1);
-          queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang] });
-        } catch (err: any) {
-          console.error(`Failed to generate ${sign}:`, err);
-          setFailedSigns(prev => [...prev, sign]);
+
+        for (const dayOffset of daysToGen) {
+          const periodStart = dayPeriodStarts[dayOffset];
+          const dayEntries = forceAll || !periodStart ? [] : entries.filter(e => e.type === type && e.language === lang && e.periodStart === periodStart);
+          const existingSigns = dayEntries.map(e => e.sign);
+          const remaining = ZODIAC_SIGNS.filter(s => !existingSigns.includes(s));
+          totalCount += remaining.length;
+        }
+
+        setTotalToGenerate(totalCount);
+        if (totalCount === 0) {
+          toast({ title: "All daily horoscopes already generated for today + 3 days", description: "Use the regenerate button on individual signs to redo specific ones." });
+          setIsGenerating(false);
+          return;
+        }
+
+        for (const dayOffset of daysToGen) {
+          if (stopRef.current) break;
+
+          const periodStart = dayPeriodStarts[dayOffset];
+          setGeneratingDay(dayOffset);
+
+          if (forceAll) {
+            await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang, daysAhead: dayOffset });
+          }
+
+          const dayEntries = forceAll || !periodStart ? [] : entries.filter(e => e.type === type && e.language === lang && e.periodStart === periodStart);
+          const existingSigns = dayEntries.map(e => e.sign);
+          const signsToGenerate = ZODIAC_SIGNS.filter(s => !existingSigns.includes(s));
+
+          for (const sign of signsToGenerate) {
+            if (stopRef.current) break;
+            setGeneratingSign(sign);
+            try {
+              await apiRequest("POST", "/api/horoscopes/generate-sign", {
+                type,
+                language: lang,
+                sign,
+                daysAhead: dayOffset,
+              });
+              completedCount++;
+              setGeneratedCount(completedCount);
+              queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang] });
+            } catch (err: any) {
+              console.error(`Failed to generate ${sign} (day +${dayOffset}):`, err);
+              setFailedSigns(prev => [...prev, `${sign}+${dayOffset}`]);
+            }
+          }
+        }
+      } else {
+        const existingSigns = forceAll ? [] : existingEntries.map(e => e.sign);
+        const signsToGenerate = ZODIAC_SIGNS.filter(s => !existingSigns.includes(s));
+        setTotalToGenerate(signsToGenerate.length);
+
+        if (forceAll) {
+          await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang });
+        }
+
+        if (signsToGenerate.length === 0) {
+          toast({ title: "All 12 signs already generated", description: "Use the regenerate button on individual signs to redo specific ones." });
+          setIsGenerating(false);
+          return;
+        }
+
+        for (let i = 0; i < signsToGenerate.length; i++) {
+          if (stopRef.current) {
+            toast({ title: "Generation stopped", description: `Completed ${i} of ${signsToGenerate.length} remaining signs before stopping.` });
+            break;
+          }
+          const sign = signsToGenerate[i];
+          setGeneratingSign(sign);
+          try {
+            await apiRequest("POST", "/api/horoscopes/generate-sign", {
+              type,
+              language: lang,
+              sign,
+            });
+            setGeneratedCount(i + 1);
+            queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang] });
+          } catch (err: any) {
+            console.error(`Failed to generate ${sign}:`, err);
+            setFailedSigns(prev => [...prev, sign]);
+          }
         }
       }
 
@@ -117,6 +213,71 @@ export default function Horoscopes() {
     } finally {
       setIsGenerating(false);
       setGeneratingSign(null);
+      setGeneratingDay(null);
+      stopRef.current = false;
+    }
+  }
+
+  async function generateDayOnly(dayOffset: number, lang: string, forceAll: boolean) {
+    setIsGenerating(true);
+    setGeneratedCount(0);
+    setFailedSigns([]);
+    setGeneratingSign(null);
+    setGeneratingDay(dayOffset);
+    stopRef.current = false;
+
+    try {
+      if (forceAll) {
+        await apiRequest("POST", "/api/horoscopes/clear-period", { type: "daily", language: lang, daysAhead: dayOffset });
+      }
+
+      const dayKey = `day${dayOffset}`;
+      const periodStart = status?.daily?.[dayKey]?.[lang]?.period?.start || status?.daily?.[dayKey]?.en?.period?.start || null;
+      const dayEntries = forceAll || !periodStart ? [] : entries.filter(e => e.type === "daily" && e.language === lang && e.periodStart === periodStart);
+      const existingSigns = dayEntries.map(e => e.sign);
+      const signsToGenerate = ZODIAC_SIGNS.filter(s => !existingSigns.includes(s));
+
+      setTotalToGenerate(signsToGenerate.length);
+
+      if (signsToGenerate.length === 0) {
+        toast({ title: "All 12 signs already generated for this day" });
+        setIsGenerating(false);
+        return;
+      }
+
+      for (let i = 0; i < signsToGenerate.length; i++) {
+        if (stopRef.current) {
+          toast({ title: "Generation stopped", description: `Completed ${i} of ${signsToGenerate.length} before stopping.` });
+          break;
+        }
+        const sign = signsToGenerate[i];
+        setGeneratingSign(sign);
+        try {
+          await apiRequest("POST", "/api/horoscopes/generate-sign", {
+            type: "daily",
+            language: lang,
+            sign,
+            daysAhead: dayOffset,
+          });
+          setGeneratedCount(i + 1);
+          queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", "daily", lang] });
+        } catch (err: any) {
+          console.error(`Failed to generate ${sign}:`, err);
+          setFailedSigns(prev => [...prev, sign]);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscopes/cron-status"] });
+      if (!stopRef.current) {
+        toast({ title: `Daily horoscopes generated for ${DAILY_DAY_LABELS[dayOffset]}` });
+      }
+    } catch (error: any) {
+      toast({ title: "Generation failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsGenerating(false);
+      setGeneratingSign(null);
+      setGeneratingDay(null);
       stopRef.current = false;
     }
   }
@@ -131,6 +292,7 @@ export default function Horoscopes() {
         type: activeType,
         language,
         sign,
+        ...(activeType === "daily" ? { daysAhead: dailyDaysAhead } : {}),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", activeType, language] });
       queryClient.invalidateQueries({ queryKey: ["/api/horoscopes/cron-status"] });
@@ -165,19 +327,23 @@ export default function Horoscopes() {
     },
   });
 
-  const currentEntries = entries.filter(e => e.type === activeType && e.language === language);
+  const feedUrl = activeType === "daily"
+    ? `/api/horoscopes/feed/daily/${language}?PCF=${dailyDaysAhead}`
+    : `/api/horoscopes/feed/${activeType}/${language}`;
 
-  const latestPeriod = currentEntries.length > 0 ? currentEntries[0].periodStart : null;
-  const latestEntries = latestPeriod
-    ? currentEntries.filter(e => e.periodStart === latestPeriod)
-    : [];
-
-  const sortedEntries = ZODIAC_SIGNS.map(s => latestEntries.find(e => e.sign === s)).filter(Boolean) as HoroscopeEntry[];
-
-  const feedUrl = `/api/horoscopes/feed/${activeType}/${language}`;
-
-  const status = cronStatus as any;
-  const currentStatus = status?.[activeType]?.[language];
+  const dailyDayStatuses = useMemo(() => {
+    if (!status?.daily) return [];
+    return [0, 1, 2, 3].map(d => {
+      const dayStatus = status.daily[`day${d}`];
+      return {
+        daysAhead: d,
+        label: DAILY_DAY_LABELS[d],
+        dateLabel: getDayDateLabel(d),
+        generated: dayStatus?.[language]?.generated || false,
+        count: dayStatus?.[language]?.count || 0,
+      };
+    });
+  }, [status, language]);
 
   return (
     <div className="space-y-6" data-testid="page-horoscopes">
@@ -197,33 +363,61 @@ export default function Horoscopes() {
               <SelectItem value="es" data-testid="option-language-es">Spanish</SelectItem>
             </SelectContent>
           </Select>
-          {sortedEntries.length > 0 && sortedEntries.length < 12 && (
-            <Button
-              onClick={() => generateAllSigns(activeType, language, sortedEntries, false)}
-              disabled={isGenerating || !!regeneratingSign}
-              data-testid="button-continue-generate"
-            >
-              {isGenerating ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
+          {activeType === "daily" && (
+            <>
+              {sortedEntries.length > 0 && sortedEntries.length < 12 && (
+                <Button
+                  onClick={() => generateDayOnly(dailyDaysAhead, language, false)}
+                  disabled={isGenerating || !!regeneratingSign}
+                  data-testid="button-continue-generate"
+                >
+                  {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Continue ({12 - sortedEntries.length} remaining)
+                </Button>
               )}
-              Continue ({12 - sortedEntries.length} remaining)
-            </Button>
+              <Button
+                variant={sortedEntries.length > 0 ? "outline" : "default"}
+                onClick={() => generateDayOnly(dailyDaysAhead, language, sortedEntries.length > 0)}
+                disabled={isGenerating || !!regeneratingSign}
+                data-testid="button-generate-day"
+              >
+                {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                {sortedEntries.length > 0 ? "Regenerate" : "Generate"} {DAILY_DAY_LABELS[dailyDaysAhead]}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => generateAllSigns("daily", language, sortedEntries, true)}
+                disabled={isGenerating || !!regeneratingSign}
+                data-testid="button-generate-all-days"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Generate All 4 Days
+              </Button>
+            </>
           )}
-          <Button
-            variant={sortedEntries.length > 0 && sortedEntries.length < 12 ? "outline" : "default"}
-            onClick={() => generateAllSigns(activeType, language, sortedEntries, sortedEntries.length > 0)}
-            disabled={isGenerating || !!regeneratingSign}
-            data-testid="button-generate"
-          >
-            {isGenerating && sortedEntries.length === 0 ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
-            )}
-            {sortedEntries.length > 0 ? "Regenerate All" : "Generate"} {activeType.charAt(0).toUpperCase() + activeType.slice(1)}
-          </Button>
+          {activeType !== "daily" && (
+            <>
+              {sortedEntries.length > 0 && sortedEntries.length < 12 && (
+                <Button
+                  onClick={() => generateAllSigns(activeType, language, sortedEntries, false)}
+                  disabled={isGenerating || !!regeneratingSign}
+                  data-testid="button-continue-generate"
+                >
+                  {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Continue ({12 - sortedEntries.length} remaining)
+                </Button>
+              )}
+              <Button
+                variant={sortedEntries.length > 0 && sortedEntries.length < 12 ? "outline" : "default"}
+                onClick={() => generateAllSigns(activeType, language, sortedEntries, sortedEntries.length > 0)}
+                disabled={isGenerating || !!regeneratingSign}
+                data-testid="button-generate"
+              >
+                {isGenerating && sortedEntries.length === 0 ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                {sortedEntries.length > 0 ? "Regenerate All" : "Generate"} {activeType.charAt(0).toUpperCase() + activeType.slice(1)}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -233,13 +427,19 @@ export default function Horoscopes() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Daily</p>
-                <p className="text-xs text-muted-foreground">Every day at 5 AM ET</p>
+                <p className="text-xs text-muted-foreground">Every day at 5 AM ET (4 days)</p>
               </div>
-              {status?.daily?.[language]?.generated ? (
-                <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
-              ) : (
-                <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
-              )}
+              {(() => {
+                const allGenerated = dailyDayStatuses.length > 0 && dailyDayStatuses.every(d => d.generated);
+                const someGenerated = dailyDayStatuses.some(d => d.generated);
+                if (allGenerated) {
+                  return <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />4/4 Days</Badge>;
+                } else if (someGenerated) {
+                  const count = dailyDayStatuses.filter(d => d.generated).length;
+                  return <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />{count}/4 Days</Badge>;
+                }
+                return <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -296,14 +496,172 @@ export default function Horoscopes() {
         </Card>
       </div>
 
-      <Tabs value={activeType} onValueChange={setActiveType}>
+      <Tabs value={activeType} onValueChange={(v) => { setActiveType(v); if (v === "daily") setDailyDaysAhead(0); }}>
         <TabsList data-testid="tabs-horoscope-type">
           <TabsTrigger value="daily" data-testid="tab-daily">Daily</TabsTrigger>
           <TabsTrigger value="weekly" data-testid="tab-weekly">Weekly</TabsTrigger>
           <TabsTrigger value="monthly" data-testid="tab-monthly">Monthly</TabsTrigger>
         </TabsList>
 
-        {["daily", "weekly", "monthly"].map(type => (
+        <TabsContent value="daily" className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {[0, 1, 2, 3].map(d => {
+              const dayStatus = dailyDayStatuses[d];
+              const isActive = dailyDaysAhead === d;
+              return (
+                <Button
+                  key={d}
+                  variant={isActive ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDailyDaysAhead(d)}
+                  className="relative"
+                  data-testid={`button-day-${d}`}
+                >
+                  <Calendar className="h-3 w-3 mr-1" />
+                  {DAILY_DAY_LABELS[d]}
+                  <span className="ml-1 text-xs opacity-70">({getDayDateLabel(d)})</span>
+                  {dayStatus?.generated && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-green-500" />
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+
+          {isGenerating && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                      <p className="font-medium">
+                        Generating {generatingDay !== null ? `${DAILY_DAY_LABELS[generatingDay]} - ` : ""}
+                        {generatingSign ? `${ZODIAC_SYMBOLS[generatingSign]} ${generatingSign}` : "..."}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm text-muted-foreground">{generatedCount} / {totalToGenerate} complete</p>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => { stopRef.current = true; }}
+                        data-testid="button-stop-generation"
+                      >
+                        <Square className="h-3 w-3 mr-1" />
+                        Stop
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div
+                      className="bg-primary h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${totalToGenerate > 0 ? (generatedCount / totalToGenerate) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {entriesLoading && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {!entriesLoading && sortedEntries.length === 0 && !isGenerating && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <Star className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No horoscopes for {DAILY_DAY_LABELS[dailyDaysAhead]} ({getDayDateLabel(dailyDaysAhead)})</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Click "Generate {DAILY_DAY_LABELS[dailyDaysAhead]}" to create horoscopes for this day, or "Generate All 4 Days" for the full range.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Make sure you've added a horoscope prompt for daily in Settings first.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {sortedEntries.length > 0 && (
+            <>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Date: {sortedEntries[0].periodStart}</span>
+                <Separator orientation="vertical" className="h-4" />
+                <span>{sortedEntries.length} signs</span>
+                <Separator orientation="vertical" className="h-4" />
+                <span className="text-xs">Feed: ?PCF={dailyDaysAhead}</span>
+                <Separator orientation="vertical" className="h-4" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-0 h-auto"
+                  onClick={() => window.open(feedUrl, '_blank')}
+                  data-testid="link-view-feed"
+                >
+                  <Rss className="h-3 w-3 mr-1" />
+                  View XML Feed
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sortedEntries.map((entry) => (
+                  <Card key={entry.id} data-testid={`card-horoscope-${entry.sign.toLowerCase()}`}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <span className="text-xl">{ZODIAC_SYMBOLS[entry.sign] || ""}</span>
+                          {entry.sign}
+                        </CardTitle>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7"
+                            onClick={() => regenerateSingleSign(entry.sign, entry.id)}
+                            disabled={regeneratingSign === entry.sign || isGenerating}
+                            title={`Regenerate ${entry.sign}`}
+                            data-testid={`button-regenerate-${entry.sign.toLowerCase()}`}
+                          >
+                            {regeneratingSign === entry.sign ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3" />}
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7"
+                            onClick={() => { navigator.clipboard.writeText(entry.content); toast({ title: `${entry.sign} horoscope copied` }); }}
+                            data-testid={`button-copy-${entry.sign.toLowerCase()}`}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7"
+                            onClick={() => { setEditingEntry(entry); setEditContent(entry.content); }}
+                            data-testid={`button-edit-${entry.sign.toLowerCase()}`}
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                            onClick={() => deleteEntryMutation.mutate(entry.id)}
+                            data-testid={`button-delete-${entry.sign.toLowerCase()}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: entry.content }} />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        {["weekly", "monthly"].map(type => (
           <TabsContent key={type} value={type} className="space-y-4">
             {isGenerating && (
               <Card>
@@ -317,28 +675,20 @@ export default function Horoscopes() {
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p className="text-sm text-muted-foreground">{generatedCount} / 12 complete</p>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => { stopRef.current = true; }}
-                          data-testid="button-stop-generation"
-                        >
-                          <Square className="h-3 w-3 mr-1" />
-                          Stop
+                        <p className="text-sm text-muted-foreground">{generatedCount} / {totalToGenerate} complete</p>
+                        <Button variant="destructive" size="sm" onClick={() => { stopRef.current = true; }} data-testid="button-stop-generation">
+                          <Square className="h-3 w-3 mr-1" />Stop
                         </Button>
                       </div>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className="bg-primary h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${(generatedCount / 12) * 100}%` }}
+                      <div className="bg-primary h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${totalToGenerate > 0 ? (generatedCount / totalToGenerate) * 100 : 0}%` }}
                       />
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {ZODIAC_SIGNS.map((sign, idx) => (
-                        <Badge
-                          key={sign}
+                        <Badge key={sign}
                           variant={idx < generatedCount ? "default" : generatingSign === sign ? "outline" : "secondary"}
                           className={
                             failedSigns.includes(sign) ? "bg-destructive text-destructive-foreground" :
@@ -357,13 +707,7 @@ export default function Horoscopes() {
             )}
 
             {entriesLoading && (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                </CardContent>
-              </Card>
+              <Card><CardContent className="pt-6"><div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div></CardContent></Card>
             )}
 
             {!entriesLoading && sortedEntries.length === 0 && !isGenerating && (
@@ -393,15 +737,11 @@ export default function Horoscopes() {
                   <Separator orientation="vertical" className="h-4" />
                   <span>{sortedEntries.length} signs</span>
                   <Separator orientation="vertical" className="h-4" />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="p-0 h-auto"
+                  <Button variant="ghost" size="sm" className="p-0 h-auto"
                     onClick={() => window.open(feedUrl, '_blank')}
                     data-testid="link-view-feed"
                   >
-                    <Rss className="h-3 w-3 mr-1" />
-                    View XML Feed
+                    <Rss className="h-3 w-3 mr-1" />View XML Feed
                   </Button>
                 </div>
 
@@ -415,49 +755,27 @@ export default function Horoscopes() {
                             {entry.sign}
                           </CardTitle>
                           <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
+                            <Button variant="ghost" size="icon" className="h-7 w-7"
                               onClick={() => regenerateSingleSign(entry.sign, entry.id)}
                               disabled={regeneratingSign === entry.sign || isGenerating}
                               title={`Regenerate ${entry.sign}`}
                               data-testid={`button-regenerate-${entry.sign.toLowerCase()}`}
                             >
-                              {regeneratingSign === entry.sign ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <RotateCw className="h-3 w-3" />
-                              )}
+                              {regeneratingSign === entry.sign ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3" />}
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => {
-                                navigator.clipboard.writeText(entry.content);
-                                toast({ title: `${entry.sign} horoscope copied` });
-                              }}
+                            <Button variant="ghost" size="icon" className="h-7 w-7"
+                              onClick={() => { navigator.clipboard.writeText(entry.content); toast({ title: `${entry.sign} horoscope copied` }); }}
                               data-testid={`button-copy-${entry.sign.toLowerCase()}`}
                             >
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => {
-                                setEditingEntry(entry);
-                                setEditContent(entry.content);
-                              }}
+                            <Button variant="ghost" size="icon" className="h-7 w-7"
+                              onClick={() => { setEditingEntry(entry); setEditContent(entry.content); }}
                               data-testid={`button-edit-${entry.sign.toLowerCase()}`}
                             >
                               <Edit2 className="h-3 w-3" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive"
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
                               onClick={() => deleteEntryMutation.mutate(entry.id)}
                               data-testid={`button-delete-${entry.sign.toLowerCase()}`}
                             >

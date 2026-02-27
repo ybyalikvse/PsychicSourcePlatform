@@ -4350,7 +4350,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
   app.post("/api/horoscopes/generate-sign", async (req, res) => {
     try {
-      const { type, language, sign } = req.body;
+      const { type, language, sign, daysAhead } = req.body;
 
       if (!type || !["daily", "weekly", "monthly"].includes(type)) {
         return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
@@ -4367,9 +4367,15 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
         });
       }
 
-      const period = getHoroscopePeriod(type);
+      let targetDate: Date | undefined;
+      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+        targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + daysAhead);
+      }
 
-      console.log(`[Horoscope] Generating ${sign} (${type}/${lang}) for ${period.label}...`);
+      const period = getHoroscopePeriod(type, targetDate);
+
+      console.log(`[Horoscope] Generating ${sign} (${type}/${lang}) for ${period.label}${daysAhead ? ` (+${daysAhead} days)` : ""}...`);
       const content = await generateHoroscopeContent(
         sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
       );
@@ -4394,12 +4400,19 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
   app.post("/api/horoscopes/clear-period", async (req, res) => {
     try {
-      const { type, language } = req.body;
+      const { type, language, daysAhead } = req.body;
       if (!type || !["daily", "weekly", "monthly"].includes(type)) {
         return res.status(400).json({ error: "Invalid type." });
       }
       const lang = language || "en";
-      const period = getHoroscopePeriod(type);
+
+      let targetDate: Date | undefined;
+      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+        targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + daysAhead);
+      }
+
+      const period = getHoroscopePeriod(type, targetDate);
       await storage.deleteHoroscopeEntriesByPeriod(type, lang, period.start);
       res.json({ success: true });
     } catch (error) {
@@ -4426,7 +4439,16 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
         return res.status(400).send("Invalid type");
       }
 
-      const period = getHoroscopePeriod(type);
+      let targetDate: Date | undefined;
+      if (type === "daily") {
+        const pcf = parseInt(req.query.PCF as string || "0", 10);
+        if (!isNaN(pcf) && pcf >= 0 && pcf <= 3) {
+          targetDate = new Date();
+          targetDate.setDate(targetDate.getDate() + pcf);
+        }
+      }
+
+      const period = getHoroscopePeriod(type, targetDate);
       const entries = await storage.getHoroscopeEntriesByPeriod(type, language, period.start);
 
       if (entries.length === 0) {
@@ -4471,24 +4493,42 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
   app.get("/api/horoscopes/cron-status", async (_req, res) => {
     try {
       const now = new Date();
-      const dailyPeriod = getHoroscopePeriod("daily", now);
       const weeklyPeriod = getHoroscopePeriod("weekly", now);
       const monthlyPeriod = getHoroscopePeriod("monthly", now);
 
-      const [dailyEn, dailyEs, weeklyEn, weeklyEs, monthlyEn, monthlyEs] = await Promise.all([
-        storage.getHoroscopeEntriesByPeriod("daily", "en", dailyPeriod.start),
-        storage.getHoroscopeEntriesByPeriod("daily", "es", dailyPeriod.start),
+      const dailyDays = [0, 1, 2, 3];
+      const dailyPeriods = dailyDays.map(d => {
+        const date = new Date();
+        date.setDate(date.getDate() + d);
+        return getHoroscopePeriod("daily", date);
+      });
+
+      const dailyPromises = dailyDays.flatMap(d => [
+        storage.getHoroscopeEntriesByPeriod("daily", "en", dailyPeriods[d].start),
+        storage.getHoroscopeEntriesByPeriod("daily", "es", dailyPeriods[d].start),
+      ]);
+
+      const [weeklyEn, weeklyEs, monthlyEn, monthlyEs, ...dailyResults] = await Promise.all([
         storage.getHoroscopeEntriesByPeriod("weekly", "en", weeklyPeriod.start),
         storage.getHoroscopeEntriesByPeriod("weekly", "es", weeklyPeriod.start),
         storage.getHoroscopeEntriesByPeriod("monthly", "en", monthlyPeriod.start),
         storage.getHoroscopeEntriesByPeriod("monthly", "es", monthlyPeriod.start),
+        ...dailyPromises,
       ]);
 
+      const dailyStatus: Record<string, Record<string, any>> = {};
+      for (let d = 0; d < dailyDays.length; d++) {
+        const enEntries = dailyResults[d * 2];
+        const esEntries = dailyResults[d * 2 + 1];
+        dailyStatus[`day${d}`] = {
+          en: { generated: enEntries.length > 0, count: enEntries.length, period: dailyPeriods[d] },
+          es: { generated: esEntries.length > 0, count: esEntries.length, period: dailyPeriods[d] },
+          daysAhead: d,
+        };
+      }
+
       res.json({
-        daily: {
-          en: { generated: dailyEn.length > 0, count: dailyEn.length, period: dailyPeriod },
-          es: { generated: dailyEs.length > 0, count: dailyEs.length, period: dailyPeriod },
-        },
+        daily: dailyStatus,
         weekly: {
           en: { generated: weeklyEn.length > 0, count: weeklyEn.length, period: weeklyPeriod },
           es: { generated: weeklyEs.length > 0, count: weeklyEs.length, period: weeklyPeriod },

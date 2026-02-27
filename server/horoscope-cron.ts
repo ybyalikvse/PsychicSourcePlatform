@@ -89,6 +89,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
 async function runHoroscopeGeneration(type: string) {
   const languages = ["en", "es"];
+  const daysToGenerate = type === "daily" ? [0, 1, 2, 3] : [0];
 
   for (const lang of languages) {
     try {
@@ -98,33 +99,41 @@ async function runHoroscopeGeneration(type: string) {
         continue;
       }
 
-      const period = getHoroscopePeriod(type);
-      const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start);
-      if (existing.length > 0) {
-        console.log(`[Horoscope Cron] ${type}/${lang} already generated for ${period.start}, skipping`);
-        continue;
+      for (const dayOffset of daysToGenerate) {
+        let targetDate: Date | undefined;
+        if (dayOffset > 0) {
+          targetDate = new Date();
+          targetDate.setDate(targetDate.getDate() + dayOffset);
+        }
+
+        const period = getHoroscopePeriod(type, targetDate);
+        const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start);
+        if (existing.length > 0) {
+          console.log(`[Horoscope Cron] ${type}/${lang} already generated for ${period.start}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}, skipping`);
+          continue;
+        }
+
+        console.log(`[Horoscope Cron] Generating ${type} horoscopes in ${lang} for ${period.label}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
+
+        for (const sign of ZODIAC_SIGNS) {
+          const content = await generateHoroscopeContent(
+            sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+          );
+
+          await storage.createHoroscopeEntry({
+            type,
+            language: lang,
+            sign,
+            content,
+            periodStart: period.start,
+            periodEnd: period.end,
+            status: "published",
+          });
+          console.log(`[Horoscope Cron] Generated ${sign} (${type}/${lang}) for ${period.start}`);
+        }
+
+        console.log(`[Horoscope Cron] Completed ${type}/${lang} for ${period.start}`);
       }
-
-      console.log(`[Horoscope Cron] Generating ${type} horoscopes in ${lang} for ${period.label}...`);
-
-      for (const sign of ZODIAC_SIGNS) {
-        const content = await generateHoroscopeContent(
-          sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
-        );
-
-        await storage.createHoroscopeEntry({
-          type,
-          language: lang,
-          sign,
-          content,
-          periodStart: period.start,
-          periodEnd: period.end,
-          status: "published",
-        });
-        console.log(`[Horoscope Cron] Generated ${sign} (${type}/${lang})`);
-      }
-
-      console.log(`[Horoscope Cron] Completed ${type}/${lang}`);
     } catch (error) {
       console.error(`[Horoscope Cron] Error generating ${type}/${lang}:`, error);
     }
