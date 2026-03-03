@@ -87,55 +87,59 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
   }
 }
 
+const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
+
 async function runHoroscopeGeneration(type: string) {
   const languages = ["en", "es"];
   const daysToGenerate = type === "daily" ? [0, 1, 2, 3] : [0];
 
-  for (const lang of languages) {
-    try {
-      const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang);
-      if (!prompt) {
-        console.log(`[Horoscope Cron] No active prompt for ${type}/${lang}, skipping`);
-        continue;
-      }
-
-      for (const dayOffset of daysToGenerate) {
-        let targetDate: Date | undefined;
-        if (dayOffset > 0) {
-          targetDate = new Date();
-          targetDate.setDate(targetDate.getDate() + dayOffset);
-        }
-
-        const period = getHoroscopePeriod(type, targetDate);
-        const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start);
-        if (existing.length > 0) {
-          console.log(`[Horoscope Cron] ${type}/${lang} already generated for ${period.start}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}, skipping`);
+  for (const siteId of HOROSCOPE_SITES) {
+    for (const lang of languages) {
+      try {
+        const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang, siteId);
+        if (!prompt) {
           continue;
         }
 
-        console.log(`[Horoscope Cron] Generating ${type} horoscopes in ${lang} for ${period.label}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
+        for (const dayOffset of daysToGenerate) {
+          let targetDate: Date | undefined;
+          if (dayOffset > 0) {
+            targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + dayOffset);
+          }
 
-        for (const sign of ZODIAC_SIGNS) {
-          const content = await generateHoroscopeContent(
-            sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
-          );
+          const period = getHoroscopePeriod(type, targetDate);
+          const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start, siteId);
+          if (existing.length > 0) {
+            console.log(`[Horoscope Cron] ${type}/${lang}/${siteId} already generated for ${period.start}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}, skipping`);
+            continue;
+          }
 
-          await storage.createHoroscopeEntry({
-            type,
-            language: lang,
-            sign,
-            content,
-            periodStart: period.start,
-            periodEnd: period.end,
-            status: "published",
-          });
-          console.log(`[Horoscope Cron] Generated ${sign} (${type}/${lang}) for ${period.start}`);
+          console.log(`[Horoscope Cron] Generating ${type} horoscopes in ${lang} for ${siteId} - ${period.label}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
+
+          for (const sign of ZODIAC_SIGNS) {
+            const content = await generateHoroscopeContent(
+              sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+            );
+
+            await storage.createHoroscopeEntry({
+              type,
+              language: lang,
+              site: siteId,
+              sign,
+              content,
+              periodStart: period.start,
+              periodEnd: period.end,
+              status: "published",
+            });
+            console.log(`[Horoscope Cron] Generated ${sign} (${type}/${lang}/${siteId}) for ${period.start}`);
+          }
+
+          console.log(`[Horoscope Cron] Completed ${type}/${lang}/${siteId} for ${period.start}`);
         }
-
-        console.log(`[Horoscope Cron] Completed ${type}/${lang} for ${period.start}`);
+      } catch (error) {
+        console.error(`[Horoscope Cron] Error generating ${type}/${lang}/${siteId}:`, error);
       }
-    } catch (error) {
-      console.error(`[Horoscope Cron] Error generating ${type}/${lang}:`, error);
     }
   }
 }
@@ -147,45 +151,48 @@ async function runStartupCatchup() {
     const languages = ["en", "es"];
     const daysToCheck = type === "daily" ? [0, 1, 2, 3] : [0];
 
-    for (const lang of languages) {
-      const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang);
-      if (!prompt) continue;
+    for (const siteId of HOROSCOPE_SITES) {
+      for (const lang of languages) {
+        const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang, siteId);
+        if (!prompt) continue;
 
-      for (const dayOffset of daysToCheck) {
-        let targetDate: Date | undefined;
-        if (dayOffset > 0) {
-          targetDate = new Date();
-          targetDate.setDate(targetDate.getDate() + dayOffset);
-        }
-
-        const period = getHoroscopePeriod(type, targetDate);
-        const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start);
-
-        if (existing.length === 0) {
-          console.log(`[Horoscope Cron] Catchup: generating ${type}/${lang} for ${period.start}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
-
-          try {
-            for (const sign of ZODIAC_SIGNS) {
-              const content = await generateHoroscopeContent(
-                sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
-              );
-              await storage.createHoroscopeEntry({
-                type,
-                language: lang,
-                sign,
-                content,
-                periodStart: period.start,
-                periodEnd: period.end,
-                status: "published",
-              });
-              console.log(`[Horoscope Cron] Catchup: generated ${sign} (${type}/${lang}) for ${period.start}`);
-            }
-            console.log(`[Horoscope Cron] Catchup: completed ${type}/${lang} for ${period.start}`);
-          } catch (error) {
-            console.error(`[Horoscope Cron] Catchup error for ${type}/${lang}:`, error);
+        for (const dayOffset of daysToCheck) {
+          let targetDate: Date | undefined;
+          if (dayOffset > 0) {
+            targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + dayOffset);
           }
-        } else {
-          console.log(`[Horoscope Cron] Catchup: ${type}/${lang} for ${period.start} already exists (${existing.length} entries), skipping`);
+
+          const period = getHoroscopePeriod(type, targetDate);
+          const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start, siteId);
+
+          if (existing.length === 0) {
+            console.log(`[Horoscope Cron] Catchup: generating ${type}/${lang}/${siteId} for ${period.start}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
+
+            try {
+              for (const sign of ZODIAC_SIGNS) {
+                const content = await generateHoroscopeContent(
+                  sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+                );
+                await storage.createHoroscopeEntry({
+                  type,
+                  language: lang,
+                  site: siteId,
+                  sign,
+                  content,
+                  periodStart: period.start,
+                  periodEnd: period.end,
+                  status: "published",
+                });
+                console.log(`[Horoscope Cron] Catchup: generated ${sign} (${type}/${lang}/${siteId}) for ${period.start}`);
+              }
+              console.log(`[Horoscope Cron] Catchup: completed ${type}/${lang}/${siteId} for ${period.start}`);
+            } catch (error) {
+              console.error(`[Horoscope Cron] Catchup error for ${type}/${lang}/${siteId}:`, error);
+            }
+          } else {
+            console.log(`[Horoscope Cron] Catchup: ${type}/${lang}/${siteId} for ${period.start} already exists (${existing.length} entries), skipping`);
+          }
         }
       }
     }

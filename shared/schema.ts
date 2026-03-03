@@ -347,6 +347,7 @@ export interface MetaSuggestions {
 // Horoscope prompts table - configurable templates per type/language
 export const horoscopePrompts = pgTable("horoscope_prompts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  site: text("site").notNull().default("psychicsource"), // psychicsource, pathforward
   type: text("type").notNull(), // daily, weekly, monthly
   language: text("language").notNull().default("en"), // en, es
   prompt: text("prompt").notNull(),
@@ -366,6 +367,7 @@ export type HoroscopePrompt = typeof horoscopePrompts.$inferSelect;
 // Horoscope entries table - generated horoscope content
 export const horoscopeEntries = pgTable("horoscope_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  site: text("site").notNull().default("psychicsource"), // psychicsource, pathforward
   type: text("type").notNull(), // daily, weekly, monthly
   language: text("language").notNull().default("en"),
   sign: text("sign").notNull(), // aries, taurus, etc.

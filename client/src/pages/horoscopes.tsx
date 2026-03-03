@@ -47,6 +47,7 @@ function getDayDateLabel(daysAhead: number): string {
 
 export default function Horoscopes() {
   const { toast } = useToast();
+  const [activeSite, setActiveSite] = useState("psychicsource");
   const [activeType, setActiveType] = useState("daily");
   const [language, setLanguage] = useState("en");
   const [dailyDaysAhead, setDailyDaysAhead] = useState(0);
@@ -62,9 +63,9 @@ export default function Horoscopes() {
   const stopRef = useRef(false);
 
   const { data: entries = [], isLoading: entriesLoading } = useQuery<HoroscopeEntry[]>({
-    queryKey: ["/api/horoscope-entries", activeType, language],
+    queryKey: ["/api/horoscope-entries", activeType, language, activeSite],
     queryFn: async () => {
-      const res = await fetch(`/api/horoscope-entries?type=${activeType}&language=${language}`);
+      const res = await fetch(`/api/horoscope-entries?type=${activeType}&language=${language}&site=${activeSite}`);
       if (!res.ok) return [];
       return res.json();
     },
@@ -77,12 +78,13 @@ export default function Horoscopes() {
   });
 
   const status = cronStatus as any;
+  const siteStatus = status?.sites?.[activeSite] || status;
 
   const dailyPeriodStart = useMemo(() => {
-    if (!status?.daily) return null;
+    if (!siteStatus?.daily) return null;
     const dayKey = `day${dailyDaysAhead}`;
-    return status.daily[dayKey]?.[language]?.period?.start || status.daily[dayKey]?.en?.period?.start || null;
-  }, [status, dailyDaysAhead, language]);
+    return siteStatus.daily[dayKey]?.[language]?.period?.start || siteStatus.daily[dayKey]?.en?.period?.start || null;
+  }, [siteStatus, dailyDaysAhead, language]);
 
   const currentEntries = useMemo(() => {
     if (activeType === "daily") {
@@ -115,7 +117,7 @@ export default function Horoscopes() {
         const dayPeriodStarts: Record<number, string | null> = {};
         for (const dayOffset of daysToGen) {
           const dayKey = `day${dayOffset}`;
-          dayPeriodStarts[dayOffset] = status?.daily?.[dayKey]?.[lang]?.period?.start || status?.daily?.[dayKey]?.en?.period?.start || null;
+          dayPeriodStarts[dayOffset] = siteStatus?.daily?.[dayKey]?.[lang]?.period?.start || siteStatus?.daily?.[dayKey]?.en?.period?.start || null;
         }
 
         for (const dayOffset of daysToGen) {
@@ -140,7 +142,7 @@ export default function Horoscopes() {
           setGeneratingDay(dayOffset);
 
           if (forceAll) {
-            await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang, daysAhead: dayOffset });
+            await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang, daysAhead: dayOffset, site: activeSite });
           }
 
           const dayEntries = forceAll || !periodStart ? [] : entries.filter(e => e.type === type && e.language === lang && e.periodStart === periodStart);
@@ -156,10 +158,11 @@ export default function Horoscopes() {
                 language: lang,
                 sign,
                 daysAhead: dayOffset,
+                site: activeSite,
               });
               completedCount++;
               setGeneratedCount(completedCount);
-              queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang] });
+              queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang, activeSite] });
             } catch (err: any) {
               console.error(`Failed to generate ${sign} (day +${dayOffset}):`, err);
               setFailedSigns(prev => [...prev, `${sign}+${dayOffset}`]);
@@ -172,7 +175,7 @@ export default function Horoscopes() {
         setTotalToGenerate(signsToGenerate.length);
 
         if (forceAll) {
-          await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang });
+          await apiRequest("POST", "/api/horoscopes/clear-period", { type, language: lang, site: activeSite });
         }
 
         if (signsToGenerate.length === 0) {
@@ -193,9 +196,10 @@ export default function Horoscopes() {
               type,
               language: lang,
               sign,
+              site: activeSite,
             });
             setGeneratedCount(i + 1);
-            queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang] });
+            queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", type, lang, activeSite] });
           } catch (err: any) {
             console.error(`Failed to generate ${sign}:`, err);
             setFailedSigns(prev => [...prev, sign]);
@@ -228,11 +232,11 @@ export default function Horoscopes() {
 
     try {
       if (forceAll) {
-        await apiRequest("POST", "/api/horoscopes/clear-period", { type: "daily", language: lang, daysAhead: dayOffset });
+        await apiRequest("POST", "/api/horoscopes/clear-period", { type: "daily", language: lang, daysAhead: dayOffset, site: activeSite });
       }
 
       const dayKey = `day${dayOffset}`;
-      const periodStart = status?.daily?.[dayKey]?.[lang]?.period?.start || status?.daily?.[dayKey]?.en?.period?.start || null;
+      const periodStart = siteStatus?.daily?.[dayKey]?.[lang]?.period?.start || siteStatus?.daily?.[dayKey]?.en?.period?.start || null;
       const dayEntries = forceAll || !periodStart ? [] : entries.filter(e => e.type === "daily" && e.language === lang && e.periodStart === periodStart);
       const existingSigns = dayEntries.map(e => e.sign);
       const signsToGenerate = ZODIAC_SIGNS.filter(s => !existingSigns.includes(s));
@@ -258,9 +262,10 @@ export default function Horoscopes() {
             language: lang,
             sign,
             daysAhead: dayOffset,
+            site: activeSite,
           });
           setGeneratedCount(i + 1);
-          queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", "daily", lang] });
+          queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", "daily", lang, activeSite] });
         } catch (err: any) {
           console.error(`Failed to generate ${sign}:`, err);
           setFailedSigns(prev => [...prev, sign]);
@@ -292,9 +297,10 @@ export default function Horoscopes() {
         type: activeType,
         language,
         sign,
+        site: activeSite,
         ...(activeType === "daily" ? { daysAhead: dailyDaysAhead } : {}),
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", activeType, language] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horoscope-entries", activeType, language, activeSite] });
       queryClient.invalidateQueries({ queryKey: ["/api/horoscopes/cron-status"] });
       toast({ title: `${sign} horoscope regenerated` });
     } catch (error: any) {
@@ -328,13 +334,13 @@ export default function Horoscopes() {
   });
 
   const feedUrl = activeType === "daily"
-    ? `/api/horoscopes/feed/daily/${language}?PCF=${dailyDaysAhead}`
-    : `/api/horoscopes/feed/${activeType}/${language}`;
+    ? `/api/horoscopes/feed/daily/${language}/${activeSite}?PCF=${dailyDaysAhead}`
+    : `/api/horoscopes/feed/${activeType}/${language}/${activeSite}`;
 
   const dailyDayStatuses = useMemo(() => {
-    if (!status?.daily) return [];
+    if (!siteStatus?.daily) return [];
     return [0, 1, 2, 3].map(d => {
-      const dayStatus = status.daily[`day${d}`];
+      const dayStatus = siteStatus.daily[`day${d}`];
       return {
         daysAhead: d,
         label: DAILY_DAY_LABELS[d],
@@ -343,7 +349,7 @@ export default function Horoscopes() {
         count: dayStatus?.[language]?.count || 0,
       };
     });
-  }, [status, language]);
+  }, [siteStatus, language]);
 
   return (
     <div className="space-y-6" data-testid="page-horoscopes">
@@ -353,6 +359,15 @@ export default function Horoscopes() {
           <p className="text-muted-foreground">Generate and manage daily, weekly, and monthly horoscopes</p>
         </div>
         <div className="flex items-center gap-3">
+          <Select value={activeSite} onValueChange={setActiveSite} data-testid="select-site">
+            <SelectTrigger className="w-[180px]" data-testid="select-site-trigger">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="psychicsource" data-testid="option-site-psychicsource">Psychic Source</SelectItem>
+              <SelectItem value="pathforward" data-testid="option-site-pathforward">Pathforward Psychics</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={language} onValueChange={setLanguage} data-testid="select-language">
             <SelectTrigger className="w-[140px]" data-testid="select-language-trigger">
               <Globe className="h-4 w-4 mr-2" />
@@ -450,7 +465,7 @@ export default function Horoscopes() {
                 <p className="text-sm font-medium">Weekly</p>
                 <p className="text-xs text-muted-foreground">Every Monday at 5 AM ET</p>
               </div>
-              {status?.weekly?.[language]?.generated ? (
+              {siteStatus?.weekly?.[language]?.generated ? (
                 <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
               ) : (
                 <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
@@ -465,7 +480,7 @@ export default function Horoscopes() {
                 <p className="text-sm font-medium">Monthly</p>
                 <p className="text-xs text-muted-foreground">1st of month at 5 AM ET</p>
               </div>
-              {status?.monthly?.[language]?.generated ? (
+              {siteStatus?.monthly?.[language]?.generated ? (
                 <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
               ) : (
                 <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>

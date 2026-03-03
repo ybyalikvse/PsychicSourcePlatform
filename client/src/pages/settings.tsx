@@ -120,6 +120,7 @@ export default function Settings() {
   const [horoscopePromptDialogOpen, setHoroscopePromptDialogOpen] = useState(false);
   const [editingHoroscopePrompt, setEditingHoroscopePrompt] = useState<HoroscopePrompt | null>(null);
   const [horoscopePromptForm, setHoroscopePromptForm] = useState({
+    site: "psychicsource" as string,
     type: "daily" as string,
     language: "en" as string,
     prompt: "",
@@ -407,12 +408,13 @@ export default function Settings() {
   });
 
   const resetHoroscopePromptForm = () => {
-    setHoroscopePromptForm({ type: "daily", language: "en", prompt: "", aiModel: "claude", isActive: true });
+    setHoroscopePromptForm({ site: "psychicsource", type: "daily", language: "en", prompt: "", aiModel: "claude", isActive: true });
   };
 
   const handleEditHoroscopePrompt = (prompt: HoroscopePrompt) => {
     setEditingHoroscopePrompt(prompt);
     setHoroscopePromptForm({
+      site: prompt.site || "psychicsource",
       type: prompt.type,
       language: prompt.language,
       prompt: prompt.prompt,
@@ -1270,6 +1272,7 @@ export default function Settings() {
                 <div key={prompt.id} className="flex items-start justify-between p-3 rounded-lg border" data-testid={`horoscope-prompt-${prompt.id}`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline">{prompt.site === "pathforward" ? "Pathforward" : "Psychic Source"}</Badge>
                       <Badge variant="outline">{prompt.type}</Badge>
                       <Badge variant="secondary">{prompt.language === "en" ? "English" : "Spanish"}</Badge>
                       <Badge variant={prompt.isActive ? "default" : "outline"}>
@@ -1313,6 +1316,18 @@ export default function Settings() {
             <DialogDescription>Configure the AI prompt used to generate horoscopes</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Site</Label>
+              <Select value={horoscopePromptForm.site} onValueChange={(v) => setHoroscopePromptForm({ ...horoscopePromptForm, site: v })}>
+                <SelectTrigger data-testid="select-horoscope-site">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="psychicsource">Psychic Source</SelectItem>
+                  <SelectItem value="pathforward">Pathforward Psychics</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Type</Label>

@@ -4219,10 +4219,11 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
   // ============ HOROSCOPE ENTRIES ============
   app.get("/api/horoscope-entries", async (req, res) => {
     try {
-      const { type, language } = req.query;
+      const { type, language, site } = req.query;
       const entries = await storage.getHoroscopeEntries(
         type as string | undefined,
-        language as string | undefined
+        language as string | undefined,
+        site as string | undefined
       );
       res.json(entries);
     } catch (error) {
@@ -4350,7 +4351,8 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
   app.post("/api/horoscopes/generate-sign", async (req, res) => {
     try {
-      const { type, language, sign, daysAhead } = req.body;
+      const { type, language, sign, daysAhead, site } = req.body;
+      const siteId = site || "psychicsource";
 
       if (!type || !["daily", "weekly", "monthly"].includes(type)) {
         return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
@@ -4360,10 +4362,10 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
       }
       const lang = language || "en";
 
-      const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang);
+      const prompt = await storage.getHoroscopePromptByTypeAndLanguage(type, lang, siteId);
       if (!prompt) {
         return res.status(400).json({
-          error: `No active horoscope prompt found for type="${type}" language="${lang}". Please add one in Settings.`
+          error: `No active horoscope prompt found for type="${type}" language="${lang}" site="${siteId}". Please add one in Settings.`
         });
       }
 
@@ -4375,7 +4377,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
       const period = getHoroscopePeriod(type, targetDate);
 
-      console.log(`[Horoscope] Generating ${sign} (${type}/${lang}) for ${period.label}${daysAhead ? ` (+${daysAhead} days)` : ""}...`);
+      console.log(`[Horoscope] Generating ${sign} (${type}/${lang}/${siteId}) for ${period.label}${daysAhead ? ` (+${daysAhead} days)` : ""}...`);
       const content = await generateHoroscopeContent(
         sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
       );
@@ -4383,6 +4385,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
       const entry = await storage.createHoroscopeEntry({
         type,
         language: lang,
+        site: siteId,
         sign,
         content,
         periodStart: period.start,
@@ -4390,7 +4393,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
         status: "published",
       });
 
-      console.log(`[Horoscope] Generated ${sign} (${type}/${lang}) - ${content.length} chars`);
+      console.log(`[Horoscope] Generated ${sign} (${type}/${lang}/${siteId}) - ${content.length} chars`);
       res.json({ success: true, entry });
     } catch (error) {
       console.error(`[Horoscope] Generation error for sign:`, error);
@@ -4400,7 +4403,8 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
   app.post("/api/horoscopes/clear-period", async (req, res) => {
     try {
-      const { type, language, daysAhead } = req.body;
+      const { type, language, daysAhead, site } = req.body;
+      const siteId = site || "psychicsource";
       if (!type || !["daily", "weekly", "monthly"].includes(type)) {
         return res.status(400).json({ error: "Invalid type." });
       }
@@ -4413,7 +4417,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
       }
 
       const period = getHoroscopePeriod(type, targetDate);
-      await storage.deleteHoroscopeEntriesByPeriod(type, lang, period.start);
+      await storage.deleteHoroscopeEntriesByPeriod(type, lang, period.start, siteId);
       res.json({ success: true });
     } catch (error) {
       console.error("[Horoscope] Clear period error:", error);
@@ -4431,9 +4435,15 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
       .replace(/'/g, '&apos;');
   }
 
-  app.get("/api/horoscopes/feed/:type/:language", async (req, res) => {
+  const SITE_LINKS: Record<string, string> = {
+    psychicsource: "https://www.psychicsource.com",
+    pathforward: "https://www.pathforwardpsychics.com",
+  };
+
+  app.get("/api/horoscopes/feed/:type/:language/:site?", async (req, res) => {
     try {
       const { type, language } = req.params;
+      const siteId = req.params.site || "psychicsource";
 
       if (!["daily", "weekly", "monthly"].includes(type)) {
         return res.status(400).send("Invalid type");
@@ -4449,7 +4459,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
       }
 
       const period = getHoroscopePeriod(type, targetDate);
-      const entries = await storage.getHoroscopeEntriesByPeriod(type, language, period.start);
+      const entries = await storage.getHoroscopeEntriesByPeriod(type, language, period.start, siteId);
 
       if (entries.length === 0) {
         return res.status(404).type("application/xml").send(
@@ -4459,12 +4469,13 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
       const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
       const pubDate = new Date(period.start + "T00:00:00Z").toUTCString();
+      const siteLink = SITE_LINKS[siteId] || SITE_LINKS.psychicsource;
 
       let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n`;
       xml += `<title>${typeLabel} Horoscopes</title>\n`;
       xml += `<description>Horoscopes for ${period.label}</description>\n`;
       xml += `<pubDate>${pubDate}</pubDate>\n`;
-      xml += `<link>https://www.psychicsource.com</link>\n`;
+      xml += `<link>${siteLink}</link>\n`;
 
       const signOrder = ZODIAC_SIGNS;
       const sortedEntries = signOrder.map(s => entries.find(e => e.sign === s)).filter(Boolean);
@@ -4490,6 +4501,9 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
   });
 
   // ============ HOROSCOPE CRON STATUS ============
+  const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
+  const HOROSCOPE_LANGUAGES = ["en", "es"];
+
   app.get("/api/horoscopes/cron-status", async (_req, res) => {
     try {
       const now = new Date();
@@ -4503,40 +4517,62 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
         return getHoroscopePeriod("daily", date);
       });
 
-      const dailyPromises = dailyDays.flatMap(d => [
-        storage.getHoroscopeEntriesByPeriod("daily", "en", dailyPeriods[d].start),
-        storage.getHoroscopeEntriesByPeriod("daily", "es", dailyPeriods[d].start),
-      ]);
-
-      const [weeklyEn, weeklyEs, monthlyEn, monthlyEs, ...dailyResults] = await Promise.all([
-        storage.getHoroscopeEntriesByPeriod("weekly", "en", weeklyPeriod.start),
-        storage.getHoroscopeEntriesByPeriod("weekly", "es", weeklyPeriod.start),
-        storage.getHoroscopeEntriesByPeriod("monthly", "en", monthlyPeriod.start),
-        storage.getHoroscopeEntriesByPeriod("monthly", "es", monthlyPeriod.start),
-        ...dailyPromises,
-      ]);
-
-      const dailyStatus: Record<string, Record<string, any>> = {};
-      for (let d = 0; d < dailyDays.length; d++) {
-        const enEntries = dailyResults[d * 2];
-        const esEntries = dailyResults[d * 2 + 1];
-        dailyStatus[`day${d}`] = {
-          en: { generated: enEntries.length > 0, count: enEntries.length, period: dailyPeriods[d] },
-          es: { generated: esEntries.length > 0, count: esEntries.length, period: dailyPeriods[d] },
-          daysAhead: d,
-        };
+      const allPrompts = await storage.getHoroscopePrompts();
+      const activeSiteLangs = new Map<string, Set<string>>();
+      for (const p of allPrompts) {
+        if (p.isActive) {
+          const key = p.site || "psychicsource";
+          if (!activeSiteLangs.has(key)) activeSiteLangs.set(key, new Set());
+          activeSiteLangs.get(key)!.add(p.language);
+        }
       }
 
+      const siteStatus: Record<string, any> = {};
+
+      for (const siteId of HOROSCOPE_SITES) {
+        const langs = activeSiteLangs.get(siteId) || new Set<string>();
+        const siteLangs = HOROSCOPE_LANGUAGES.filter(l => langs.has(l));
+        if (siteLangs.length === 0 && siteId !== "psychicsource") continue;
+
+        const dailyPromises = dailyDays.flatMap(d =>
+          HOROSCOPE_LANGUAGES.map(l => storage.getHoroscopeEntriesByPeriod("daily", l, dailyPeriods[d].start, siteId))
+        );
+
+        const weeklyMonthlyPromises = HOROSCOPE_LANGUAGES.flatMap(l => [
+          storage.getHoroscopeEntriesByPeriod("weekly", l, weeklyPeriod.start, siteId),
+          storage.getHoroscopeEntriesByPeriod("monthly", l, monthlyPeriod.start, siteId),
+        ]);
+
+        const allResults = await Promise.all([...dailyPromises, ...weeklyMonthlyPromises]);
+        const dailyResults = allResults.slice(0, dailyDays.length * HOROSCOPE_LANGUAGES.length);
+        const wmResults = allResults.slice(dailyDays.length * HOROSCOPE_LANGUAGES.length);
+
+        const dailySt: Record<string, Record<string, any>> = {};
+        for (let d = 0; d < dailyDays.length; d++) {
+          const langData: Record<string, any> = {};
+          for (let li = 0; li < HOROSCOPE_LANGUAGES.length; li++) {
+            const entries = dailyResults[d * HOROSCOPE_LANGUAGES.length + li];
+            langData[HOROSCOPE_LANGUAGES[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d] };
+          }
+          dailySt[`day${d}`] = { ...langData, daysAhead: d };
+        }
+
+        const weeklySt: Record<string, any> = {};
+        const monthlySt: Record<string, any> = {};
+        for (let li = 0; li < HOROSCOPE_LANGUAGES.length; li++) {
+          const wEntries = wmResults[li * 2];
+          const mEntries = wmResults[li * 2 + 1];
+          weeklySt[HOROSCOPE_LANGUAGES[li]] = { generated: wEntries.length > 0, count: wEntries.length, period: weeklyPeriod };
+          monthlySt[HOROSCOPE_LANGUAGES[li]] = { generated: mEntries.length > 0, count: mEntries.length, period: monthlyPeriod };
+        }
+
+        siteStatus[siteId] = { daily: dailySt, weekly: weeklySt, monthly: monthlySt };
+      }
+
+      const defaultSite = siteStatus.psychicsource || { daily: {}, weekly: {}, monthly: {} };
       res.json({
-        daily: dailyStatus,
-        weekly: {
-          en: { generated: weeklyEn.length > 0, count: weeklyEn.length, period: weeklyPeriod },
-          es: { generated: weeklyEs.length > 0, count: weeklyEs.length, period: weeklyPeriod },
-        },
-        monthly: {
-          en: { generated: monthlyEn.length > 0, count: monthlyEn.length, period: monthlyPeriod },
-          es: { generated: monthlyEs.length > 0, count: monthlyEs.length, period: monthlyPeriod },
-        },
+        ...defaultSite,
+        sites: siteStatus,
       });
     } catch (error) {
       console.error("[Horoscope] Error fetching cron status:", error);
