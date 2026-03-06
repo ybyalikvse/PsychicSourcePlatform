@@ -28,8 +28,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience, LinkTableColumn, OptimizationPrompt, HoroscopePrompt } from "@shared/schema";
-import { Copy, Target, Star } from "lucide-react";
+import type { WritingStyle, SeoSettings as SeoSettingsType, ImageStyle, TargetAudience, LinkTableColumn, OptimizationPrompt, HoroscopePrompt, VideoCaptionPrompt } from "@shared/schema";
+import { Copy, Target, Star, Video } from "lucide-react";
 
 interface WritingStyleFormData {
   name: string;
@@ -125,6 +125,15 @@ export default function Settings() {
     language: "en" as string,
     prompt: "",
     aiModel: "claude" as string,
+    isActive: true,
+  });
+
+  const [captionPromptDialogOpen, setCaptionPromptDialogOpen] = useState(false);
+  const [editingCaptionPrompt, setEditingCaptionPrompt] = useState<VideoCaptionPrompt | null>(null);
+  const [captionPromptForm, setCaptionPromptForm] = useState({
+    platform: "tiktok" as string,
+    captionPrompt: "",
+    hashtagPrompt: "",
     isActive: true,
   });
 
@@ -432,6 +441,77 @@ export default function Settings() {
       });
     } else {
       createHoroscopePromptMutation.mutate(horoscopePromptForm);
+    }
+  };
+
+  const { data: captionPrompts = [], isLoading: captionPromptsLoading } = useQuery<VideoCaptionPrompt[]>({
+    queryKey: ["/api/video-caption-prompts"],
+  });
+
+  const createCaptionPromptMutation = useMutation({
+    mutationFn: (data: typeof captionPromptForm) =>
+      apiRequest("POST", "/api/video-caption-prompts", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/video-caption-prompts"] });
+      setCaptionPromptDialogOpen(false);
+      resetCaptionPromptForm();
+      toast({ title: "Video caption prompt created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create caption prompt", variant: "destructive" });
+    },
+  });
+
+  const updateCaptionPromptMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<typeof captionPromptForm> }) =>
+      apiRequest("PATCH", `/api/video-caption-prompts/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/video-caption-prompts"] });
+      setCaptionPromptDialogOpen(false);
+      setEditingCaptionPrompt(null);
+      resetCaptionPromptForm();
+      toast({ title: "Video caption prompt updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update caption prompt", variant: "destructive" });
+    },
+  });
+
+  const deleteCaptionPromptMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/video-caption-prompts/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/video-caption-prompts"] });
+      toast({ title: "Video caption prompt deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete caption prompt", variant: "destructive" });
+    },
+  });
+
+  const resetCaptionPromptForm = () => {
+    setCaptionPromptForm({ platform: "tiktok", captionPrompt: "", hashtagPrompt: "", isActive: true });
+  };
+
+  const handleEditCaptionPrompt = (prompt: VideoCaptionPrompt) => {
+    setEditingCaptionPrompt(prompt);
+    setCaptionPromptForm({
+      platform: prompt.platform,
+      captionPrompt: prompt.captionPrompt,
+      hashtagPrompt: prompt.hashtagPrompt,
+      isActive: prompt.isActive ?? true,
+    });
+    setCaptionPromptDialogOpen(true);
+  };
+
+  const handleSaveCaptionPrompt = () => {
+    if (editingCaptionPrompt) {
+      updateCaptionPromptMutation.mutate({
+        id: editingCaptionPrompt.id,
+        data: captionPromptForm,
+      });
+    } else {
+      createCaptionPromptMutation.mutate(captionPromptForm);
     }
   };
 
@@ -1491,6 +1571,120 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Video className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-lg">Video Caption Prompts</CardTitle>
+                <CardDescription>Configure AI prompts for generating video captions and hashtags per platform</CardDescription>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingCaptionPrompt(null);
+                resetCaptionPromptForm();
+                setCaptionPromptDialogOpen(true);
+              }}
+              data-testid="button-add-caption-prompt"
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              Add Prompt
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {captionPromptsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : captionPrompts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No caption prompts configured. Add prompts for each platform to customize AI-generated captions.</p>
+          ) : (
+            <div className="space-y-3">
+              {captionPrompts.map((prompt) => (
+                <div key={prompt.id} className="flex items-start justify-between gap-4 p-3 border rounded-lg" data-testid={`caption-prompt-${prompt.id}`}>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="capitalize">{prompt.platform}</Badge>
+                      <Badge variant={prompt.isActive ? "default" : "secondary"}>
+                        {prompt.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{prompt.captionPrompt}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => handleEditCaptionPrompt(prompt)} data-testid={`button-edit-caption-prompt-${prompt.id}`}>
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteCaptionPromptMutation.mutate(prompt.id)} data-testid={`button-delete-caption-prompt-${prompt.id}`}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={captionPromptDialogOpen} onOpenChange={setCaptionPromptDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingCaptionPrompt ? "Edit Caption Prompt" : "Add Caption Prompt"}</DialogTitle>
+            <DialogDescription>Configure AI prompt for generating video captions and hashtags</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Platform</Label>
+              <Select value={captionPromptForm.platform} onValueChange={(v) => setCaptionPromptForm({ ...captionPromptForm, platform: v })}>
+                <SelectTrigger data-testid="select-caption-platform">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tiktok">TikTok</SelectItem>
+                  <SelectItem value="instagram">Instagram</SelectItem>
+                  <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="facebook">Facebook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Caption Prompt</Label>
+              <Textarea
+                value={captionPromptForm.captionPrompt}
+                onChange={(e) => setCaptionPromptForm({ ...captionPromptForm, captionPrompt: e.target.value })}
+                placeholder="Instructions for AI to generate the video caption..."
+                rows={4}
+                data-testid="input-caption-prompt"
+              />
+            </div>
+            <div>
+              <Label>Hashtag Prompt</Label>
+              <Textarea
+                value={captionPromptForm.hashtagPrompt}
+                onChange={(e) => setCaptionPromptForm({ ...captionPromptForm, hashtagPrompt: e.target.value })}
+                placeholder="Instructions for AI to generate hashtags..."
+                rows={3}
+                data-testid="input-hashtag-prompt"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={captionPromptForm.isActive}
+                onCheckedChange={(v) => setCaptionPromptForm({ ...captionPromptForm, isActive: v })}
+                data-testid="switch-caption-prompt-active"
+              />
+              <Label>Active</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCaptionPromptDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveCaptionPrompt} data-testid="button-save-caption-prompt">Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

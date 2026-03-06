@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startHoroscopeCrons } from "./horoscope-cron";
+import { startVideoCrons } from "./video-cron";
 
 const app = express();
 const httpServer = createServer(app);
@@ -97,6 +98,7 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
 
       startHoroscopeCrons();
+      startVideoCrons();
     },
   );
 })();

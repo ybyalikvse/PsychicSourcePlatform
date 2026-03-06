@@ -386,4 +386,110 @@ export const insertHoroscopeEntrySchema = createInsertSchema(horoscopeEntries).o
 export type InsertHoroscopeEntry = z.infer<typeof insertHoroscopeEntrySchema>;
 export type HoroscopeEntry = typeof horoscopeEntries.$inferSelect;
 
+// Psychics table - psychic users for video portal
+export const psychics = pgTable("psychics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  firebaseUid: text("firebase_uid"),
+  status: text("status").notNull().default("active"), // active, inactive
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertPsychicSchema = createInsertSchema(psychics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPsychic = z.infer<typeof insertPsychicSchema>;
+export type Psychic = typeof psychics.$inferSelect;
+
+// Video requests table - admin creates, psychics fulfill
+export const videoRequests = pgTable("video_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  topic: text("topic").notNull(),
+  hook: text("hook"),
+  videoDuration: text("video_duration"), // e.g. "30s", "60s", "90s"
+  requiredDate: text("required_date"),
+  payAmount: text("pay_amount"),
+  description: text("description"),
+  status: text("status").notNull().default("available"), // available, claimed, submitted, revision_requested, approved, paid
+  claimedBy: text("claimed_by"), // psychic id
+  claimedAt: text("claimed_at"),
+  submittedAt: text("submitted_at"),
+  approvedAt: text("approved_at"),
+  videoUrl: text("video_url"), // S3 URL
+  createdAt: text("created_at").notNull().default(sql`now()`),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertVideoRequestSchema = createInsertSchema(videoRequests).omit({
+  id: true,
+  claimedBy: true,
+  claimedAt: true,
+  submittedAt: true,
+  approvedAt: true,
+  videoUrl: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertVideoRequest = z.infer<typeof insertVideoRequestSchema>;
+export type VideoRequest = typeof videoRequests.$inferSelect;
+
+// Video messages table - messaging between admin and psychic
+export const videoMessages = pgTable("video_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  videoRequestId: text("video_request_id").notNull(),
+  senderType: text("sender_type").notNull(), // admin, psychic
+  senderName: text("sender_name").notNull(),
+  message: text("message").notNull(),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertVideoMessageSchema = createInsertSchema(videoMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVideoMessage = z.infer<typeof insertVideoMessageSchema>;
+export type VideoMessage = typeof videoMessages.$inferSelect;
+
+// Video captions table - AI-generated captions and hashtags
+export const videoCaptions = pgTable("video_captions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  videoRequestId: text("video_request_id").notNull(),
+  caption: text("caption").notNull(),
+  hashtags: text("hashtags").notNull(),
+  platform: text("platform").notNull(), // tiktok, instagram, youtube, facebook
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertVideoCaptionSchema = createInsertSchema(videoCaptions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVideoCaption = z.infer<typeof insertVideoCaptionSchema>;
+export type VideoCaption = typeof videoCaptions.$inferSelect;
+
+// Video caption prompts table - configurable AI prompts for caption generation
+export const videoCaptionPrompts = pgTable("video_caption_prompts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: text("platform").notNull(), // tiktok, instagram, youtube, facebook
+  captionPrompt: text("caption_prompt").notNull(),
+  hashtagPrompt: text("hashtag_prompt").notNull(),
+  isActive: boolean("is_active").default(true),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertVideoCaptionPromptSchema = createInsertSchema(videoCaptionPrompts).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertVideoCaptionPrompt = z.infer<typeof insertVideoCaptionPromptSchema>;
+export type VideoCaptionPrompt = typeof videoCaptionPrompts.$inferSelect;
+
 export * from "./models/chat";

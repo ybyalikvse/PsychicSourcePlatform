@@ -12,6 +12,8 @@ import {
   Layers,
   Link as LinkIcon,
   Star,
+  Users,
+  Video,
 } from "lucide-react";
 import {
   Sidebar,
@@ -62,6 +64,16 @@ const mainNavItems = [
     title: "Horoscopes",
     url: "/horoscopes",
     icon: Star,
+  },
+  {
+    title: "Psychics",
+    url: "/psychics",
+    icon: Users,
+  },
+  {
+    title: "Video Requests",
+    url: "/video-requests",
+    icon: Video,
   },
 ];
 

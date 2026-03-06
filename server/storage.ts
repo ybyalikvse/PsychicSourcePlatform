@@ -15,9 +15,15 @@ import {
   type OptimizationAnalysis, type InsertOptimizationAnalysis,
   type HoroscopePrompt, type InsertHoroscopePrompt,
   type HoroscopeEntry, type InsertHoroscopeEntry,
+  type Psychic, type InsertPsychic,
+  type VideoRequest, type InsertVideoRequest,
+  type VideoMessage, type InsertVideoMessage,
+  type VideoCaption, type InsertVideoCaption,
+  type VideoCaptionPrompt, type InsertVideoCaptionPrompt,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
   writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
   horoscopePrompts, horoscopeEntries,
+  psychics, videoRequests, videoMessages, videoCaptions, videoCaptionPrompts,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -125,6 +131,38 @@ export interface IStorage {
   updateHoroscopeEntry(id: string, entry: Partial<InsertHoroscopeEntry>): Promise<HoroscopeEntry | undefined>;
   deleteHoroscopeEntry(id: string): Promise<boolean>;
   deleteHoroscopeEntriesByPeriod(type: string, language: string, periodStart: string, site?: string): Promise<boolean>;
+
+  // Psychics
+  getPsychics(): Promise<Psychic[]>;
+  getPsychic(id: string): Promise<Psychic | undefined>;
+  createPsychic(psychic: InsertPsychic): Promise<Psychic>;
+  updatePsychic(id: string, psychic: Partial<InsertPsychic>): Promise<Psychic | undefined>;
+  deletePsychic(id: string): Promise<boolean>;
+
+  // Video Requests
+  getVideoRequests(status?: string): Promise<VideoRequest[]>;
+  getVideoRequest(id: string): Promise<VideoRequest | undefined>;
+  getVideoRequestsByPsychic(psychicId: string): Promise<VideoRequest[]>;
+  createVideoRequest(request: InsertVideoRequest): Promise<VideoRequest>;
+  updateVideoRequest(id: string, updates: Partial<VideoRequest>): Promise<VideoRequest | undefined>;
+  deleteVideoRequest(id: string): Promise<boolean>;
+
+  // Video Messages
+  getVideoMessages(videoRequestId: string): Promise<VideoMessage[]>;
+  createVideoMessage(message: InsertVideoMessage): Promise<VideoMessage>;
+
+  // Video Captions
+  getVideoCaptions(videoRequestId: string): Promise<VideoCaption[]>;
+  createVideoCaption(caption: InsertVideoCaption): Promise<VideoCaption>;
+  deleteVideoCaption(id: string): Promise<boolean>;
+
+  // Video Caption Prompts
+  getVideoCaptionPrompts(): Promise<VideoCaptionPrompt[]>;
+  getVideoCaptionPrompt(id: string): Promise<VideoCaptionPrompt | undefined>;
+  getVideoCaptionPromptByPlatform(platform: string): Promise<VideoCaptionPrompt | undefined>;
+  createVideoCaptionPrompt(prompt: InsertVideoCaptionPrompt): Promise<VideoCaptionPrompt>;
+  updateVideoCaptionPrompt(id: string, prompt: Partial<InsertVideoCaptionPrompt>): Promise<VideoCaptionPrompt | undefined>;
+  deleteVideoCaptionPrompt(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -361,6 +399,28 @@ export class MemStorage implements IStorage {
   async updateHoroscopeEntry(_id: string, _entry: Partial<InsertHoroscopeEntry>): Promise<HoroscopeEntry | undefined> { return undefined; }
   async deleteHoroscopeEntry(_id: string): Promise<boolean> { return false; }
   async deleteHoroscopeEntriesByPeriod(_type: string, _language: string, _periodStart: string, _site?: string): Promise<boolean> { return false; }
+  async getPsychics(): Promise<Psychic[]> { return []; }
+  async getPsychic(_id: string): Promise<Psychic | undefined> { return undefined; }
+  async createPsychic(_psychic: InsertPsychic): Promise<Psychic> { throw new Error("Not implemented"); }
+  async updatePsychic(_id: string, _psychic: Partial<InsertPsychic>): Promise<Psychic | undefined> { return undefined; }
+  async deletePsychic(_id: string): Promise<boolean> { return false; }
+  async getVideoRequests(_status?: string): Promise<VideoRequest[]> { return []; }
+  async getVideoRequest(_id: string): Promise<VideoRequest | undefined> { return undefined; }
+  async getVideoRequestsByPsychic(_psychicId: string): Promise<VideoRequest[]> { return []; }
+  async createVideoRequest(_request: InsertVideoRequest): Promise<VideoRequest> { throw new Error("Not implemented"); }
+  async updateVideoRequest(_id: string, _updates: Partial<VideoRequest>): Promise<VideoRequest | undefined> { return undefined; }
+  async deleteVideoRequest(_id: string): Promise<boolean> { return false; }
+  async getVideoMessages(_videoRequestId: string): Promise<VideoMessage[]> { return []; }
+  async createVideoMessage(_message: InsertVideoMessage): Promise<VideoMessage> { throw new Error("Not implemented"); }
+  async getVideoCaptions(_videoRequestId: string): Promise<VideoCaption[]> { return []; }
+  async createVideoCaption(_caption: InsertVideoCaption): Promise<VideoCaption> { throw new Error("Not implemented"); }
+  async deleteVideoCaption(_id: string): Promise<boolean> { return false; }
+  async getVideoCaptionPrompts(): Promise<VideoCaptionPrompt[]> { return []; }
+  async getVideoCaptionPrompt(_id: string): Promise<VideoCaptionPrompt | undefined> { return undefined; }
+  async getVideoCaptionPromptByPlatform(_platform: string): Promise<VideoCaptionPrompt | undefined> { return undefined; }
+  async createVideoCaptionPrompt(_prompt: InsertVideoCaptionPrompt): Promise<VideoCaptionPrompt> { throw new Error("Not implemented"); }
+  async updateVideoCaptionPrompt(_id: string, _prompt: Partial<InsertVideoCaptionPrompt>): Promise<VideoCaptionPrompt | undefined> { return undefined; }
+  async deleteVideoCaptionPrompt(_id: string): Promise<boolean> { return false; }
 }
 
 // Database storage implementation - uses PostgreSQL for persistence
@@ -789,6 +849,126 @@ export class DatabaseStorage implements IStorage {
     for (const entry of entries) {
       await db.delete(horoscopeEntries).where(eq(horoscopeEntries.id, entry.id));
     }
+    return true;
+  }
+
+  // Psychics
+  async getPsychics(): Promise<Psychic[]> {
+    return db.select().from(psychics).orderBy(psychics.name);
+  }
+
+  async getPsychic(id: string): Promise<Psychic | undefined> {
+    const [psychic] = await db.select().from(psychics).where(eq(psychics.id, id));
+    return psychic;
+  }
+
+  async createPsychic(psychic: InsertPsychic): Promise<Psychic> {
+    const [created] = await db.insert(psychics).values(psychic).returning();
+    return created;
+  }
+
+  async updatePsychic(id: string, updates: Partial<InsertPsychic>): Promise<Psychic | undefined> {
+    const [updated] = await db.update(psychics).set(updates).where(eq(psychics.id, id)).returning();
+    return updated;
+  }
+
+  async deletePsychic(id: string): Promise<boolean> {
+    await db.delete(psychics).where(eq(psychics.id, id));
+    return true;
+  }
+
+  // Video Requests
+  async getVideoRequests(status?: string): Promise<VideoRequest[]> {
+    const all = await db.select().from(videoRequests).orderBy(desc(videoRequests.createdAt));
+    if (status) return all.filter(r => r.status === status);
+    return all;
+  }
+
+  async getVideoRequest(id: string): Promise<VideoRequest | undefined> {
+    const [request] = await db.select().from(videoRequests).where(eq(videoRequests.id, id));
+    return request;
+  }
+
+  async getVideoRequestsByPsychic(psychicId: string): Promise<VideoRequest[]> {
+    const all = await db.select().from(videoRequests).orderBy(desc(videoRequests.createdAt));
+    return all.filter(r => r.claimedBy === psychicId);
+  }
+
+  async createVideoRequest(request: InsertVideoRequest): Promise<VideoRequest> {
+    const [created] = await db.insert(videoRequests).values(request).returning();
+    return created;
+  }
+
+  async updateVideoRequest(id: string, updates: Partial<VideoRequest>): Promise<VideoRequest | undefined> {
+    const [updated] = await db.update(videoRequests)
+      .set({ ...updates, updatedAt: new Date().toISOString() })
+      .where(eq(videoRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteVideoRequest(id: string): Promise<boolean> {
+    await db.delete(videoRequests).where(eq(videoRequests.id, id));
+    return true;
+  }
+
+  // Video Messages
+  async getVideoMessages(videoRequestId: string): Promise<VideoMessage[]> {
+    const all = await db.select().from(videoMessages).orderBy(videoMessages.createdAt);
+    return all.filter(m => m.videoRequestId === videoRequestId);
+  }
+
+  async createVideoMessage(message: InsertVideoMessage): Promise<VideoMessage> {
+    const [created] = await db.insert(videoMessages).values(message).returning();
+    return created;
+  }
+
+  // Video Captions
+  async getVideoCaptions(videoRequestId: string): Promise<VideoCaption[]> {
+    const all = await db.select().from(videoCaptions).orderBy(desc(videoCaptions.createdAt));
+    return all.filter(c => c.videoRequestId === videoRequestId);
+  }
+
+  async createVideoCaption(caption: InsertVideoCaption): Promise<VideoCaption> {
+    const [created] = await db.insert(videoCaptions).values(caption).returning();
+    return created;
+  }
+
+  async deleteVideoCaption(id: string): Promise<boolean> {
+    await db.delete(videoCaptions).where(eq(videoCaptions.id, id));
+    return true;
+  }
+
+  // Video Caption Prompts
+  async getVideoCaptionPrompts(): Promise<VideoCaptionPrompt[]> {
+    return db.select().from(videoCaptionPrompts).orderBy(videoCaptionPrompts.platform);
+  }
+
+  async getVideoCaptionPrompt(id: string): Promise<VideoCaptionPrompt | undefined> {
+    const [prompt] = await db.select().from(videoCaptionPrompts).where(eq(videoCaptionPrompts.id, id));
+    return prompt;
+  }
+
+  async getVideoCaptionPromptByPlatform(platform: string): Promise<VideoCaptionPrompt | undefined> {
+    const all = await db.select().from(videoCaptionPrompts);
+    return all.find(p => p.platform === platform && p.isActive);
+  }
+
+  async createVideoCaptionPrompt(prompt: InsertVideoCaptionPrompt): Promise<VideoCaptionPrompt> {
+    const [created] = await db.insert(videoCaptionPrompts).values(prompt).returning();
+    return created;
+  }
+
+  async updateVideoCaptionPrompt(id: string, updates: Partial<InsertVideoCaptionPrompt>): Promise<VideoCaptionPrompt | undefined> {
+    const [updated] = await db.update(videoCaptionPrompts)
+      .set({ ...updates, updatedAt: new Date().toISOString() })
+      .where(eq(videoCaptionPrompts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteVideoCaptionPrompt(id: string): Promise<boolean> {
+    await db.delete(videoCaptionPrompts).where(eq(videoCaptionPrompts.id, id));
     return true;
   }
 }

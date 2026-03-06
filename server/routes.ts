@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertLinkTableColumnSchema, insertSiteUrlSchema, insertHoroscopePromptSchema, insertHoroscopeEntrySchema } from "@shared/schema";
+import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertLinkTableColumnSchema, insertSiteUrlSchema, insertHoroscopePromptSchema, insertHoroscopeEntrySchema, insertPsychicSchema, insertVideoRequestSchema, insertVideoMessageSchema, insertVideoCaptionSchema, insertVideoCaptionPromptSchema } from "@shared/schema";
 import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
@@ -4578,6 +4578,429 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
     } catch (error) {
       console.error("[Horoscope] Error fetching cron status:", error);
       res.status(500).json({ error: "Failed to fetch cron status" });
+    }
+  });
+
+  // ============ PSYCHICS MANAGEMENT ============
+  app.get("/api/psychics", async (_req, res) => {
+    try {
+      const allPsychics = await storage.getPsychics();
+      res.json(allPsychics);
+    } catch (error) {
+      console.error("[Psychics] Error:", error);
+      res.status(500).json({ error: "Failed to fetch psychics" });
+    }
+  });
+
+  app.get("/api/psychics/:id", async (req, res) => {
+    try {
+      const psychic = await storage.getPsychic(req.params.id);
+      if (!psychic) return res.status(404).json({ error: "Psychic not found" });
+      res.json(psychic);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch psychic" });
+    }
+  });
+
+  app.post("/api/psychics", async (req, res) => {
+    try {
+      const parsed = insertPsychicSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const psychic = await storage.createPsychic(parsed.data);
+      res.json(psychic);
+    } catch (error) {
+      console.error("[Psychics] Create error:", error);
+      res.status(500).json({ error: "Failed to create psychic" });
+    }
+  });
+
+  app.patch("/api/psychics/:id", async (req, res) => {
+    try {
+      const psychic = await storage.updatePsychic(req.params.id, req.body);
+      if (!psychic) return res.status(404).json({ error: "Psychic not found" });
+      res.json(psychic);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update psychic" });
+    }
+  });
+
+  app.delete("/api/psychics/:id", async (req, res) => {
+    try {
+      await storage.deletePsychic(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete psychic" });
+    }
+  });
+
+  app.get("/api/psychics/:id/videos", async (req, res) => {
+    try {
+      const videos = await storage.getVideoRequestsByPsychic(req.params.id);
+      res.json(videos);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch psychic videos" });
+    }
+  });
+
+  // ============ VIDEO REQUESTS (Admin) ============
+  app.get("/api/video-requests", async (req, res) => {
+    try {
+      const { status } = req.query;
+      const requests = await storage.getVideoRequests(status as string | undefined);
+      res.json(requests);
+    } catch (error) {
+      console.error("[Video Requests] Error:", error);
+      res.status(500).json({ error: "Failed to fetch video requests" });
+    }
+  });
+
+  app.get("/api/video-requests/:id", async (req, res) => {
+    try {
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      res.json(request);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch video request" });
+    }
+  });
+
+  app.post("/api/video-requests", async (req, res) => {
+    try {
+      const parsed = insertVideoRequestSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const request = await storage.createVideoRequest(parsed.data);
+      res.json(request);
+    } catch (error) {
+      console.error("[Video Requests] Create error:", error);
+      res.status(500).json({ error: "Failed to create video request" });
+    }
+  });
+
+  app.patch("/api/video-requests/:id", async (req, res) => {
+    try {
+      const request = await storage.updateVideoRequest(req.params.id, req.body);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      res.json(request);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update video request" });
+    }
+  });
+
+  app.delete("/api/video-requests/:id", async (req, res) => {
+    try {
+      await storage.deleteVideoRequest(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete video request" });
+    }
+  });
+
+  app.patch("/api/video-requests/:id/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      const validStatuses = ["available", "claimed", "submitted", "revision_requested", "approved", "paid"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+
+      const updates: any = { status };
+      if (status === "approved") updates.approvedAt = new Date().toISOString();
+      if (status === "available") {
+        updates.claimedBy = null;
+        updates.claimedAt = null;
+        updates.submittedAt = null;
+        updates.videoUrl = null;
+      }
+
+      const request = await storage.updateVideoRequest(req.params.id, updates);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      res.json(request);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update video request status" });
+    }
+  });
+
+  // ============ VIDEO MESSAGES ============
+  app.get("/api/video-requests/:id/messages", async (req, res) => {
+    try {
+      const messages = await storage.getVideoMessages(req.params.id);
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/video-requests/:id/messages", async (req, res) => {
+    try {
+      const parsed = insertVideoMessageSchema.safeParse({
+        ...req.body,
+        videoRequestId: req.params.id,
+      });
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const message = await storage.createVideoMessage(parsed.data);
+      res.json(message);
+    } catch (error) {
+      console.error("[Video Messages] Create error:", error);
+      res.status(500).json({ error: "Failed to create message" });
+    }
+  });
+
+  // ============ VIDEO CAPTIONS ============
+  app.get("/api/video-requests/:id/captions", async (req, res) => {
+    try {
+      const captions = await storage.getVideoCaptions(req.params.id);
+      res.json(captions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch captions" });
+    }
+  });
+
+  app.delete("/api/video-captions/:id", async (req, res) => {
+    try {
+      await storage.deleteVideoCaption(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete caption" });
+    }
+  });
+
+  app.post("/api/video-requests/:id/generate-captions", async (req, res) => {
+    try {
+      const { platform } = req.body;
+      if (!platform) return res.status(400).json({ error: "Platform is required" });
+
+      const videoRequest = await storage.getVideoRequest(req.params.id);
+      if (!videoRequest) return res.status(404).json({ error: "Video request not found" });
+
+      const promptConfig = await storage.getVideoCaptionPromptByPlatform(platform);
+      const captionPrompt = promptConfig?.captionPrompt || "Write a compelling social media caption for this video. Keep it engaging and include a call to action.";
+      const hashtagPrompt = promptConfig?.hashtagPrompt || "Generate 10-15 relevant hashtags for this video.";
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are a social media expert. Generate captions and hashtags for videos. Respond in JSON format with 'caption' and 'hashtags' fields."
+          },
+          {
+            role: "user",
+            content: `Video Topic: ${videoRequest.topic}
+Title: ${videoRequest.title}
+Hook: ${videoRequest.hook || "N/A"}
+Description: ${videoRequest.description || "N/A"}
+Platform: ${platform}
+
+Caption Instructions: ${captionPrompt}
+Hashtag Instructions: ${hashtagPrompt}
+
+Return JSON: { "caption": "...", "hashtags": "..." }`
+          }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 1024,
+      });
+
+      const result = JSON.parse(response.choices[0]?.message?.content || '{"caption":"","hashtags":""}');
+      const caption = await storage.createVideoCaption({
+        videoRequestId: req.params.id,
+        caption: result.caption || "",
+        hashtags: result.hashtags || "",
+        platform,
+      });
+      res.json(caption);
+    } catch (error) {
+      console.error("[Video Captions] Generate error:", error);
+      res.status(500).json({ error: "Failed to generate captions" });
+    }
+  });
+
+  // ============ VIDEO CAPTION PROMPTS (Settings) ============
+  app.get("/api/video-caption-prompts", async (_req, res) => {
+    try {
+      const prompts = await storage.getVideoCaptionPrompts();
+      res.json(prompts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch video caption prompts" });
+    }
+  });
+
+  app.post("/api/video-caption-prompts", async (req, res) => {
+    try {
+      const parsed = insertVideoCaptionPromptSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const prompt = await storage.createVideoCaptionPrompt(parsed.data);
+      res.json(prompt);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create video caption prompt" });
+    }
+  });
+
+  app.patch("/api/video-caption-prompts/:id", async (req, res) => {
+    try {
+      const prompt = await storage.updateVideoCaptionPrompt(req.params.id, req.body);
+      if (!prompt) return res.status(404).json({ error: "Prompt not found" });
+      res.json(prompt);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update video caption prompt" });
+    }
+  });
+
+  app.delete("/api/video-caption-prompts/:id", async (req, res) => {
+    try {
+      await storage.deleteVideoCaptionPrompt(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete video caption prompt" });
+    }
+  });
+
+  // ============ PSYCHIC PORTAL (Public-facing) ============
+  const multerModule = await import("multer");
+  const multer = multerModule.default;
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
+
+  app.get("/api/portal/video-requests", async (req, res) => {
+    try {
+      const { status } = req.query;
+      const requests = await storage.getVideoRequests(status as string || "available");
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch video requests" });
+    }
+  });
+
+  app.get("/api/portal/my-requests", async (req, res) => {
+    try {
+      const { psychicId } = req.query;
+      if (!psychicId) return res.status(400).json({ error: "psychicId is required" });
+      const requests = await storage.getVideoRequestsByPsychic(psychicId as string);
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch your requests" });
+    }
+  });
+
+  app.post("/api/portal/video-requests/:id/claim", async (req, res) => {
+    try {
+      const { psychicId } = req.body;
+      if (!psychicId) return res.status(400).json({ error: "psychicId is required" });
+
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      if (request.status !== "available") {
+        return res.status(400).json({ error: "This video request is no longer available" });
+      }
+
+      const updated = await storage.updateVideoRequest(req.params.id, {
+        status: "claimed",
+        claimedBy: psychicId,
+        claimedAt: new Date().toISOString(),
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to claim video request" });
+    }
+  });
+
+  app.post("/api/portal/video-requests/:id/release", async (req, res) => {
+    try {
+      const { psychicId } = req.body;
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      if (request.claimedBy !== psychicId) {
+        return res.status(403).json({ error: "You can only release your own claimed requests" });
+      }
+
+      const updated = await storage.updateVideoRequest(req.params.id, {
+        status: "available",
+        claimedBy: null,
+        claimedAt: null,
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to release video request" });
+    }
+  });
+
+  app.post("/api/portal/video-requests/:id/upload", upload.single("video"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No video file uploaded" });
+      const psychicId = req.body?.psychicId;
+
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      if (psychicId && request.claimedBy !== psychicId) {
+        return res.status(403).json({ error: "You can only upload to your own claimed requests" });
+      }
+      if (request.status !== "claimed" && request.status !== "revision_requested") {
+        return res.status(400).json({ error: "Can only upload to claimed or revision-requested requests" });
+      }
+
+      const { uploadImageToS3, isS3Configured } = await import("./s3");
+      if (!isS3Configured()) {
+        return res.status(500).json({ error: "S3 storage not configured. Please set AWS credentials." });
+      }
+
+      const ext = req.file.originalname.split('.').pop() || "mp4";
+      const filename = `videos/${req.params.id}_${Date.now()}.${ext}`;
+      const videoUrl = await uploadImageToS3(req.file.buffer, filename, req.file.mimetype);
+
+      const updated = await storage.updateVideoRequest(req.params.id, { videoUrl });
+      res.json({ success: true, videoUrl, request: updated });
+    } catch (error) {
+      console.error("[Portal Upload] Error:", error);
+      res.status(500).json({ error: "Failed to upload video" });
+    }
+  });
+
+  app.post("/api/portal/video-requests/:id/submit", async (req, res) => {
+    try {
+      const { psychicId } = req.body;
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      if (psychicId && request.claimedBy !== psychicId) {
+        return res.status(403).json({ error: "You can only submit your own claimed requests" });
+      }
+      if (!request.videoUrl) {
+        return res.status(400).json({ error: "Please upload a video before submitting" });
+      }
+
+      const updated = await storage.updateVideoRequest(req.params.id, {
+        status: "submitted",
+        submittedAt: new Date().toISOString(),
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to submit video request" });
+    }
+  });
+
+  app.get("/api/portal/video-requests/:id/messages", async (req, res) => {
+    try {
+      const messages = await storage.getVideoMessages(req.params.id);
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/portal/video-requests/:id/messages", async (req, res) => {
+    try {
+      const parsed = insertVideoMessageSchema.safeParse({
+        ...req.body,
+        videoRequestId: req.params.id,
+      });
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const message = await storage.createVideoMessage(parsed.data);
+      res.json(message);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create message" });
     }
   });
 

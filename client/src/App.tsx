@@ -1,4 +1,5 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
+import { useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +9,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAnalytics } from "@/hooks/use-analytics";
+import { PortalLayout } from "@/components/portal-layout";
+import type { Psychic } from "@shared/schema";
 
 import Dashboard from "@/pages/dashboard";
 import Content from "@/pages/content";
@@ -20,9 +23,14 @@ import Optimize from "@/pages/optimize";
 import InternalLinks from "@/pages/internal-links";
 import Settings from "@/pages/settings";
 import Horoscopes from "@/pages/horoscopes";
+import Psychics from "@/pages/psychics";
+import VideoRequests from "@/pages/video-requests";
+import PortalLogin from "@/pages/portal/portal-login";
+import PortalRequestsPage from "@/pages/portal/portal-requests";
+import PortalMyRequestsPage from "@/pages/portal/portal-my-requests";
 import NotFound from "@/pages/not-found";
 
-function Router() {
+function AdminRouter() {
   useAnalytics();
 
   return (
@@ -39,8 +47,50 @@ function Router() {
       <Route path="/internal-links" component={InternalLinks} />
       <Route path="/settings" component={Settings} />
       <Route path="/horoscopes" component={Horoscopes} />
+      <Route path="/psychics" component={Psychics} />
+      <Route path="/video-requests" component={VideoRequests} />
       <Route component={NotFound} />
     </Switch>
+  );
+}
+
+function PortalRouter() {
+  const [psychic, setPsychic] = useState<Psychic | null>(() => {
+    const stored = localStorage.getItem("portal_psychic");
+    if (stored) {
+      try { return JSON.parse(stored); } catch { return null; }
+    }
+    return null;
+  });
+
+  const handleLogin = (p: Psychic) => {
+    setPsychic(p);
+    localStorage.setItem("portal_psychic", JSON.stringify(p));
+  };
+
+  const handleLogout = () => {
+    setPsychic(null);
+    localStorage.removeItem("portal_psychic");
+  };
+
+  if (!psychic) {
+    return <PortalLogin onLogin={handleLogin} />;
+  }
+
+  return (
+    <PortalLayout psychicName={psychic.name} onLogout={handleLogout}>
+      <Switch>
+        <Route path="/portal/requests">
+          <PortalRequestsPage psychic={psychic} />
+        </Route>
+        <Route path="/portal/my-requests">
+          <PortalMyRequestsPage psychic={psychic} />
+        </Route>
+        <Route path="/portal">
+          <PortalRequestsPage psychic={psychic} />
+        </Route>
+      </Switch>
+    </PortalLayout>
   );
 }
 
@@ -60,7 +110,7 @@ function AppLayout() {
             <ThemeToggle />
           </header>
           <main className="flex-1 overflow-auto p-6">
-            <Router />
+            <AdminRouter />
           </main>
         </div>
       </div>
@@ -69,11 +119,14 @@ function AppLayout() {
 }
 
 function App() {
+  const [location] = useLocation();
+  const isPortal = location.startsWith("/portal");
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <AppLayout />
+          {isPortal ? <PortalRouter /> : <AppLayout />}
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>
