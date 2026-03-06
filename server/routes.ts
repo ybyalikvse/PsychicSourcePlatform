@@ -2383,13 +2383,14 @@ Respond in JSON format:
       if (styleId) {
         const style = await storage.getImageStyle(styleId);
         if (style) {
+          const stylePromptText = style.stylePrompt || "";
+          const additionalText = style.additionalInstructions || "";
           styleInstructions = `
-IMPORTANT - All image suggestions MUST follow this visual style:
-Style: ${style.name}
-Style Description: ${style.stylePrompt || ""}
-${style.additionalInstructions ? `Additional Requirements: ${style.additionalInstructions}` : ""}
+IMPORTANT - All image suggestions MUST follow these exact visual style instructions (do NOT reference the style name "${style.name}" in your prompts — instead apply the actual style directions below):
+${stylePromptText}
+${additionalText ? `Additional Requirements: ${additionalText}` : ""}
 
-Incorporate these style elements into every image prompt you generate.
+Apply these style directions to every image prompt you generate. Describe the visual style in full rather than referencing a style name or abbreviation.
 `;
         }
       }
