@@ -1,5 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,6 +10,9 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { PortalLayout } from "@/components/portal-layout";
+import { useFirebaseAuth } from "@/hooks/use-firebase-auth";
+import { apiRequest } from "@/lib/queryClient";
+import { Loader2 } from "lucide-react";
 import type { Psychic } from "@shared/schema";
 
 import Dashboard from "@/pages/dashboard";
@@ -55,6 +58,7 @@ function AdminRouter() {
 }
 
 function PortalRouter() {
+  const { user, loading: authLoading, logout: firebaseLogout } = useFirebaseAuth();
   const [psychic, setPsychic] = useState<Psychic | null>(() => {
     const stored = localStorage.getItem("portal_psychic");
     if (stored) {
@@ -62,16 +66,51 @@ function PortalRouter() {
     }
     return null;
   });
+  const [verifying, setVerifying] = useState(false);
+
+  useEffect(() => {
+    if (user && !psychic && !verifying) {
+      setVerifying(true);
+      user.getIdToken().then(async (idToken) => {
+        try {
+          const res = await apiRequest("POST", "/api/portal/auth/firebase", { idToken });
+          const p: Psychic = await res.json();
+          setPsychic(p);
+          localStorage.setItem("portal_psychic", JSON.stringify(p));
+        } catch {
+          await firebaseLogout();
+          localStorage.removeItem("portal_psychic");
+        } finally {
+          setVerifying(false);
+        }
+      });
+    }
+    if (!user && psychic) {
+      setPsychic(null);
+      localStorage.removeItem("portal_psychic");
+    }
+  }, [user]);
 
   const handleLogin = (p: Psychic) => {
     setPsychic(p);
     localStorage.setItem("portal_psychic", JSON.stringify(p));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await firebaseLogout();
     setPsychic(null);
     localStorage.removeItem("portal_psychic");
   };
+
+  if (authLoading || verifying) {
+    return (
+      <PortalLayout>
+        <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </PortalLayout>
+    );
+  }
 
   if (!psychic) {
     return <PortalLogin onLogin={handleLogin} />;

@@ -135,6 +135,7 @@ export interface IStorage {
   // Psychics
   getPsychics(): Promise<Psychic[]>;
   getPsychic(id: string): Promise<Psychic | undefined>;
+  getPsychicByFirebaseUid(uid: string): Promise<Psychic | undefined>;
   createPsychic(psychic: InsertPsychic): Promise<Psychic>;
   updatePsychic(id: string, psychic: Partial<InsertPsychic>): Promise<Psychic | undefined>;
   deletePsychic(id: string): Promise<boolean>;
@@ -401,6 +402,7 @@ export class MemStorage implements IStorage {
   async deleteHoroscopeEntriesByPeriod(_type: string, _language: string, _periodStart: string, _site?: string): Promise<boolean> { return false; }
   async getPsychics(): Promise<Psychic[]> { return []; }
   async getPsychic(_id: string): Promise<Psychic | undefined> { return undefined; }
+  async getPsychicByFirebaseUid(_uid: string): Promise<Psychic | undefined> { return undefined; }
   async createPsychic(_psychic: InsertPsychic): Promise<Psychic> { throw new Error("Not implemented"); }
   async updatePsychic(_id: string, _psychic: Partial<InsertPsychic>): Promise<Psychic | undefined> { return undefined; }
   async deletePsychic(_id: string): Promise<boolean> { return false; }
@@ -859,6 +861,11 @@ export class DatabaseStorage implements IStorage {
 
   async getPsychic(id: string): Promise<Psychic | undefined> {
     const [psychic] = await db.select().from(psychics).where(eq(psychics.id, id));
+    return psychic;
+  }
+
+  async getPsychicByFirebaseUid(uid: string): Promise<Psychic | undefined> {
+    const [psychic] = await db.select().from(psychics).where(eq(psychics.firebaseUid, uid));
     return psychic;
   }
 

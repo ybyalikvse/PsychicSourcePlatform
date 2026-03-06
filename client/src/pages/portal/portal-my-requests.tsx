@@ -8,7 +8,8 @@ import { DataState } from "@/components/data-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { portalApiRequest, portalFetch } from "@/lib/portal-api";
+import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, Clock, DollarSign, Send, MessageSquare, XCircle, CheckCircle } from "lucide-react";
 import PortalUpload from "./portal-upload";
@@ -32,19 +33,25 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
   const [messageText, setMessageText] = useState("");
 
   const { data: requests, isLoading } = useQuery<VideoRequest[]>({
-    queryKey: ["/api/portal/my-requests", `?psychicId=${psychic.id}`],
+    queryKey: ["/api/portal/my-requests"],
+    queryFn: async () => {
+      const res = await portalFetch("/api/portal/my-requests");
+      return res.json();
+    },
   });
 
   const { data: messages } = useQuery<VideoMessage[]>({
     queryKey: ["/api/portal/video-requests", selectedRequest?.id, "messages"],
+    queryFn: async () => {
+      const res = await portalFetch(`/api/portal/video-requests/${selectedRequest!.id}/messages`);
+      return res.json();
+    },
     enabled: !!selectedRequest,
   });
 
   const releaseMutation = useMutation({
     mutationFn: async (requestId: string) => {
-      const res = await apiRequest("POST", `/api/portal/video-requests/${requestId}/release`, {
-        psychicId: psychic.id,
-      });
+      const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/release`);
       return res.json();
     },
     onSuccess: () => {
@@ -60,7 +67,7 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
 
   const submitMutation = useMutation({
     mutationFn: async (requestId: string) => {
-      const res = await apiRequest("POST", `/api/portal/video-requests/${requestId}/submit`);
+      const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/submit`);
       return res.json();
     },
     onSuccess: () => {
@@ -75,8 +82,7 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
 
   const sendMessageMutation = useMutation({
     mutationFn: async ({ requestId, message }: { requestId: string; message: string }) => {
-      const res = await apiRequest("POST", `/api/portal/video-requests/${requestId}/messages`, {
-        senderType: "psychic",
+      const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/messages`, {
         senderName: psychic.name,
         message,
       });

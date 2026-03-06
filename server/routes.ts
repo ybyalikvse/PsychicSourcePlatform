@@ -4865,7 +4865,71 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
   const multer = multerModule.default;
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
-  app.get("/api/portal/video-requests", async (req, res) => {
+  const firebaseAdminModule = await import("firebase-admin");
+  const firebaseAdmin = firebaseAdminModule.default;
+  if (!firebaseAdmin.apps.length) {
+    firebaseAdmin.initializeApp({
+      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+    });
+  }
+
+  async function verifyPortalAuth(req: any, res: any, next: any) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Missing or invalid authorization header" });
+    }
+    const idToken = authHeader.split("Bearer ")[1];
+    try {
+      const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+      const psychic = await storage.getPsychicByFirebaseUid(decoded.uid);
+      if (!psychic || psychic.status !== "active") {
+        return res.status(403).json({ error: "Unauthorized psychic account" });
+      }
+      req.portalPsychic = psychic;
+      next();
+    } catch (error) {
+      return res.status(401).json({ error: "Invalid authentication token" });
+    }
+  }
+
+  app.post("/api/portal/auth/firebase", async (req, res) => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        return res.status(400).json({ error: "Missing idToken" });
+      }
+      const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+      const firebaseUid = decoded.uid;
+      const email = decoded.email;
+
+      let psychic = await storage.getPsychicByFirebaseUid(firebaseUid);
+
+      if (!psychic && email) {
+        const allPsychics = await storage.getPsychics();
+        const matchByEmail = allPsychics.find(
+          (p) => p.email.toLowerCase() === email.toLowerCase() && p.status === "active"
+        );
+        if (matchByEmail) {
+          psychic = await storage.updatePsychic(matchByEmail.id, { firebaseUid });
+        }
+      }
+
+      if (!psychic) {
+        return res.status(404).json({ error: "No psychic profile found for this account. Please contact an administrator." });
+      }
+
+      if (psychic.status !== "active") {
+        return res.status(403).json({ error: "Your psychic profile is inactive. Please contact an administrator." });
+      }
+
+      res.json(psychic);
+    } catch (error: any) {
+      console.error("Firebase auth error:", error);
+      res.status(401).json({ error: "Invalid authentication token" });
+    }
+  });
+
+  app.get("/api/portal/video-requests", verifyPortalAuth, async (req: any, res) => {
     try {
       const { status } = req.query;
       const requests = await storage.getVideoRequests(status as string || "available");
@@ -4875,22 +4939,19 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  app.get("/api/portal/my-requests", async (req, res) => {
+  app.get("/api/portal/my-requests", verifyPortalAuth, async (req: any, res) => {
     try {
-      const { psychicId } = req.query;
-      if (!psychicId) return res.status(400).json({ error: "psychicId is required" });
-      const requests = await storage.getVideoRequestsByPsychic(psychicId as string);
+      const psychic = req.portalPsychic;
+      const requests = await storage.getVideoRequestsByPsychic(psychic.id);
       res.json(requests);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch your requests" });
     }
   });
 
-  app.post("/api/portal/video-requests/:id/claim", async (req, res) => {
+  app.post("/api/portal/video-requests/:id/claim", verifyPortalAuth, async (req: any, res) => {
     try {
-      const { psychicId } = req.body;
-      if (!psychicId) return res.status(400).json({ error: "psychicId is required" });
-
+      const psychic = req.portalPsychic;
       const request = await storage.getVideoRequest(req.params.id);
       if (!request) return res.status(404).json({ error: "Video request not found" });
       if (request.status !== "available") {
@@ -4899,7 +4960,7 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
 
       const updated = await storage.updateVideoRequest(req.params.id, {
         status: "claimed",
-        claimedBy: psychicId,
+        claimedBy: psychic.id,
         claimedAt: new Date().toISOString(),
       });
       res.json(updated);
@@ -4908,12 +4969,12 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  app.post("/api/portal/video-requests/:id/release", async (req, res) => {
+  app.post("/api/portal/video-requests/:id/release", verifyPortalAuth, async (req: any, res) => {
     try {
-      const { psychicId } = req.body;
+      const psychic = req.portalPsychic;
       const request = await storage.getVideoRequest(req.params.id);
       if (!request) return res.status(404).json({ error: "Video request not found" });
-      if (request.claimedBy !== psychicId) {
+      if (request.claimedBy !== psychic.id) {
         return res.status(403).json({ error: "You can only release your own claimed requests" });
       }
 
@@ -4928,14 +4989,14 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  app.post("/api/portal/video-requests/:id/upload", upload.single("video"), async (req: any, res) => {
+  app.post("/api/portal/video-requests/:id/upload", verifyPortalAuth, upload.single("video"), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: "No video file uploaded" });
-      const psychicId = req.body?.psychicId;
+      const psychic = req.portalPsychic;
 
       const request = await storage.getVideoRequest(req.params.id);
       if (!request) return res.status(404).json({ error: "Video request not found" });
-      if (psychicId && request.claimedBy !== psychicId) {
+      if (request.claimedBy !== psychic.id) {
         return res.status(403).json({ error: "You can only upload to your own claimed requests" });
       }
       if (request.status !== "claimed" && request.status !== "revision_requested") {
@@ -4959,12 +5020,12 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  app.post("/api/portal/video-requests/:id/submit", async (req, res) => {
+  app.post("/api/portal/video-requests/:id/submit", verifyPortalAuth, async (req: any, res) => {
     try {
-      const { psychicId } = req.body;
+      const psychic = req.portalPsychic;
       const request = await storage.getVideoRequest(req.params.id);
       if (!request) return res.status(404).json({ error: "Video request not found" });
-      if (psychicId && request.claimedBy !== psychicId) {
+      if (request.claimedBy !== psychic.id) {
         return res.status(403).json({ error: "You can only submit your own claimed requests" });
       }
       if (!request.videoUrl) {
@@ -4981,7 +5042,7 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  app.get("/api/portal/video-requests/:id/messages", async (req, res) => {
+  app.get("/api/portal/video-requests/:id/messages", verifyPortalAuth, async (req: any, res) => {
     try {
       const messages = await storage.getVideoMessages(req.params.id);
       res.json(messages);
@@ -4990,11 +5051,14 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  app.post("/api/portal/video-requests/:id/messages", async (req, res) => {
+  app.post("/api/portal/video-requests/:id/messages", verifyPortalAuth, async (req: any, res) => {
     try {
+      const psychic = req.portalPsychic;
       const parsed = insertVideoMessageSchema.safeParse({
         ...req.body,
         videoRequestId: req.params.id,
+        senderType: "psychic",
+        senderId: psychic.id,
       });
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
       const message = await storage.createVideoMessage(parsed.data);

@@ -383,6 +383,19 @@ export default function Psychics() {
                   </FormItem>
                 )}
               />
+              <FormField
+                control={addForm.control}
+                name="firebaseUid"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Firebase UID (optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Auto-linked on first login" {...field} value={field.value || ""} data-testid="input-psychic-firebase-uid" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)} data-testid="button-cancel-add">
                   Cancel
@@ -453,6 +466,19 @@ export default function Psychics() {
                         <SelectItem value="inactive" data-testid="option-edit-status-inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="firebaseUid"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Firebase UID</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Auto-linked on first login" {...field} value={field.value || ""} data-testid="input-edit-psychic-firebase-uid" />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

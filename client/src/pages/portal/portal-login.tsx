@@ -1,11 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { PortalLayout } from "@/components/portal-layout";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Video } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Video, Loader2 } from "lucide-react";
+import { SiGoogle } from "react-icons/si";
+import { useFirebaseAuth } from "@/hooks/use-firebase-auth";
+import { apiRequest } from "@/lib/queryClient";
 import type { Psychic } from "@shared/schema";
 
 interface PortalLoginProps {
@@ -13,18 +14,44 @@ interface PortalLoginProps {
 }
 
 export default function PortalLogin({ onLogin }: PortalLoginProps) {
-  const [selectedId, setSelectedId] = useState<string>("");
+  const { loginWithGoogle } = useFirebaseAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: psychics, isLoading } = useQuery<Psychic[]>({
-    queryKey: ["/api/psychics"],
-  });
+  const handleGoogleLogin = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await loginWithGoogle();
+      const idToken = await result.user.getIdToken();
 
-  const activePsychics = psychics?.filter((p) => p.status === "active") || [];
-
-  const handleLogin = () => {
-    const psychic = activePsychics.find((p) => p.id === selectedId);
-    if (psychic) {
+      const res = await apiRequest("POST", "/api/portal/auth/firebase", { idToken });
+      const psychic: Psychic = await res.json();
       onLogin(psychic);
+    } catch (err: any) {
+      if (err?.code === "auth/popup-closed-by-user") {
+        setLoading(false);
+        return;
+      }
+      let message = "Login failed. Please try again.";
+      if (err?.message) {
+        try {
+          const parsed = JSON.parse(err.message);
+          if (parsed.error) message = parsed.error;
+        } catch {
+          if (err.message.includes("No psychic profile")) {
+            message = "No psychic profile found for this account. Please contact an administrator.";
+          } else if (err.message.includes("inactive")) {
+            message = "Your psychic profile is inactive. Please contact an administrator.";
+          }
+        }
+      }
+      if (err?.data?.error) {
+        message = err.data.error;
+      }
+      setError(message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -40,40 +67,33 @@ export default function PortalLogin({ onLogin }: PortalLoginProps) {
             </div>
             <CardTitle className="text-xl" data-testid="text-portal-title">Psychic Video Portal</CardTitle>
             <CardDescription data-testid="text-portal-description">
-              Select your profile to browse and fulfill video requests
+              Sign in with your Google account to access video requests
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isLoading ? (
-              <Skeleton className="h-9 w-full" />
-            ) : activePsychics.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center" data-testid="text-no-psychics">
-                No active psychics found. Please contact an administrator.
-              </p>
-            ) : (
-              <>
-                <Select value={selectedId} onValueChange={setSelectedId}>
-                  <SelectTrigger data-testid="select-psychic">
-                    <SelectValue placeholder="Select your name" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activePsychics.map((p) => (
-                      <SelectItem key={p.id} value={p.id} data-testid={`select-psychic-${p.id}`}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  className="w-full"
-                  disabled={!selectedId}
-                  onClick={handleLogin}
-                  data-testid="button-portal-login"
-                >
-                  Continue
-                </Button>
-              </>
+            {error && (
+              <Alert variant="destructive" data-testid="alert-login-error">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={loading}
+              onClick={handleGoogleLogin}
+              data-testid="button-google-login"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <SiGoogle className="h-4 w-4 mr-2" />
+              )}
+              Sign in with Google
+            </Button>
+            <p className="text-xs text-center text-muted-foreground" data-testid="text-login-help">
+              Your Google account email must match the email in your psychic profile.
+              Contact an administrator if you need help.
+            </p>
           </CardContent>
         </Card>
       </div>

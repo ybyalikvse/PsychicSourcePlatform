@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataState } from "@/components/data-state";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { portalApiRequest, portalFetch } from "@/lib/portal-api";
+import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, Clock, DollarSign, Video } from "lucide-react";
 import type { VideoRequest, Psychic } from "@shared/schema";
@@ -17,14 +18,16 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
   const { toast } = useToast();
 
   const { data: requests, isLoading } = useQuery<VideoRequest[]>({
-    queryKey: ["/api/portal/video-requests", "?status=available"],
+    queryKey: ["/api/portal/video-requests", "available"],
+    queryFn: async () => {
+      const res = await portalFetch("/api/portal/video-requests?status=available");
+      return res.json();
+    },
   });
 
   const claimMutation = useMutation({
     mutationFn: async (requestId: string) => {
-      const res = await apiRequest("POST", `/api/portal/video-requests/${requestId}/claim`, {
-        psychicId: psychic.id,
-      });
+      const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/claim`);
       return res.json();
     },
     onSuccess: () => {

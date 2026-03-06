@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Upload, CheckCircle, AlertCircle, Film } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { auth } from "@/lib/firebase";
 
 interface PortalUploadProps {
   requestId: string;
@@ -35,6 +36,12 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
         }
       });
 
+      const user = auth.currentUser;
+      let idToken: string | null = null;
+      if (user) {
+        idToken = await user.getIdToken();
+      }
+
       await new Promise<void>((resolve, reject) => {
         xhr.addEventListener("load", () => {
           if (xhr.status >= 200 && xhr.status < 300) {
@@ -52,6 +59,9 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
         xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
 
         xhr.open("POST", `/api/portal/video-requests/${requestId}/upload`);
+        if (idToken) {
+          xhr.setRequestHeader("Authorization", `Bearer ${idToken}`);
+        }
         xhr.send(formData);
       });
 
