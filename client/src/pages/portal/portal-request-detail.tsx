@@ -161,7 +161,7 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
   const canMessage = isMine;
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
