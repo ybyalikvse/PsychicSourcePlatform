@@ -10,9 +10,10 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { PortalLayout } from "@/components/portal-layout";
-import { useFirebaseAuth } from "@/hooks/use-firebase-auth";
+import { FirebaseAuthProvider, useFirebaseAuth } from "@/hooks/use-firebase-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2 } from "lucide-react";
+import { Loader2, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { Psychic } from "@shared/schema";
 
 import Dashboard from "@/pages/dashboard";
@@ -28,6 +29,7 @@ import Settings from "@/pages/settings";
 import Horoscopes from "@/pages/horoscopes";
 import Psychics from "@/pages/psychics";
 import VideoRequests from "@/pages/video-requests";
+import LoginPage from "@/pages/login";
 import PortalLogin from "@/pages/portal/portal-login";
 import PortalRequestsPage from "@/pages/portal/portal-requests";
 import PortalMyRequestsPage from "@/pages/portal/portal-my-requests";
@@ -133,7 +135,67 @@ function PortalRouter() {
   );
 }
 
-function AppLayout() {
+function AdminAuthGate() {
+  const { user, loading, logout } = useFirebaseAuth();
+  const [verified, setVerified] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    if (user && !verified && !checking) {
+      setChecking(true);
+      user.getIdToken().then(async (idToken) => {
+        try {
+          const res = await apiRequest("POST", "/api/auth/verify", { idToken });
+          if (res.ok) {
+            setVerified(true);
+          } else {
+            await logout();
+          }
+        } catch {
+          await logout();
+        } finally {
+          setChecking(false);
+        }
+      });
+    }
+    if (!user) {
+      setVerified(false);
+    }
+  }, [user]);
+
+  const handleAuthenticated = async (idToken: string) => {
+    try {
+      const res = await apiRequest("POST", "/api/auth/verify", { idToken });
+      if (res.ok) {
+        setVerified(true);
+      }
+    } catch {
+      // handled by login page
+    }
+  };
+
+  if (loading || checking) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user || !verified) {
+    return (
+      <LoginPage
+        title="Admin Sign In"
+        description="Sign in to access the admin dashboard"
+        onAuthenticated={handleAuthenticated}
+      />
+    );
+  }
+
+  return <AppLayout onLogout={logout} userEmail={user.email || undefined} />;
+}
+
+function AppLayout({ onLogout, userEmail }: { onLogout: () => void; userEmail?: string }) {
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "4rem",
@@ -146,7 +208,23 @@ function AppLayout() {
         <div className="flex flex-col flex-1 min-w-0">
           <header className="flex items-center justify-between gap-4 h-14 px-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
+            <div className="flex items-center gap-3">
+              {userEmail && (
+                <span className="text-sm text-muted-foreground hidden sm:inline" data-testid="text-admin-email">
+                  {userEmail}
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onLogout}
+                title="Sign out"
+                data-testid="button-admin-logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+              <ThemeToggle />
+            </div>
           </header>
           <main className="flex-1 overflow-auto p-6">
             <AdminRouter />
@@ -164,10 +242,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
-          {isPortal ? <PortalRouter /> : <AppLayout />}
-          <Toaster />
-        </TooltipProvider>
+        <FirebaseAuthProvider>
+          <TooltipProvider>
+            {isPortal ? <PortalRouter /> : <AdminAuthGate />}
+            <Toaster />
+          </TooltipProvider>
+        </FirebaseAuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

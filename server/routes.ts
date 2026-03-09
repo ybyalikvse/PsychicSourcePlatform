@@ -4860,11 +4860,7 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  // ============ PSYCHIC PORTAL (Public-facing) ============
-  const multerModule = await import("multer");
-  const multer = multerModule.default;
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
-
+  // ============ FIREBASE AUTH ============
   const firebaseAdminModule = await import("firebase-admin");
   const firebaseAdmin = firebaseAdminModule.default;
   if (!firebaseAdmin.apps.length) {
@@ -4872,6 +4868,25 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       projectId: process.env.VITE_FIREBASE_PROJECT_ID,
     });
   }
+
+  app.post("/api/auth/verify", async (req, res) => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        return res.status(400).json({ error: "Missing idToken" });
+      }
+      const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+      res.json({ uid: decoded.uid, email: decoded.email, verified: true });
+    } catch (error: any) {
+      console.error("Admin auth verify error:", error);
+      res.status(401).json({ error: "Invalid authentication token" });
+    }
+  });
+
+  // ============ PSYCHIC PORTAL (Public-facing) ============
+  const multerModule = await import("multer");
+  const multer = multerModule.default;
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
   async function verifyPortalAuth(req: any, res: any, next: any) {
     const authHeader = req.headers.authorization;
