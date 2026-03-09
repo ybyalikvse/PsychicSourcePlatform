@@ -332,7 +332,9 @@ export default function VideoRequests() {
                 <CardContent>
                   <video
                     controls
-                    className="w-full rounded-md"
+                    playsInline
+                    crossOrigin="anonymous"
+                    className="max-w-full max-h-[500px] rounded-md mx-auto"
                     src={selectedRequest.videoUrl}
                     data-testid="video-preview"
                   />

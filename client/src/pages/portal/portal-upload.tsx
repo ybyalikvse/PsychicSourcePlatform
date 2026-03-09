@@ -128,7 +128,9 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
           <video
             src={existingUrl}
             controls
-            className="w-full max-h-48 rounded-md"
+            playsInline
+            crossOrigin="anonymous"
+            className="max-w-full max-h-[400px] rounded-md mx-auto"
             data-testid="video-preview"
           />
         </div>
