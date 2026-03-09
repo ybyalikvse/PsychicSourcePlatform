@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useLocation, useRoute } from "wouter";
 import type { VideoRequest, VideoMessage, VideoCaption, Psychic } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,14 +79,20 @@ const createVideoRequestSchema = z.object({
 
 type CreateVideoRequestForm = z.infer<typeof createVideoRequestSchema>;
 
+const SUBMITTED_OR_BEYOND = ["submitted", "revision_requested", "approved", "paid"];
+
 export default function VideoRequests() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [match, params] = useRoute("/video-requests/:id");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<VideoRequest | null>(null);
   const [editingRequest, setEditingRequest] = useState<VideoRequest | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [captionPlatform, setCaptionPlatform] = useState("tiktok");
+  const [showRevisionDialog, setShowRevisionDialog] = useState(false);
+  const [revisionNotes, setRevisionNotes] = useState("");
 
   const { data: requests = [], isLoading } = useQuery<VideoRequest[]>({
     queryKey: ["/api/video-requests"],
@@ -116,6 +123,15 @@ export default function VideoRequests() {
     },
     enabled: !!selectedRequest,
   });
+
+  useEffect(() => {
+    if (match && params?.id && requests.length > 0) {
+      const found = requests.find(r => r.id === params.id);
+      if (found) setSelectedRequest(found);
+    } else if (!match) {
+      setSelectedRequest(null);
+    }
+  }, [match, params?.id, requests]);
 
   const filteredRequests = useMemo(() => {
     if (statusFilter === "all") return requests;
@@ -178,7 +194,7 @@ export default function VideoRequests() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/video-requests"] });
-      setSelectedRequest(null);
+      navigate("/video-requests");
       toast({ title: "Video request deleted" });
     },
     onError: (err: Error) => {
@@ -263,11 +279,25 @@ export default function VideoRequests() {
     return p ? p.name : psychicId;
   }
 
+  if (match && !selectedRequest && !isLoading) {
+    return (
+      <div className="space-y-6" data-testid="page-video-request-not-found">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-requests")} data-testid="button-back">
+            <ArrowLeft />
+          </Button>
+          <h1 className="text-2xl font-bold tracking-tight">Video Request Not Found</h1>
+        </div>
+        <DataState status="empty" title="Not Found" message="This video request doesn't exist or has been deleted." actions={[{ label: "Back to Requests", onClick: () => navigate("/video-requests") }]} />
+      </div>
+    );
+  }
+
   if (selectedRequest) {
     return (
       <div className="space-y-6" data-testid="page-video-request-detail">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setSelectedRequest(null)} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-requests")} data-testid="button-back">
             <ArrowLeft />
           </Button>
           <div className="flex-1">
@@ -440,7 +470,7 @@ export default function VideoRequests() {
                     <Button
                       variant="outline"
                       className="w-full"
-                      onClick={() => statusMutation.mutate({ id: selectedRequest.id, status: "revision_requested" })}
+                      onClick={() => { setRevisionNotes(""); setShowRevisionDialog(true); }}
                       disabled={statusMutation.isPending}
                       data-testid="button-request-revision"
                     >
@@ -470,14 +500,16 @@ export default function VideoRequests() {
                   </Button>
                 )}
                 <Separator />
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => openEditDialog(selectedRequest)}
-                  data-testid="button-edit-request"
-                >
-                  Edit Request
-                </Button>
+                {!SUBMITTED_OR_BEYOND.includes(selectedRequest.status) && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => openEditDialog(selectedRequest)}
+                    data-testid="button-edit-request"
+                  >
+                    Edit Request
+                  </Button>
+                )}
                 <Button
                   variant="destructive"
                   className="w-full"
@@ -626,12 +658,14 @@ export default function VideoRequests() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => setSelectedRequest(req)} data-testid={`button-view-${req.id}`}>
+                      <Button variant="ghost" size="icon" onClick={() => navigate(`/video-requests/${req.id}`)} data-testid={`button-view-${req.id}`}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => openEditDialog(req)} data-testid={`button-edit-${req.id}`}>
-                        <Video className="h-4 w-4" />
-                      </Button>
+                      {!SUBMITTED_OR_BEYOND.includes(req.status) && (
+                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(req)} data-testid={`button-edit-${req.id}`}>
+                          <Video className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -732,6 +766,51 @@ export default function VideoRequests() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Request Revision</DialogTitle>
+            <DialogDescription>
+              Provide details about what needs to be changed. The psychic will see this message.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={revisionNotes}
+              onChange={e => setRevisionNotes(e.target.value)}
+              placeholder="Describe what needs to be revised..."
+              rows={4}
+              data-testid="input-revision-notes"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRevisionDialog(false)} data-testid="button-cancel-revision">
+              Cancel
+            </Button>
+            <Button
+              disabled={!revisionNotes.trim() || statusMutation.isPending || sendMessageMutation.isPending}
+              onClick={async () => {
+                if (!selectedRequest || !revisionNotes.trim()) return;
+                sendMessageMutation.mutate(
+                  { id: selectedRequest.id, message: `🔄 Revision Requested: ${revisionNotes.trim()}` },
+                  {
+                    onSuccess: () => {
+                      statusMutation.mutate({ id: selectedRequest.id, status: "revision_requested" });
+                      setShowRevisionDialog(false);
+                      setRevisionNotes("");
+                    },
+                  }
+                );
+              }}
+              data-testid="button-submit-revision"
+            >
+              {(statusMutation.isPending || sendMessageMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+              Submit Revision Request
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

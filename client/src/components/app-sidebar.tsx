@@ -124,7 +124,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location === item.url}
+                    isActive={location === item.url || location.startsWith(item.url + "/")}
                     data-testid={`nav-${item.title.toLowerCase().replace(' ', '-')}`}
                   >
                     <Link href={item.url}>
@@ -146,7 +146,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location === item.url}
+                    isActive={location === item.url || location.startsWith(item.url + "/")}
                     data-testid={`nav-${item.title.toLowerCase().replace(' ', '-')}`}
                   >
                     <Link href={item.url}>

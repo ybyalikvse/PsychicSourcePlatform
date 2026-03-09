@@ -61,6 +61,7 @@ function AdminRouter() {
       <Route path="/settings" component={Settings} />
       <Route path="/horoscopes" component={Horoscopes} />
       <Route path="/psychics" component={Psychics} />
+      <Route path="/video-requests/:id" component={VideoRequests} />
       <Route path="/video-requests" component={VideoRequests} />
       <Route component={NotFound} />
     </Switch>
