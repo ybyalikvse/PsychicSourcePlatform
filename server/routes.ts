@@ -5134,16 +5134,16 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
         return res.status(400).json({ error: "Can only upload to claimed or revision-requested requests" });
       }
 
-      const { uploadImageToS3, isS3Configured } = await import("./s3");
+      const { uploadVideoToS3, isS3Configured } = await import("./s3");
       if (!isS3Configured()) {
         return res.status(500).json({ error: "S3 storage not configured. Please set AWS credentials." });
       }
 
       const ext = req.file.originalname.split('.').pop() || "mp4";
-      const filename = `video-submissions/${req.params.id}_${Date.now()}.${ext}`;
-      console.log(`[Portal Upload] Uploading video for request ${req.params.id}, size: ${req.file.size}, type: ${req.file.mimetype}, filename: ${filename}`);
-      const videoUrl = await uploadImageToS3(req.file.buffer, filename, req.file.mimetype);
-      console.log(`[Portal Upload] Upload successful: ${videoUrl.substring(0, 80)}...`);
+      const s3Key = `video-submissions/${req.params.id}_${Date.now()}.${ext}`;
+      console.log(`[Portal Upload] Uploading video for request ${req.params.id}, size: ${req.file.size}, type: ${req.file.mimetype}, key: ${s3Key}`);
+      const { key, url: videoUrl } = await uploadVideoToS3(req.file.buffer, s3Key, req.file.mimetype);
+      console.log(`[Portal Upload] Upload successful, key: ${key}`);
 
       const updated = await storage.updateVideoRequest(req.params.id, { videoUrl });
       res.json({ success: true, videoUrl, request: updated });
