@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { useFirebaseAuth } from "@/hooks/use-firebase-auth";
-import logoPath from "@assets/psychicsource-logo-nobg.png";
+import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 
 interface LoginPageProps {
   title?: string;

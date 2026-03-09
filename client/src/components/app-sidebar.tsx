@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import logoPath from "@assets/psychicsource-logo-nobg.png";
+import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 import {
   LayoutDashboard,
   FileText,

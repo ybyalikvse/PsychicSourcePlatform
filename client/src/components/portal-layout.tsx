@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Video, ListChecks, LogOut } from "lucide-react";
-import logoPath from "@assets/psychicsource-logo-nobg.png";
+import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
