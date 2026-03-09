@@ -271,7 +271,6 @@ function UnifiedAuthGate() {
   if (!user || (!authInfo && !needsRegistration)) {
     return (
       <LoginPage
-        title="Psychic Source"
         description="Sign in to continue"
         onAuthenticated={handleAuthenticated}
         externalError={authError}
@@ -282,7 +281,6 @@ function UnifiedAuthGate() {
   if (needsRegistration) {
     return (
       <LoginPage
-        title="Psychic Source"
         description="Sign in to continue"
         onAuthenticated={handleAuthenticated}
         externalError={authError}
@@ -312,7 +310,6 @@ function UnifiedAuthGate() {
 
   return (
     <LoginPage
-      title="Psychic Source"
       description="Sign in to continue"
       onAuthenticated={handleAuthenticated}
       externalError={authError}

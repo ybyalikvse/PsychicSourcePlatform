@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { Video, ListChecks, LogOut, Sparkles } from "lucide-react";
+import { Video, ListChecks, LogOut } from "lucide-react";
+import logoPath from "@assets/psychicsource-logo-nobg.png";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -60,13 +61,8 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
         <Sidebar>
           <SidebarHeader className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold">Psychic Portal</span>
-                <span className="text-xs text-muted-foreground">{psychicName}</span>
-              </div>
+              <img src={logoPath} alt="Psychic Source" className="h-10 object-contain" data-testid="img-portal-logo" />
+              <span className="text-xs text-muted-foreground">{psychicName}</span>
             </div>
           </SidebarHeader>
 

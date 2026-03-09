@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { useFirebaseAuth } from "@/hooks/use-firebase-auth";
+import logoPath from "@assets/psychicsource-logo-nobg.png";
 
 interface LoginPageProps {
   title?: string;
@@ -90,9 +91,7 @@ export default function LoginPage({
         <Card className="w-full max-w-md mx-4">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <div className="rounded-full p-3 bg-primary/10">
-                <Sparkles className="h-8 w-8 text-primary" />
-              </div>
+              <img src={logoPath} alt="Psychic Source" className="h-14 object-contain" data-testid="img-logo" />
             </div>
             <CardTitle className="text-xl" data-testid="text-register-title">Complete Your Profile</CardTitle>
             <CardDescription data-testid="text-register-description">
@@ -155,11 +154,9 @@ export default function LoginPage({
       <Card className="w-full max-w-md mx-4">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="rounded-full p-3 bg-primary/10">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
+            <img src={logoPath} alt="Psychic Source" className="h-14 object-contain" data-testid="img-logo" />
           </div>
-          <CardTitle className="text-xl" data-testid="text-login-title">{title}</CardTitle>
+          {title && <CardTitle className="text-xl" data-testid="text-login-title">{title}</CardTitle>}
           <CardDescription data-testid="text-login-description">{description}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

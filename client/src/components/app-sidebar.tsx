@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import logoPath from "@assets/psychicsource-logo-nobg.png";
 import {
   LayoutDashboard,
   FileText,
@@ -6,7 +7,6 @@ import {
   Settings,
   Zap,
   TrendingUp,
-  Sparkles,
   Wand2,
   Target,
   Layers,
@@ -113,13 +113,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-            <Sparkles className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">Psychic Source</span>
-            <span className="text-xs text-muted-foreground">Content Hub</span>
-          </div>
+          <img src={logoPath} alt="Psychic Source" className="h-10 object-contain" data-testid="img-sidebar-logo" />
         </div>
       </SidebarHeader>
       
