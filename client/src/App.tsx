@@ -142,6 +142,16 @@ function UnifiedAuthGate() {
   }, [pendingRedirect]);
 
   useEffect(() => {
+    if (authInfo) {
+      if (authInfo.isAdmin && !authInfo.isPsychic && location.startsWith("/portal")) {
+        setLocation("/");
+      } else if (authInfo.isPsychic && !authInfo.isAdmin && !location.startsWith("/portal")) {
+        setLocation("/portal");
+      }
+    }
+  }, [authInfo, location]);
+
+  useEffect(() => {
     if (user && !authInfo && !checking && !needsRegistration) {
       setChecking(true);
       setAuthError(null);
@@ -178,9 +188,6 @@ function UnifiedAuthGate() {
   const handleAuthResponse = (data: AuthInfo, idToken: string) => {
     if (data.isAdmin || data.isPsychic) {
       setAuthInfo(data);
-      if (data.isPsychic && !data.isAdmin && !location.startsWith("/portal")) {
-        setPendingRedirect("/portal");
-      }
     } else if (data.isPending) {
       setAuthError("Your account is pending admin approval. Please check back later.");
     } else {
@@ -286,7 +293,7 @@ function UnifiedAuthGate() {
   if (authInfo) {
     const isPortalRoute = location.startsWith("/portal");
 
-    if (isPortalRoute && authInfo.isPsychic && authInfo.psychic) {
+    if (authInfo.isAdmin && isPortalRoute && authInfo.isPsychic && authInfo.psychic) {
       return <PortalView psychic={authInfo.psychic} onLogout={handleLogout} />;
     }
 
