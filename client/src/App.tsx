@@ -11,7 +11,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { PortalLayout } from "@/components/portal-layout";
 import { FirebaseAuthProvider, useFirebaseAuth } from "@/hooks/use-firebase-auth";
-import { apiRequest } from "@/lib/queryClient";
 import { Loader2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Psychic } from "@shared/schema";
@@ -30,10 +29,18 @@ import Horoscopes from "@/pages/horoscopes";
 import Psychics from "@/pages/psychics";
 import VideoRequests from "@/pages/video-requests";
 import LoginPage from "@/pages/login";
-import PortalLogin from "@/pages/portal/portal-login";
 import PortalRequestsPage from "@/pages/portal/portal-requests";
 import PortalMyRequestsPage from "@/pages/portal/portal-my-requests";
 import NotFound from "@/pages/not-found";
+
+interface AuthInfo {
+  uid: string;
+  email: string;
+  isAdmin: boolean;
+  isPsychic: boolean;
+  isPending: boolean;
+  psychic: Psychic | null;
+}
 
 function AdminRouter() {
   useAnalytics();
@@ -59,83 +66,9 @@ function AdminRouter() {
   );
 }
 
-function PortalRouter() {
-  const { user, loading: authLoading, logout: firebaseLogout } = useFirebaseAuth();
-  const [psychic, setPsychic] = useState<Psychic | null>(() => {
-    const stored = localStorage.getItem("portal_psychic");
-    if (stored) {
-      try { return JSON.parse(stored); } catch { return null; }
-    }
-    return null;
-  });
-  const [verifying, setVerifying] = useState(false);
-  const [portalError, setPortalError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (user && !psychic && !verifying) {
-      setVerifying(true);
-      setPortalError(null);
-      user.getIdToken().then(async (idToken) => {
-        try {
-          const res = await fetch("/api/portal/auth/firebase", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idToken }),
-          });
-          if (res.ok) {
-            const p: Psychic = await res.json();
-            setPsychic(p);
-            localStorage.setItem("portal_psychic", JSON.stringify(p));
-          } else {
-            const data = await res.json().catch(() => ({}));
-            setPortalError(data.error || "Login failed. Please try again.");
-            await firebaseLogout();
-            localStorage.removeItem("portal_psychic");
-          }
-        } catch {
-          setPortalError("Login failed. Please try again.");
-          await firebaseLogout();
-          localStorage.removeItem("portal_psychic");
-        } finally {
-          setVerifying(false);
-        }
-      });
-    }
-    if (!user && psychic) {
-      setPsychic(null);
-      localStorage.removeItem("portal_psychic");
-    }
-  }, [user]);
-
-  const handleLogin = (p: Psychic) => {
-    setPsychic(p);
-    setPortalError(null);
-    localStorage.setItem("portal_psychic", JSON.stringify(p));
-  };
-
-  const handleLogout = async () => {
-    await firebaseLogout();
-    setPsychic(null);
-    setPortalError(null);
-    localStorage.removeItem("portal_psychic");
-  };
-
-  if (authLoading || verifying) {
-    return (
-      <PortalLayout>
-        <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </PortalLayout>
-    );
-  }
-
-  if (!psychic) {
-    return <PortalLogin onLogin={handleLogin} externalError={portalError} />;
-  }
-
+function PortalView({ psychic, onLogout }: { psychic: Psychic; onLogout: () => void }) {
   return (
-    <PortalLayout psychicName={psychic.name} onLogout={handleLogout}>
+    <PortalLayout psychicName={psychic.name} onLogout={onLogout}>
       <Switch>
         <Route path="/portal/requests">
           <PortalRequestsPage psychic={psychic} />
@@ -149,85 +82,6 @@ function PortalRouter() {
       </Switch>
     </PortalLayout>
   );
-}
-
-function AdminAuthGate() {
-  const { user, loading, logout } = useFirebaseAuth();
-  const [verified, setVerified] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (user && !verified && !checking) {
-      setChecking(true);
-      setAuthError(null);
-      user.getIdToken().then(async (idToken) => {
-        try {
-          const res = await fetch("/api/auth/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idToken }),
-          });
-          if (res.ok) {
-            setVerified(true);
-          } else {
-            const data = await res.json().catch(() => ({}));
-            setAuthError(data.error || "Access denied.");
-            await logout();
-          }
-        } catch {
-          await logout();
-        } finally {
-          setChecking(false);
-        }
-      });
-    }
-    if (!user) {
-      setVerified(false);
-    }
-  }, [user]);
-
-  const handleAuthenticated = async (idToken: string) => {
-    setAuthError(null);
-    try {
-      const res = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-      if (res.ok) {
-        setVerified(true);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setAuthError(data.error || "Access denied.");
-        await logout();
-      }
-    } catch {
-      setAuthError("Failed to verify. Please try again.");
-      await logout();
-    }
-  };
-
-  if (loading || checking) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!user || !verified) {
-    return (
-      <LoginPage
-        title="Admin Sign In"
-        description="Sign in to access the admin dashboard"
-        onAuthenticated={handleAuthenticated}
-        externalError={authError}
-      />
-    );
-  }
-
-  return <AppLayout onLogout={logout} userEmail={user.email || undefined} />;
 }
 
 function AppLayout({ onLogout, userEmail }: { onLogout: () => void; userEmail?: string }) {
@@ -270,16 +124,198 @@ function AppLayout({ onLogout, userEmail }: { onLogout: () => void; userEmail?: 
   );
 }
 
-function App() {
-  const [location] = useLocation();
-  const isPortal = location.startsWith("/portal");
+function UnifiedAuthGate() {
+  const { user, loading, logout } = useFirebaseAuth();
+  const [location, setLocation] = useLocation();
+  const [authInfo, setAuthInfo] = useState<AuthInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [needsRegistration, setNeedsRegistration] = useState(false);
+  const [pendingIdToken, setPendingIdToken] = useState<string | null>(null);
+  const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (pendingRedirect) {
+      setLocation(pendingRedirect);
+      setPendingRedirect(null);
+    }
+  }, [pendingRedirect]);
+
+  useEffect(() => {
+    if (user && !authInfo && !checking && !needsRegistration) {
+      setChecking(true);
+      setAuthError(null);
+      user.getIdToken().then(async (idToken) => {
+        try {
+          const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+          if (res.ok) {
+            const data: AuthInfo = await res.json();
+            handleAuthResponse(data, idToken);
+          } else {
+            const data = await res.json().catch(() => ({}));
+            setAuthError(data.error || "Login failed.");
+            await logout();
+          }
+        } catch {
+          setAuthError("Login failed. Please try again.");
+          await logout();
+        } finally {
+          setChecking(false);
+        }
+      });
+    }
+    if (!user) {
+      setAuthInfo(null);
+      setNeedsRegistration(false);
+      setPendingIdToken(null);
+    }
+  }, [user]);
+
+  const handleAuthResponse = (data: AuthInfo, idToken: string) => {
+    if (data.isAdmin || data.isPsychic) {
+      setAuthInfo(data);
+      if (data.isPsychic && !data.isAdmin && !location.startsWith("/portal")) {
+        setPendingRedirect("/portal");
+      }
+    } else if (data.isPending) {
+      setAuthError("Your account is pending admin approval. Please check back later.");
+    } else {
+      setPendingIdToken(idToken);
+      setNeedsRegistration(true);
+    }
+  };
+
+  const handleAuthenticated = async (idToken: string) => {
+    setAuthError(null);
+    setChecking(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      if (res.ok) {
+        const data: AuthInfo = await res.json();
+        handleAuthResponse(data, idToken);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setAuthError(data.error || "Login failed.");
+        await logout();
+      }
+    } catch {
+      setAuthError("Login failed. Please try again.");
+      await logout();
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleRegisterPsychic = async (name: string) => {
+    if (!pendingIdToken) return;
+    setAuthError(null);
+    setChecking(true);
+    try {
+      const res = await fetch("/api/auth/register-psychic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: pendingIdToken, name }),
+      });
+      if (res.ok) {
+        setNeedsRegistration(false);
+        setPendingIdToken(null);
+        setAuthError("Your profile has been created and is pending admin approval. Please check back later.");
+        await logout();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setAuthError(data.error || "Registration failed.");
+      }
+    } catch {
+      setAuthError("Registration failed. Please try again.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setAuthInfo(null);
+    setNeedsRegistration(false);
+    setPendingIdToken(null);
+    setAuthError(null);
+    setLocation("/");
+  };
+
+  if (loading || checking) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user || (!authInfo && !needsRegistration)) {
+    return (
+      <LoginPage
+        title="Psychic Source"
+        description="Sign in to continue"
+        onAuthenticated={handleAuthenticated}
+        externalError={authError}
+      />
+    );
+  }
+
+  if (needsRegistration) {
+    return (
+      <LoginPage
+        title="Psychic Source"
+        description="Sign in to continue"
+        onAuthenticated={handleAuthenticated}
+        externalError={authError}
+        showRegistration
+        onRegister={handleRegisterPsychic}
+        onCancel={handleLogout}
+        registrationEmail={user.email || ""}
+      />
+    );
+  }
+
+  if (authInfo) {
+    const isPortalRoute = location.startsWith("/portal");
+
+    if (isPortalRoute && authInfo.isPsychic && authInfo.psychic) {
+      return <PortalView psychic={authInfo.psychic} onLogout={handleLogout} />;
+    }
+
+    if (authInfo.isAdmin) {
+      return <AppLayout onLogout={handleLogout} userEmail={authInfo.email} />;
+    }
+
+    if (authInfo.isPsychic && authInfo.psychic) {
+      return <PortalView psychic={authInfo.psychic} onLogout={handleLogout} />;
+    }
+  }
+
+  return (
+    <LoginPage
+      title="Psychic Source"
+      description="Sign in to continue"
+      onAuthenticated={handleAuthenticated}
+      externalError={authError}
+    />
+  );
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <FirebaseAuthProvider>
           <TooltipProvider>
-            {isPortal ? <PortalRouter /> : <AdminAuthGate />}
+            <UnifiedAuthGate />
             <Toaster />
           </TooltipProvider>
         </FirebaseAuthProvider>

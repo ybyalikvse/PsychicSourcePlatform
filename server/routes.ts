@@ -4893,6 +4893,96 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        return res.status(400).json({ error: "Missing idToken" });
+      }
+      const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+      const email = decoded.email?.toLowerCase() || "";
+      const firebaseUid = decoded.uid;
+
+      const isAdmin = ADMIN_EMAILS.includes(email);
+
+      let psychic = await storage.getPsychicByFirebaseUid(firebaseUid);
+      if (!psychic && email) {
+        const allPsychics = await storage.getPsychics();
+        const matchByEmail = allPsychics.find(
+          (p) => p.email.toLowerCase() === email && p.status === "active"
+        );
+        if (matchByEmail) {
+          if (matchByEmail.firebaseUid && matchByEmail.firebaseUid !== firebaseUid) {
+            return res.status(403).json({ error: "This psychic profile is already linked to a different account." });
+          }
+          psychic = await storage.updatePsychic(matchByEmail.id, { firebaseUid });
+        }
+      }
+
+      const isPsychic = psychic && psychic.status === "active";
+      const isPending = psychic && psychic.status === "pending";
+
+      res.json({
+        uid: firebaseUid,
+        email: decoded.email,
+        isAdmin,
+        isPsychic: !!isPsychic,
+        isPending: !!isPending,
+        psychic: isPsychic ? psychic : null,
+      });
+    } catch (error: any) {
+      console.error("Unified auth login error:", error);
+      res.status(401).json({ error: "Invalid authentication token" });
+    }
+  });
+
+  app.post("/api/auth/register-psychic", async (req, res) => {
+    try {
+      const { idToken, name } = req.body;
+      if (!idToken) {
+        return res.status(400).json({ error: "Missing idToken" });
+      }
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+      const email = decoded.email;
+      const firebaseUid = decoded.uid;
+
+      if (!email) {
+        return res.status(400).json({ error: "Your account must have an email address." });
+      }
+
+      const existing = await storage.getPsychicByFirebaseUid(firebaseUid);
+      if (existing) {
+        return res.json(existing);
+      }
+
+      const allPsychics = await storage.getPsychics();
+      const emailMatch = allPsychics.find(
+        (p) => p.email.toLowerCase() === email.toLowerCase()
+      );
+      if (emailMatch) {
+        if (emailMatch.firebaseUid && emailMatch.firebaseUid !== firebaseUid) {
+          return res.status(403).json({ error: "A psychic profile with this email already exists under a different account." });
+        }
+        const updated = await storage.updatePsychic(emailMatch.id, { firebaseUid });
+        return res.json(updated);
+      }
+
+      const psychic = await storage.createPsychic({
+        name: name.trim(),
+        email: email.toLowerCase(),
+        firebaseUid,
+        status: "pending",
+      });
+      res.json(psychic);
+    } catch (error: any) {
+      console.error("Register psychic error:", error);
+      res.status(500).json({ error: "Failed to register. Please try again." });
+    }
+  });
+
   // ============ PSYCHIC PORTAL (Public-facing) ============
   const multerModule = await import("multer");
   const multer = multerModule.default;

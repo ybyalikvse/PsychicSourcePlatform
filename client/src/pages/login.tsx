@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { useFirebaseAuth } from "@/hooks/use-firebase-auth";
 
@@ -14,6 +14,10 @@ interface LoginPageProps {
   description?: string;
   onAuthenticated: (idToken: string) => void;
   externalError?: string | null;
+  showRegistration?: boolean;
+  onRegister?: (name: string) => void;
+  onCancel?: () => void;
+  registrationEmail?: string;
 }
 
 export default function LoginPage({
@@ -21,6 +25,10 @@ export default function LoginPage({
   description = "Sign in to access the dashboard",
   onAuthenticated,
   externalError,
+  showRegistration,
+  onRegister,
+  onCancel,
+  registrationEmail,
 }: LoginPageProps) {
   const { loginWithGoogle, loginWithEmail, signUpWithEmail } = useFirebaseAuth();
   const [loading, setLoading] = useState(false);
@@ -29,6 +37,7 @@ export default function LoginPage({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+  const [psychicName, setPsychicName] = useState("");
 
   const handleGoogleLogin = async () => {
     setError(null);
@@ -69,10 +78,87 @@ export default function LoginPage({
     }
   };
 
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!psychicName.trim() || !onRegister) return;
+    onRegister(psychicName.trim());
+  };
+
+  if (showRegistration) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="w-full max-w-md mx-4">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="rounded-full p-3 bg-primary/10">
+                <Sparkles className="h-8 w-8 text-primary" />
+              </div>
+            </div>
+            <CardTitle className="text-xl" data-testid="text-register-title">Complete Your Profile</CardTitle>
+            <CardDescription data-testid="text-register-description">
+              Set up your psychic profile to get started
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {displayError && (
+              <Alert variant="destructive" data-testid="alert-register-error">
+                <AlertDescription>{displayError}</AlertDescription>
+              </Alert>
+            )}
+
+            {registrationEmail && (
+              <div className="space-y-1">
+                <Label className="text-muted-foreground text-xs">Email</Label>
+                <p className="text-sm font-medium" data-testid="text-register-email">{registrationEmail}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleRegister} className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="psychic-name">Your Name</Label>
+                <Input
+                  id="psychic-name"
+                  type="text"
+                  placeholder="Enter your name"
+                  value={psychicName}
+                  onChange={(e) => setPsychicName(e.target.value)}
+                  autoFocus
+                  data-testid="input-psychic-name"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={!psychicName.trim()}
+                data-testid="button-register-psychic"
+              >
+                Create Profile
+              </Button>
+            </form>
+
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={onCancel}
+              data-testid="button-cancel-register"
+            >
+              Cancel & Sign Out
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-md mx-4">
         <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <div className="rounded-full p-3 bg-primary/10">
+              <Sparkles className="h-8 w-8 text-primary" />
+            </div>
+          </div>
           <CardTitle className="text-xl" data-testid="text-login-title">{title}</CardTitle>
           <CardDescription data-testid="text-login-description">{description}</CardDescription>
         </CardHeader>

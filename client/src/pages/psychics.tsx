@@ -156,6 +156,9 @@ export default function Psychics() {
     if (status === "active") {
       return <Badge variant="outline" className="text-green-600" data-testid={`badge-status-${status}`}>Active</Badge>;
     }
+    if (status === "pending") {
+      return <Badge variant="outline" className="text-yellow-600" data-testid={`badge-status-${status}`}>Pending</Badge>;
+    }
     return <Badge variant="outline" className="text-muted-foreground" data-testid={`badge-status-${status}`}>Inactive</Badge>;
   }
 
@@ -376,6 +379,7 @@ export default function Psychics() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="active" data-testid="option-status-active">Active</SelectItem>
+                        <SelectItem value="pending" data-testid="option-status-pending">Pending</SelectItem>
                         <SelectItem value="inactive" data-testid="option-status-inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
@@ -463,6 +467,7 @@ export default function Psychics() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="active" data-testid="option-edit-status-active">Active</SelectItem>
+                        <SelectItem value="pending" data-testid="option-edit-status-pending">Pending</SelectItem>
                         <SelectItem value="inactive" data-testid="option-edit-status-inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
