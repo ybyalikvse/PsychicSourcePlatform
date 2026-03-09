@@ -457,7 +457,7 @@ export default function VideoRequests() {
                 <CardTitle className="text-lg">Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {selectedRequest.status === "submitted" && (
+                {(selectedRequest.status === "submitted" || selectedRequest.status === "revision_requested") && (
                   <>
                     <Button
                       className="w-full"
@@ -488,7 +488,7 @@ export default function VideoRequests() {
                     <DollarSign className="h-4 w-4" /> Mark as Paid
                   </Button>
                 )}
-                {(selectedRequest.status === "claimed" || selectedRequest.status === "revision_requested") && (
+                {selectedRequest.status === "claimed" && (
                   <Button
                     variant="outline"
                     className="w-full"
