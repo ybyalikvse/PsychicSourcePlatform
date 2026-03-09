@@ -112,9 +112,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <img src={logoPath} alt="Psychic Source" className="h-10 object-contain" data-testid="img-sidebar-logo" />
-        </div>
+        <img src={logoPath} alt="Psychic Source" className="w-full object-contain" data-testid="img-sidebar-logo" />
       </SidebarHeader>
       
       <SidebarContent>

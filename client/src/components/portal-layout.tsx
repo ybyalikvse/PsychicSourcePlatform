@@ -60,8 +60,8 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
       <div className="flex h-screen w-full">
         <Sidebar>
           <SidebarHeader className="p-4">
-            <div className="flex items-center gap-3">
-              <img src={logoPath} alt="Psychic Source" className="h-10 object-contain" data-testid="img-portal-logo" />
+            <div className="flex flex-col items-center gap-2">
+              <img src={logoPath} alt="Psychic Source" className="w-full object-contain" data-testid="img-portal-logo" />
               <span className="text-xs text-muted-foreground">{psychicName}</span>
             </div>
           </SidebarHeader>

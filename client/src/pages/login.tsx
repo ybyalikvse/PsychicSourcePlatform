@@ -91,7 +91,7 @@ export default function LoginPage({
         <Card className="w-full max-w-md mx-4">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <img src={logoPath} alt="Psychic Source" className="h-14 object-contain" data-testid="img-logo" />
+              <img src={logoPath} alt="Psychic Source" className="h-20 object-contain" data-testid="img-logo" />
             </div>
             <CardTitle className="text-xl" data-testid="text-register-title">Complete Your Profile</CardTitle>
             <CardDescription data-testid="text-register-description">
@@ -154,7 +154,7 @@ export default function LoginPage({
       <Card className="w-full max-w-md mx-4">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={logoPath} alt="Psychic Source" className="h-14 object-contain" data-testid="img-logo" />
+            <img src={logoPath} alt="Psychic Source" className="h-20 object-contain" data-testid="img-logo" />
           </div>
           {title && <CardTitle className="text-xl" data-testid="text-login-title">{title}</CardTitle>}
           <CardDescription data-testid="text-login-description">{description}</CardDescription>
