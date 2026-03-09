@@ -4872,6 +4872,7 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
   const ADMIN_EMAILS = [
     "ybyalik@gmail.com",
     "ybyalik@vseinc.com",
+    "info@onbiz.com",
   ];
 
   app.post("/api/auth/verify", async (req, res) => {

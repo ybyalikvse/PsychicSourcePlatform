@@ -14,12 +14,14 @@ import type { Psychic } from "@shared/schema";
 
 interface PortalLoginProps {
   onLogin: (psychic: Psychic) => void;
+  externalError?: string | null;
 }
 
-export default function PortalLogin({ onLogin }: PortalLoginProps) {
+export default function PortalLogin({ onLogin, externalError }: PortalLoginProps) {
   const { loginWithGoogle, loginWithEmail, signUpWithEmail } = useFirebaseAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayError = error || externalError;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
@@ -85,9 +87,9 @@ export default function PortalLogin({ onLogin }: PortalLoginProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {error && (
+            {displayError && (
               <Alert variant="destructive" data-testid="alert-login-error">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{displayError}</AlertDescription>
               </Alert>
             )}
 

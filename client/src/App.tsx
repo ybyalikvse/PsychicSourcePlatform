@@ -69,17 +69,31 @@ function PortalRouter() {
     return null;
   });
   const [verifying, setVerifying] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user && !psychic && !verifying) {
       setVerifying(true);
+      setPortalError(null);
       user.getIdToken().then(async (idToken) => {
         try {
-          const res = await apiRequest("POST", "/api/portal/auth/firebase", { idToken });
-          const p: Psychic = await res.json();
-          setPsychic(p);
-          localStorage.setItem("portal_psychic", JSON.stringify(p));
+          const res = await fetch("/api/portal/auth/firebase", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+          if (res.ok) {
+            const p: Psychic = await res.json();
+            setPsychic(p);
+            localStorage.setItem("portal_psychic", JSON.stringify(p));
+          } else {
+            const data = await res.json().catch(() => ({}));
+            setPortalError(data.error || "Login failed. Please try again.");
+            await firebaseLogout();
+            localStorage.removeItem("portal_psychic");
+          }
         } catch {
+          setPortalError("Login failed. Please try again.");
           await firebaseLogout();
           localStorage.removeItem("portal_psychic");
         } finally {
@@ -95,12 +109,14 @@ function PortalRouter() {
 
   const handleLogin = (p: Psychic) => {
     setPsychic(p);
+    setPortalError(null);
     localStorage.setItem("portal_psychic", JSON.stringify(p));
   };
 
   const handleLogout = async () => {
     await firebaseLogout();
     setPsychic(null);
+    setPortalError(null);
     localStorage.removeItem("portal_psychic");
   };
 
@@ -115,7 +131,7 @@ function PortalRouter() {
   }
 
   if (!psychic) {
-    return <PortalLogin onLogin={handleLogin} />;
+    return <PortalLogin onLogin={handleLogin} externalError={portalError} />;
   }
 
   return (
