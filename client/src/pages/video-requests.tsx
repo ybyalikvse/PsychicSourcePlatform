@@ -333,11 +333,12 @@ export default function VideoRequests() {
                   <video
                     controls
                     playsInline
-                    crossOrigin="anonymous"
+                    preload="metadata"
                     className="max-w-full max-h-[500px] rounded-md mx-auto"
-                    src={selectedRequest.videoUrl}
                     data-testid="video-preview"
-                  />
+                  >
+                    <source src={selectedRequest.videoUrl} type="video/mp4" />
+                  </video>
                 </CardContent>
               </Card>
             )}

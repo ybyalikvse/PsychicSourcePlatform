@@ -126,13 +126,14 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
             Current video
           </div>
           <video
-            src={existingUrl}
             controls
             playsInline
-            crossOrigin="anonymous"
+            preload="metadata"
             className="max-w-full max-h-[400px] rounded-md mx-auto"
             data-testid="video-preview"
-          />
+          >
+            <source src={existingUrl} type="video/mp4" />
+          </video>
         </div>
       )}
 
