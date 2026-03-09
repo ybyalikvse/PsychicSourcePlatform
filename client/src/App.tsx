@@ -139,16 +139,24 @@ function AdminAuthGate() {
   const { user, loading, logout } = useFirebaseAuth();
   const [verified, setVerified] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user && !verified && !checking) {
       setChecking(true);
+      setAuthError(null);
       user.getIdToken().then(async (idToken) => {
         try {
-          const res = await apiRequest("POST", "/api/auth/verify", { idToken });
+          const res = await fetch("/api/auth/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
           if (res.ok) {
             setVerified(true);
           } else {
+            const data = await res.json().catch(() => ({}));
+            setAuthError(data.error || "Access denied.");
             await logout();
           }
         } catch {
@@ -164,13 +172,23 @@ function AdminAuthGate() {
   }, [user]);
 
   const handleAuthenticated = async (idToken: string) => {
+    setAuthError(null);
     try {
-      const res = await apiRequest("POST", "/api/auth/verify", { idToken });
+      const res = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
       if (res.ok) {
         setVerified(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setAuthError(data.error || "Access denied.");
+        await logout();
       }
     } catch {
-      // handled by login page
+      setAuthError("Failed to verify. Please try again.");
+      await logout();
     }
   };
 
@@ -188,6 +206,7 @@ function AdminAuthGate() {
         title="Admin Sign In"
         description="Sign in to access the admin dashboard"
         onAuthenticated={handleAuthenticated}
+        externalError={authError}
       />
     );
   }

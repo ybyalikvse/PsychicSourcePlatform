@@ -4869,6 +4869,11 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     });
   }
 
+  const ADMIN_EMAILS = [
+    "ybyalik@gmail.com",
+    "ybyalik@vseinc.com",
+  ];
+
   app.post("/api/auth/verify", async (req, res) => {
     try {
       const { idToken } = req.body;
@@ -4876,6 +4881,10 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
         return res.status(400).json({ error: "Missing idToken" });
       }
       const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+      const email = decoded.email?.toLowerCase();
+      if (!email || !ADMIN_EMAILS.includes(email)) {
+        return res.status(403).json({ error: "Access denied. Your account is not authorized for admin access." });
+      }
       res.json({ uid: decoded.uid, email: decoded.email, verified: true });
     } catch (error: any) {
       console.error("Admin auth verify error:", error);
@@ -4925,6 +4934,9 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
           (p) => p.email.toLowerCase() === email.toLowerCase() && p.status === "active"
         );
         if (matchByEmail) {
+          if (matchByEmail.firebaseUid && matchByEmail.firebaseUid !== firebaseUid) {
+            return res.status(403).json({ error: "This psychic profile is already linked to a different account. Please contact an administrator." });
+          }
           psychic = await storage.updatePsychic(matchByEmail.id, { firebaseUid });
         }
       }

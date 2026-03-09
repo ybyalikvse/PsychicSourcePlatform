@@ -13,16 +13,19 @@ interface LoginPageProps {
   title?: string;
   description?: string;
   onAuthenticated: (idToken: string) => void;
+  externalError?: string | null;
 }
 
 export default function LoginPage({
   title = "Sign In",
   description = "Sign in to access the dashboard",
   onAuthenticated,
+  externalError,
 }: LoginPageProps) {
   const { loginWithGoogle, loginWithEmail, signUpWithEmail } = useFirebaseAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayError = error || externalError;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
@@ -74,9 +77,9 @@ export default function LoginPage({
           <CardDescription data-testid="text-login-description">{description}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {error && (
+          {displayError && (
             <Alert variant="destructive" data-testid="alert-login-error">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{displayError}</AlertDescription>
             </Alert>
           )}
 
