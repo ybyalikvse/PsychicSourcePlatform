@@ -5140,8 +5140,10 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       }
 
       const ext = req.file.originalname.split('.').pop() || "mp4";
-      const filename = `videos/${req.params.id}_${Date.now()}.${ext}`;
+      const filename = `video-submissions/${req.params.id}_${Date.now()}.${ext}`;
+      console.log(`[Portal Upload] Uploading video for request ${req.params.id}, size: ${req.file.size}, type: ${req.file.mimetype}, filename: ${filename}`);
       const videoUrl = await uploadImageToS3(req.file.buffer, filename, req.file.mimetype);
+      console.log(`[Portal Upload] Upload successful: ${videoUrl.substring(0, 80)}...`);
 
       const updated = await storage.updateVideoRequest(req.params.id, { videoUrl });
       res.json({ success: true, videoUrl, request: updated });
