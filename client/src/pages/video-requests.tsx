@@ -588,6 +588,51 @@ export default function VideoRequests() {
             </Card>
           </div>
         </div>
+
+        <Dialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Request Revision</DialogTitle>
+              <DialogDescription>
+                Provide details about what needs to be changed. The psychic will see this message.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Textarea
+                value={revisionNotes}
+                onChange={e => setRevisionNotes(e.target.value)}
+                placeholder="Describe what needs to be revised..."
+                rows={4}
+                data-testid="input-revision-notes"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowRevisionDialog(false)} data-testid="button-cancel-revision">
+                Cancel
+              </Button>
+              <Button
+                disabled={!revisionNotes.trim() || statusMutation.isPending || sendMessageMutation.isPending}
+                onClick={() => {
+                  if (!selectedRequest || !revisionNotes.trim()) return;
+                  sendMessageMutation.mutate(
+                    { id: selectedRequest.id, message: `🔄 Revision Requested: ${revisionNotes.trim()}` },
+                    {
+                      onSuccess: () => {
+                        statusMutation.mutate({ id: selectedRequest.id, status: "revision_requested" });
+                        setShowRevisionDialog(false);
+                        setRevisionNotes("");
+                      },
+                    }
+                  );
+                }}
+                data-testid="button-submit-revision"
+              >
+                {(statusMutation.isPending || sendMessageMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+                Submit Revision Request
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -766,51 +811,6 @@ export default function VideoRequests() {
               </DialogFooter>
             </form>
           </Form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Request Revision</DialogTitle>
-            <DialogDescription>
-              Provide details about what needs to be changed. The psychic will see this message.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              value={revisionNotes}
-              onChange={e => setRevisionNotes(e.target.value)}
-              placeholder="Describe what needs to be revised..."
-              rows={4}
-              data-testid="input-revision-notes"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRevisionDialog(false)} data-testid="button-cancel-revision">
-              Cancel
-            </Button>
-            <Button
-              disabled={!revisionNotes.trim() || statusMutation.isPending || sendMessageMutation.isPending}
-              onClick={async () => {
-                if (!selectedRequest || !revisionNotes.trim()) return;
-                sendMessageMutation.mutate(
-                  { id: selectedRequest.id, message: `🔄 Revision Requested: ${revisionNotes.trim()}` },
-                  {
-                    onSuccess: () => {
-                      statusMutation.mutate({ id: selectedRequest.id, status: "revision_requested" });
-                      setShowRevisionDialog(false);
-                      setRevisionNotes("");
-                    },
-                  }
-                );
-              }}
-              data-testid="button-submit-revision"
-            >
-              {(statusMutation.isPending || sendMessageMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
-              Submit Revision Request
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
