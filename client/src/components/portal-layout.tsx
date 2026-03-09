@@ -79,7 +79,7 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
                         asChild
-                        isActive={location === item.url || (item.url === "/portal/requests" && location === "/portal")}
+                        isActive={location === item.url || (item.url === "/portal/requests" && location === "/portal") || (item.url === "/portal/my-requests" && location.startsWith("/portal/request/"))}
                         data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                       >
                         <Link href={item.url}>

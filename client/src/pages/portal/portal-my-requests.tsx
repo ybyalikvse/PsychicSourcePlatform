@@ -1,19 +1,13 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataState } from "@/components/data-state";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { portalApiRequest, portalFetch } from "@/lib/portal-api";
-import { queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import { Calendar, Clock, DollarSign, Send, MessageSquare, XCircle, CheckCircle } from "lucide-react";
-import PortalUpload from "./portal-upload";
-import type { VideoRequest, VideoMessage, Psychic } from "@shared/schema";
+import { portalFetch } from "@/lib/portal-api";
+import { Calendar, Clock, DollarSign, Eye } from "lucide-react";
+import type { VideoRequest, Psychic } from "@shared/schema";
 
 interface PortalMyRequestsProps {
   psychic: Psychic;
@@ -28,9 +22,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 };
 
 export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
-  const { toast } = useToast();
-  const [selectedRequest, setSelectedRequest] = useState<VideoRequest | null>(null);
-  const [messageText, setMessageText] = useState("");
+  const [, setLocation] = useLocation();
 
   const { data: requests, isLoading } = useQuery<VideoRequest[]>({
     queryKey: ["/api/portal/my-requests"],
@@ -40,70 +32,6 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
     },
     refetchInterval: 15000,
   });
-
-  const { data: messages } = useQuery<VideoMessage[]>({
-    queryKey: ["/api/portal/video-requests", selectedRequest?.id, "messages"],
-    queryFn: async () => {
-      const res = await portalFetch(`/api/portal/video-requests/${selectedRequest!.id}/messages`);
-      return res.json();
-    },
-    enabled: !!selectedRequest,
-  });
-
-  const releaseMutation = useMutation({
-    mutationFn: async (requestId: string) => {
-      const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/release`);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Request released", description: "The request is now available for others." });
-      queryClient.invalidateQueries({ queryKey: ["/api/portal/my-requests"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/portal/video-requests"] });
-      setSelectedRequest(null);
-    },
-    onError: (error: Error) => {
-      toast({ title: "Failed to release", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const submitMutation = useMutation({
-    mutationFn: async (requestId: string) => {
-      const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/submit`);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Video submitted", description: "Your video has been submitted for review." });
-      queryClient.invalidateQueries({ queryKey: ["/api/portal/my-requests"] });
-      setSelectedRequest(null);
-    },
-    onError: (error: Error) => {
-      toast({ title: "Failed to submit", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const sendMessageMutation = useMutation({
-    mutationFn: async ({ requestId, message }: { requestId: string; message: string }) => {
-      const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/messages`, {
-        senderName: psychic.name,
-        message,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      setMessageText("");
-      if (selectedRequest) {
-        queryClient.invalidateQueries({ queryKey: ["/api/portal/video-requests", selectedRequest.id, "messages"] });
-      }
-    },
-    onError: (error: Error) => {
-      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const handleSendMessage = () => {
-    if (!selectedRequest || !messageText.trim()) return;
-    sendMessageMutation.mutate({ requestId: selectedRequest.id, message: messageText.trim() });
-  };
 
   if (isLoading) {
     return (
@@ -178,13 +106,13 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
                     )}
                   </div>
                 </CardContent>
-                <CardFooter className="flex-wrap gap-2">
+                <CardFooter>
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedRequest(req)}
+                    className="w-full"
+                    onClick={() => setLocation(`/portal/request/${req.id}`)}
                     data-testid={`button-details-${req.id}`}
                   >
+                    <Eye className="h-4 w-4" />
                     View Details
                   </Button>
                 </CardFooter>
@@ -193,150 +121,6 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
           })}
         </div>
       )}
-
-      <Dialog open={!!selectedRequest} onOpenChange={(open) => !open && setSelectedRequest(null)}>
-        {selectedRequest && (
-          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle data-testid="text-detail-title">{selectedRequest.title}</DialogTitle>
-              <DialogDescription>{selectedRequest.topic}</DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Status:</span>
-                    <Badge variant={statusConfig[selectedRequest.status]?.variant || "secondary"} data-testid="badge-detail-status">
-                      {statusConfig[selectedRequest.status]?.label || selectedRequest.status}
-                    </Badge>
-                  </div>
-                  {selectedRequest.hook && (
-                    <div>
-                      <span className="text-sm font-medium">Hook:</span>
-                      <p className="text-sm text-muted-foreground">{selectedRequest.hook}</p>
-                    </div>
-                  )}
-                  {selectedRequest.description && (
-                    <div>
-                      <span className="text-sm font-medium">Description:</span>
-                      <p className="text-sm text-muted-foreground">{selectedRequest.description}</p>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {selectedRequest.videoDuration && (
-                      <Badge variant="outline" className="no-default-active-elevate">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {selectedRequest.videoDuration}
-                      </Badge>
-                    )}
-                    {selectedRequest.payAmount && (
-                      <Badge variant="outline" className="no-default-active-elevate">
-                        <DollarSign className="h-3 w-3 mr-1" />
-                        ${selectedRequest.payAmount}
-                      </Badge>
-                    )}
-                    {selectedRequest.requiredDate && (
-                      <Badge variant="outline" className="no-default-active-elevate">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        {new Date(selectedRequest.requiredDate).toLocaleDateString()}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                {(selectedRequest.status === "claimed" || selectedRequest.status === "revision_requested") && (
-                  <div className="space-y-3 border-t pt-4">
-                    <h3 className="text-sm font-medium">Upload Video</h3>
-                    <PortalUpload
-                      requestId={selectedRequest.id}
-                      existingUrl={selectedRequest.videoUrl}
-                      onUploadComplete={() => {
-                        queryClient.invalidateQueries({ queryKey: ["/api/portal/my-requests"] });
-                      }}
-                    />
-                  </div>
-                )}
-
-                {(selectedRequest.status === "claimed" || selectedRequest.status === "revision_requested") && selectedRequest.videoUrl && (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={() => submitMutation.mutate(selectedRequest.id)}
-                      disabled={submitMutation.isPending}
-                      data-testid="button-submit-video"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                      {submitMutation.isPending ? "Submitting..." : "Submit for Review"}
-                    </Button>
-                  </div>
-                )}
-
-                {selectedRequest.status === "claimed" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => releaseMutation.mutate(selectedRequest.id)}
-                    disabled={releaseMutation.isPending}
-                    data-testid="button-release-request"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    {releaseMutation.isPending ? "Releasing..." : "Release Request"}
-                  </Button>
-                )}
-
-                <div className="space-y-3 border-t pt-4">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    Messages
-                  </h3>
-                  <div className="space-y-2 max-h-48 overflow-auto">
-                    {messages && messages.length > 0 ? (
-                      messages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={`rounded-md p-3 text-sm ${
-                            msg.senderType === "psychic"
-                              ? "bg-primary/10 ml-4"
-                              : "bg-muted mr-4"
-                          }`}
-                          data-testid={`message-${msg.id}`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="font-medium text-xs">{msg.senderName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(msg.createdAt).toLocaleString()}
-                            </span>
-                          </div>
-                          <p>{msg.message}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No messages yet.</p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Textarea
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      placeholder="Type a message..."
-                      className="resize-none text-sm"
-                      rows={2}
-                      data-testid="input-message"
-                    />
-                    <Button
-                      size="icon"
-                      onClick={handleSendMessage}
-                      disabled={!messageText.trim() || sendMessageMutation.isPending}
-                      data-testid="button-send-message"
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </ScrollArea>
-          </DialogContent>
-        )}
-      </Dialog>
     </div>
   );
 }

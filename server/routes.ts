@@ -5056,6 +5056,20 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
+  app.get("/api/portal/video-requests/:id", verifyPortalAuth, async (req: any, res) => {
+    try {
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      const psychic = req.portalPsychic;
+      if (request.status !== "available" && request.claimedBy !== psychic.id) {
+        return res.status(403).json({ error: "You do not have access to this request" });
+      }
+      res.json(request);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch video request" });
+    }
+  });
+
   app.get("/api/portal/my-requests", verifyPortalAuth, async (req: any, res) => {
     try {
       const psychic = req.portalPsychic;
@@ -5161,6 +5175,10 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
 
   app.get("/api/portal/video-requests/:id/messages", verifyPortalAuth, async (req: any, res) => {
     try {
+      const psychic = req.portalPsychic;
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      if (request.claimedBy !== psychic.id) return res.status(403).json({ error: "Access denied" });
       const messages = await storage.getVideoMessages(req.params.id);
       res.json(messages);
     } catch (error) {
@@ -5171,6 +5189,9 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
   app.post("/api/portal/video-requests/:id/messages", verifyPortalAuth, async (req: any, res) => {
     try {
       const psychic = req.portalPsychic;
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      if (request.claimedBy !== psychic.id) return res.status(403).json({ error: "Access denied" });
       const parsed = insertVideoMessageSchema.safeParse({
         ...req.body,
         videoRequestId: req.params.id,

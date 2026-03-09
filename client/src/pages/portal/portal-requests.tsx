@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +8,7 @@ import { DataState } from "@/components/data-state";
 import { portalApiRequest, portalFetch } from "@/lib/portal-api";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Clock, DollarSign, Video } from "lucide-react";
+import { Calendar, Clock, DollarSign, Video, Eye } from "lucide-react";
 import type { VideoRequest, Psychic } from "@shared/schema";
 
 interface PortalRequestsProps {
@@ -16,6 +17,7 @@ interface PortalRequestsProps {
 
 export default function PortalRequests({ psychic }: PortalRequestsProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const { data: requests, isLoading } = useQuery<VideoRequest[]>({
     queryKey: ["/api/portal/video-requests", "available"],
@@ -31,10 +33,11 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
       const res = await portalApiRequest("POST", `/api/portal/video-requests/${requestId}/claim`);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, requestId) => {
       toast({ title: "Request claimed", description: "You have successfully claimed this video request." });
       queryClient.invalidateQueries({ queryKey: ["/api/portal/video-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal/my-requests"] });
+      setLocation(`/portal/request/${requestId}`);
     },
     onError: (error: Error) => {
       toast({ title: "Failed to claim", description: error.message, variant: "destructive" });
@@ -111,15 +114,24 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
                   )}
                 </div>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="flex gap-2">
                 <Button
-                  className="w-full"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setLocation(`/portal/request/${req.id}`)}
+                  data-testid={`button-view-${req.id}`}
+                >
+                  <Eye className="h-4 w-4" />
+                  View Details
+                </Button>
+                <Button
+                  className="flex-1"
                   onClick={() => claimMutation.mutate(req.id)}
                   disabled={claimMutation.isPending}
                   data-testid={`button-claim-${req.id}`}
                 >
                   <Video className="h-4 w-4" />
-                  {claimMutation.isPending ? "Claiming..." : "Claim Request"}
+                  {claimMutation.isPending ? "Claiming..." : "Claim"}
                 </Button>
               </CardFooter>
             </Card>

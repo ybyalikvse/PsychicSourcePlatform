@@ -31,6 +31,7 @@ import VideoRequests from "@/pages/video-requests";
 import LoginPage from "@/pages/login";
 import PortalRequestsPage from "@/pages/portal/portal-requests";
 import PortalMyRequestsPage from "@/pages/portal/portal-my-requests";
+import PortalRequestDetailPage from "@/pages/portal/portal-request-detail";
 import NotFound from "@/pages/not-found";
 
 interface AuthInfo {
@@ -75,6 +76,9 @@ function PortalView({ psychic, onLogout }: { psychic: Psychic; onLogout: () => v
         </Route>
         <Route path="/portal/my-requests">
           <PortalMyRequestsPage psychic={psychic} />
+        </Route>
+        <Route path="/portal/request/:id">
+          {(params) => <PortalRequestDetailPage requestId={params.id} psychic={psychic} />}
         </Route>
         <Route path="/portal">
           <PortalRequestsPage psychic={psychic} />
