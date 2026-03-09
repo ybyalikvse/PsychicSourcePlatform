@@ -38,6 +38,7 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
       const res = await portalFetch("/api/portal/my-requests");
       return res.json();
     },
+    refetchInterval: 15000,
   });
 
   const { data: messages } = useQuery<VideoMessage[]>({

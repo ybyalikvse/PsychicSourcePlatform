@@ -23,6 +23,7 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
       const res = await portalFetch("/api/portal/video-requests?status=available");
       return res.json();
     },
+    refetchInterval: 15000,
   });
 
   const claimMutation = useMutation({
