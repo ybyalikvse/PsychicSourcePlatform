@@ -60,6 +60,7 @@ function AdminRouter() {
       <Route path="/internal-links" component={InternalLinks} />
       <Route path="/settings" component={Settings} />
       <Route path="/horoscopes" component={Horoscopes} />
+      <Route path="/psychics/:id" component={Psychics} />
       <Route path="/psychics" component={Psychics} />
       <Route path="/video-requests/:id" component={VideoRequests} />
       <Route path="/video-requests" component={VideoRequests} />

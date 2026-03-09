@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useLocation, useRoute } from "wouter";
 import type { Psychic, VideoRequest } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Plus, Pencil, Trash2, Video, ArrowLeft, Loader2 } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Video, ArrowLeft, Loader2, Eye } from "lucide-react";
 
 const psychicFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -65,6 +66,8 @@ type PsychicFormValues = z.infer<typeof psychicFormSchema>;
 
 export default function Psychics() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [match, params] = useRoute("/psychics/:id");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingPsychic, setEditingPsychic] = useState<Psychic | null>(null);
   const [deletingPsychic, setDeletingPsychic] = useState<Psychic | null>(null);
@@ -82,6 +85,15 @@ export default function Psychics() {
     queryKey: ["/api/psychics", viewingPsychic?.id, "videos"],
     enabled: !!viewingPsychic,
   });
+
+  useEffect(() => {
+    if (match && params?.id && psychics.length > 0) {
+      const found = psychics.find(p => p.id === params.id);
+      if (found) setViewingPsychic(found);
+    } else if (!match) {
+      setViewingPsychic(null);
+    }
+  }, [match, params?.id, psychics]);
 
   const addForm = useForm<PsychicFormValues>({
     resolver: zodResolver(psychicFormSchema),
@@ -175,11 +187,29 @@ export default function Psychics() {
     return <Badge variant="outline" className={config.className} data-testid={`badge-video-status-${status}`}>{config.label}</Badge>;
   }
 
+  if (match && !viewingPsychic && !isLoading) {
+    return (
+      <div className="space-y-6" data-testid="page-psychic-not-found">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/psychics")} data-testid="button-back">
+            <ArrowLeft />
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">Psychic Not Found</h1>
+        </div>
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-muted-foreground text-sm text-center">This psychic doesn't exist or has been deleted.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (viewingPsychic) {
     return (
       <div className="space-y-6" data-testid="page-psychic-videos">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setViewingPsychic(null)} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/psychics")} data-testid="button-back">
             <ArrowLeft />
           </Button>
           <div>
@@ -216,11 +246,17 @@ export default function Psychics() {
                     <TableHead>Status</TableHead>
                     <TableHead>Claimed</TableHead>
                     <TableHead>Submitted</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {psychicVideos.map((video) => (
-                    <TableRow key={video.id} data-testid={`row-video-${video.id}`}>
+                    <TableRow
+                      key={video.id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/video-requests/${video.id}`)}
+                      data-testid={`row-video-${video.id}`}
+                    >
                       <TableCell className="font-medium" data-testid={`text-video-title-${video.id}`}>{video.title}</TableCell>
                       <TableCell data-testid={`text-video-topic-${video.id}`}>{video.topic}</TableCell>
                       <TableCell>{getVideoStatusBadge(video.status)}</TableCell>
@@ -229,6 +265,16 @@ export default function Psychics() {
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm" data-testid={`text-video-submitted-${video.id}`}>
                         {video.submittedAt ? new Date(video.submittedAt).toLocaleDateString() : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/video-requests/${video.id}`); }}
+                          data-testid={`button-view-video-${video.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -289,7 +335,7 @@ export default function Psychics() {
                   <TableRow
                     key={psychic.id}
                     className="cursor-pointer"
-                    onClick={() => setViewingPsychic(psychic)}
+                    onClick={() => navigate(`/psychics/${psychic.id}`)}
                     data-testid={`row-psychic-${psychic.id}`}
                   >
                     <TableCell className="font-medium" data-testid={`text-psychic-name-${psychic.id}`}>{psychic.name}</TableCell>
