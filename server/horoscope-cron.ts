@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { storage } from "./storage";
 import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
+
 
 const ZODIAC_SIGNS = [
   "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
@@ -60,31 +60,18 @@ ${languageInstruction}
 Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.
 Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if the prompt requests them. Output clean HTML with no CSS, no classes, no inline styles. Only use <p> and <h3> tags.`;
 
-  if (aiModel === "gpt") {
-    const openai = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: "https://openrouter.ai/api/v1",
-    });
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: fullPrompt }],
-      max_tokens: type === "daily" ? 4096 : type === "weekly" ? 8192 : 8192,
-      temperature: 0.85,
-    });
-    return response.choices[0]?.message?.content?.trim() || "";
-  } else {
-    const anthropic = new Anthropic({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: "https://openrouter.ai/api/v1",
-    });
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: type === "daily" ? 4096 : type === "weekly" ? 8192 : 8192,
-      messages: [{ role: "user", content: fullPrompt }],
-    });
-    const block = response.content[0];
-    return block.type === "text" ? block.text.trim() : "";
-  }
+  const openai = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+  });
+  const model = aiModel === "gpt" ? "openai/gpt-4o" : "anthropic/claude-sonnet-4-5";
+  const response = await openai.chat.completions.create({
+    model,
+    messages: [{ role: "user", content: fullPrompt }],
+    max_tokens: type === "daily" ? 4096 : 8192,
+    temperature: 0.85,
+  });
+  return response.choices[0]?.message?.content?.trim() || "";
 }
 
 const HOROSCOPE_SITES = ["psychicsource", "pathforward"];

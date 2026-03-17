@@ -5,7 +5,7 @@ import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, inser
 import type { ContentOptimizationResult, ContentSuggestion } from "../shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
+
 import FirecrawlAppModule from "@mendable/firecrawl-js";
 const FirecrawlApp = (FirecrawlAppModule as any).default || FirecrawlAppModule;
 
@@ -1879,28 +1879,27 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
           }
         }
       } else {
-        // Use Anthropic Claude for content generation (default)
-        const anthropic = new Anthropic({
+        // Use Claude via OpenRouter for content generation (default)
+        const openaiClaude = new OpenAI({
           apiKey: process.env.OPENROUTER_API_KEY,
           baseURL: "https://openrouter.ai/api/v1",
         });
 
-        const stream = anthropic.messages.stream({
-          model: "claude-sonnet-4-5",
+        const stream = await openaiClaude.chat.completions.create({
+          model: "anthropic/claude-sonnet-4-5",
           max_tokens: maxTokens,
-          system: systemPrompt,
           messages: [
+            { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
           ],
+          stream: true,
         });
 
-        for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            const content = event.delta.text;
-            if (content) {
-              fullContent += content;
-              res.write(`data: ${JSON.stringify({ content })}\n\n`);
-            }
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content;
+          if (content) {
+            fullContent += content;
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
         }
       }
@@ -4253,31 +4252,18 @@ ${languageInstruction}
 Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.
 Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if the prompt requests them. Output clean HTML with no CSS, no classes, no inline styles. Only use <p> and <h3> tags.`;
 
-    if (aiModel === "gpt") {
-      const openai = new OpenAI({
-        apiKey: process.env.OPENROUTER_API_KEY,
-        baseURL: "https://openrouter.ai/api/v1",
-      });
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [{ role: "user", content: fullPrompt }],
-        max_tokens: type === "daily" ? 4096 : type === "weekly" ? 8192 : 8192,
-        temperature: 0.85,
-      });
-      return response.choices[0]?.message?.content?.trim() || "";
-    } else {
-      const anthropic = new Anthropic({
-        apiKey: process.env.OPENROUTER_API_KEY,
-        baseURL: "https://openrouter.ai/api/v1",
-      });
-      const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: type === "daily" ? 4096 : type === "weekly" ? 8192 : 8192,
-        messages: [{ role: "user", content: fullPrompt }],
-      });
-      const block = response.content[0];
-      return block.type === "text" ? block.text.trim() : "";
-    }
+    const openai = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+    const model = aiModel === "gpt" ? "openai/gpt-4o" : "anthropic/claude-sonnet-4-5";
+    const response = await openai.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: fullPrompt }],
+      max_tokens: type === "daily" ? 4096 : 8192,
+      temperature: 0.85,
+    });
+    return response.choices[0]?.message?.content?.trim() || "";
   }
 
   app.post("/api/horoscopes/generate-sign", async (req, res) => {
