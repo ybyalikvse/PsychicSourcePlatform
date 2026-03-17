@@ -24,7 +24,7 @@ import {
   writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
   horoscopePrompts, horoscopeEntries,
   psychics, videoRequests, videoMessages, videoCaptions, videoCaptionPrompts,
-} from "@shared/schema";
+} from "../shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, desc, gte } from "drizzle-orm";

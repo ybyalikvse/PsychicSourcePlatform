@@ -24,46 +24,63 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
     setProgress(0);
     setError(null);
 
-    const formData = new FormData();
-    formData.append("video", file);
-
     try {
-      const xhr = new XMLHttpRequest();
+      const user = auth.currentUser;
+      const idToken = user ? await user.getIdToken() : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (idToken) headers["Authorization"] = `Bearer ${idToken}`;
 
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          setProgress(Math.round((e.loaded / e.total) * 100));
-        }
+      // Step 1: Get presigned URL from our API
+      const presignRes = await fetch(`/api/portal/video-requests/${requestId}/presign-upload`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ filename: file.name, contentType: file.type || "video/mp4" }),
       });
 
-      const user = auth.currentUser;
-      let idToken: string | null = null;
-      if (user) {
-        idToken = await user.getIdToken();
+      if (!presignRes.ok) {
+        const err = await presignRes.json();
+        throw new Error(err.error || "Failed to get upload URL");
       }
 
+      const { presignedUrl, s3Key } = await presignRes.json();
+      setProgress(10);
+
+      // Step 2: Upload directly to S3 using presigned URL
       await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            setProgress(10 + Math.round((e.loaded / e.total) * 80));
+          }
+        });
         xhr.addEventListener("load", () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            try {
-              const resp = JSON.parse(xhr.responseText);
-              reject(new Error(resp.error || "Upload failed"));
-            } catch {
-              reject(new Error("Upload failed"));
-            }
+            reject(new Error("Upload to storage failed"));
           }
         });
         xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
         xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
 
-        xhr.open("POST", `/api/portal/video-requests/${requestId}/upload`);
-        if (idToken) {
-          xhr.setRequestHeader("Authorization", `Bearer ${idToken}`);
-        }
-        xhr.send(formData);
+        xhr.open("PUT", presignedUrl);
+        xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+        xhr.send(file);
       });
+
+      setProgress(90);
+
+      // Step 3: Confirm upload with our API
+      const confirmRes = await fetch(`/api/portal/video-requests/${requestId}/confirm-upload`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ s3Key }),
+      });
+
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json();
+        throw new Error(err.error || "Failed to confirm upload");
+      }
 
       setUploaded(true);
       setProgress(100);

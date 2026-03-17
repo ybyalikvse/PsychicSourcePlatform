@@ -1,0 +1,17 @@
+name: Video Cleanup
+
+on:
+  schedule:
+    # Every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger video cleanup
+        run: |
+          curl -f -X GET \
+            "${{ secrets.VERCEL_APP_URL }}/api/cron/video-cleanup" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

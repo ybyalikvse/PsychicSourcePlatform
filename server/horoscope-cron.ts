@@ -89,7 +89,7 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
 const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
 
-async function runHoroscopeGeneration(type: string) {
+export async function runHoroscopeGeneration(type: string) {
   const languages = ["en", "es"];
   const daysToGenerate = type === "daily" ? [0, 1, 2, 3] : [0];
 

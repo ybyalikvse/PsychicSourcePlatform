@@ -21,7 +21,7 @@ export function startVideoCrons() {
   }, 10000);
 }
 
-async function releaseExpiredClaims() {
+export async function releaseExpiredClaims() {
   const claimedRequests = await storage.getVideoRequests("claimed");
   const now = new Date();
   let releasedCount = 0;

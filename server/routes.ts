@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertLinkTableColumnSchema, insertSiteUrlSchema, insertHoroscopePromptSchema, insertHoroscopeEntrySchema, insertPsychicSchema, insertVideoRequestSchema, insertVideoMessageSchema, insertVideoCaptionSchema, insertVideoCaptionPromptSchema } from "@shared/schema";
-import type { ContentOptimizationResult, ContentSuggestion } from "@shared/schema";
+import { insertArticleSchema, insertKeywordSchema, insertImageStyleSchema, insertTargetAudienceSchema, insertLinkTableColumnSchema, insertSiteUrlSchema, insertHoroscopePromptSchema, insertHoroscopeEntrySchema, insertPsychicSchema, insertVideoRequestSchema, insertVideoMessageSchema, insertVideoCaptionSchema, insertVideoCaptionPromptSchema } from "../shared/schema";
+import type { ContentOptimizationResult, ContentSuggestion } from "../shared/schema";
 import crypto from "crypto";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
@@ -5120,11 +5120,10 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     }
   });
 
-  app.post("/api/portal/video-requests/:id/upload", verifyPortalAuth, upload.single("video"), async (req: any, res) => {
+  // Step 1: Get a presigned S3 URL for direct browser upload
+  app.post("/api/portal/video-requests/:id/presign-upload", verifyPortalAuth, async (req: any, res) => {
     try {
-      if (!req.file) return res.status(400).json({ error: "No video file uploaded" });
       const psychic = req.portalPsychic;
-
       const request = await storage.getVideoRequest(req.params.id);
       if (!request) return res.status(404).json({ error: "Video request not found" });
       if (request.claimedBy !== psychic.id) {
@@ -5134,22 +5133,52 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
         return res.status(400).json({ error: "Can only upload to claimed or revision-requested requests" });
       }
 
-      const { uploadVideoToS3, isS3Configured } = await import("./s3");
+      const { isS3Configured, getS3Client } = await import("./s3");
       if (!isS3Configured()) {
         return res.status(500).json({ error: "S3 storage not configured. Please set AWS credentials." });
       }
 
-      const ext = req.file.originalname.split('.').pop() || "mp4";
-      const s3Key = `video-submissions/${req.params.id}_${Date.now()}.${ext}`;
-      console.log(`[Portal Upload] Uploading video for request ${req.params.id}, size: ${req.file.size}, type: ${req.file.mimetype}, key: ${s3Key}`);
-      const { key, url: videoUrl } = await uploadVideoToS3(req.file.buffer, s3Key, req.file.mimetype);
-      console.log(`[Portal Upload] Upload successful, key: ${key}`);
+      const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+      const { PutObjectCommand } = await import("@aws-sdk/client-s3");
 
-      const updated = await storage.updateVideoRequest(req.params.id, { videoUrl });
-      res.json({ success: true, videoUrl, request: updated });
+      const ext = (req.body.filename || "video.mp4").split('.').pop() || "mp4";
+      const contentType = req.body.contentType || "video/mp4";
+      const s3Key = `video-submissions/${req.params.id}_${Date.now()}.${ext}`;
+
+      const s3Client = getS3Client();
+      const command = new PutObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET,
+        Key: s3Key,
+        ContentType: contentType,
+      });
+      const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+
+      res.json({ presignedUrl, s3Key, contentType });
     } catch (error) {
-      console.error("[Portal Upload] Error:", error);
-      res.status(500).json({ error: "Failed to upload video" });
+      console.error("[Portal Presign] Error:", error);
+      res.status(500).json({ error: "Failed to generate upload URL" });
+    }
+  });
+
+  // Step 2: Confirm upload completed, save the S3 key to the video request
+  app.post("/api/portal/video-requests/:id/confirm-upload", verifyPortalAuth, async (req: any, res) => {
+    try {
+      const psychic = req.portalPsychic;
+      const request = await storage.getVideoRequest(req.params.id);
+      if (!request) return res.status(404).json({ error: "Video request not found" });
+      if (request.claimedBy !== psychic.id) {
+        return res.status(403).json({ error: "You can only confirm your own uploads" });
+      }
+
+      const { s3Key } = req.body;
+      if (!s3Key) return res.status(400).json({ error: "Missing s3Key" });
+
+      // Store the S3 key as the videoUrl — getSignedVideoUrl will generate fresh signed URLs when needed
+      const updated = await storage.updateVideoRequest(req.params.id, { videoUrl: s3Key });
+      res.json({ success: true, request: updated });
+    } catch (error) {
+      console.error("[Portal Confirm Upload] Error:", error);
+      res.status(500).json({ error: "Failed to confirm upload" });
     }
   });
 

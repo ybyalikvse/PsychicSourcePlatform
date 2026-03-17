@@ -94,8 +94,10 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
 
-      startHoroscopeCrons();
-      startVideoCrons();
+      if (!process.env.VERCEL) {
+        startHoroscopeCrons();
+        startVideoCrons();
+      }
     },
   );
 })();
