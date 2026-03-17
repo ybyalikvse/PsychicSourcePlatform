@@ -1744,8 +1744,8 @@ Create dedicated sections for each of these topics, using them as H2 headings wh
         if (allInternalUrls.length > 15) {
           try {
             const openai = new OpenAI({
-              apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-              baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+              apiKey: process.env.OPENROUTER_API_KEY,
+              baseURL: "https://openrouter.ai/api/v1",
             });
             
             const filterResponse = await openai.chat.completions.create({
@@ -1857,8 +1857,8 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
       if (provider === "openai") {
         // Use OpenAI for content generation
         const openai = new OpenAI({
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+          apiKey: process.env.OPENROUTER_API_KEY,
+          baseURL: "https://openrouter.ai/api/v1",
         });
 
         const stream = await openai.chat.completions.create({
@@ -1881,8 +1881,8 @@ Write the complete ${targetWordCount}-word article now. Output clean HTML only:`
       } else {
         // Use Anthropic Claude for content generation (default)
         const anthropic = new Anthropic({
-          apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+          apiKey: process.env.OPENROUTER_API_KEY,
+          baseURL: "https://openrouter.ai/api/v1",
         });
 
         const stream = anthropic.messages.stream({
@@ -1963,8 +1963,8 @@ Respond in JSON format:
 }`;
 
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
       const response = await openai.chat.completions.create({
@@ -2254,8 +2254,8 @@ Respond in JSON format:
       if (provider === "openai") {
         // Use OpenAI gpt-image-1 for image generation
         const openai = new OpenAI({
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+          apiKey: process.env.OPENROUTER_API_KEY,
+          baseURL: "https://openrouter.ai/api/v1",
         });
 
         // Map aspect ratio to OpenAI size
@@ -2307,10 +2307,10 @@ Respond in JSON format:
         const { GoogleGenAI } = await import("@google/genai");
         
         const ai = new GoogleGenAI({
-          apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+          apiKey: process.env.GEMINI_API_KEY,
           httpOptions: {
             apiVersion: "",
-            baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+            baseUrl: process.env.GEMINI_BASE_URL,
           },
         });
 
@@ -2396,8 +2396,8 @@ Apply these style directions to every image prompt you generate. Describe the vi
       }
 
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
       const prompt = `Analyze this blog post content and suggest ${count} compelling image ideas that would enhance the article visually.
@@ -2474,8 +2474,8 @@ Make the first suggestion suitable as a featured/hero image. The rest should be 
       console.log(`[Image Placement] existingImageCount=${existingImageCount}`);
 
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
       const avoidParagraphsNote = paragraphsNearImages.length > 0 
@@ -2574,15 +2574,15 @@ Example response:
   app.get("/api/optimize/test-gemini", async (req, res) => {
     try {
       console.log("[Gemini Test] Starting Gemini API test...");
-      console.log("[Gemini Test] API Key exists:", !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
-      console.log("[Gemini Test] Base URL:", process.env.AI_INTEGRATIONS_GEMINI_BASE_URL);
+      console.log("[Gemini Test] API Key exists:", !!process.env.GEMINI_API_KEY);
+      console.log("[Gemini Test] Base URL:", process.env.GEMINI_BASE_URL);
       
       const { GoogleGenAI } = await import("@google/genai");
       const genAI = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        apiKey: process.env.GEMINI_API_KEY,
         httpOptions: {
           apiVersion: "",
-          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+          baseUrl: process.env.GEMINI_BASE_URL,
         },
       });
 
@@ -2613,8 +2613,8 @@ Example response:
       res.json({ 
         success: true, 
         message: responseText,
-        apiKeyExists: !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-        baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        apiKeyExists: !!process.env.GEMINI_API_KEY,
+        baseUrl: process.env.GEMINI_BASE_URL,
       });
     } catch (error: any) {
       console.error("[Gemini Test] Error:", error);
@@ -2622,8 +2622,8 @@ Example response:
         success: false, 
         error: error.message,
         stack: error.stack,
-        apiKeyExists: !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-        baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        apiKeyExists: !!process.env.GEMINI_API_KEY,
+        baseUrl: process.env.GEMINI_BASE_URL,
       });
     }
   });
@@ -2902,10 +2902,10 @@ Example response:
       try {
         const { GoogleGenAI } = await import("@google/genai");
         const genAI = new GoogleGenAI({
-          apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+          apiKey: process.env.GEMINI_API_KEY,
           httpOptions: {
             apiVersion: "",
-            baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+            baseUrl: process.env.GEMINI_BASE_URL,
           },
         });
 
@@ -3440,10 +3440,10 @@ Be extremely specific and actionable. Reference specific competitor content when
       // Re-run AI analysis
       const { GoogleGenAI } = await import("@google/genai");
       const genAI = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        apiKey: process.env.GEMINI_API_KEY,
         httpOptions: {
           apiVersion: "",
-          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+          baseUrl: process.env.GEMINI_BASE_URL,
         },
       });
 
@@ -3769,10 +3769,10 @@ Be extremely specific and actionable. Reference specific competitor content when
       // Use Gemini for content rewriting
       const { GoogleGenAI } = await import("@google/genai");
       const genAI = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        apiKey: process.env.GEMINI_API_KEY,
         httpOptions: {
           apiVersion: "",
-          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+          baseUrl: process.env.GEMINI_BASE_URL,
         },
       });
 
@@ -3959,10 +3959,10 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       // Use Gemini for content processing
       const { GoogleGenAI } = await import("@google/genai");
       const genAI = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        apiKey: process.env.GEMINI_API_KEY,
         httpOptions: {
           apiVersion: "",
-          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+          baseUrl: process.env.GEMINI_BASE_URL,
         },
       });
 
@@ -4325,8 +4325,8 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
     if (aiModel === "gpt") {
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -4337,8 +4337,8 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
       return response.choices[0]?.message?.content?.trim() || "";
     } else {
       const anthropic = new Anthropic({
-        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
       const response = await anthropic.messages.create({
         model: "claude-sonnet-4-5",
@@ -4777,8 +4777,8 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
       const hashtagPrompt = promptConfig?.hashtagPrompt || "Generate 10-15 relevant hashtags for this video.";
 
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
       const response = await openai.chat.completions.create({

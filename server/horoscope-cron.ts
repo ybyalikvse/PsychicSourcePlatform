@@ -62,8 +62,8 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
 
   if (aiModel === "gpt") {
     const openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
     });
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -74,8 +74,8 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
     return response.choices[0]?.message?.content?.trim() || "";
   } else {
     const anthropic = new Anthropic({
-      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
     });
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
