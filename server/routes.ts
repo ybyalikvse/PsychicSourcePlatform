@@ -2303,52 +2303,42 @@ Respond in JSON format:
           storage: "base64",
         });
       } else {
-        // Use Gemini for image generation (default)
-        const { GoogleGenAI } = await import("@google/genai");
-        
-        const ai = new GoogleGenAI({
-          apiKey: process.env.GEMINI_API_KEY,
-          httpOptions: {
-            apiVersion: "",
-            baseUrl: process.env.GEMINI_BASE_URL,
-          },
+        // Use OpenRouter for image generation (default)
+        const openaiDefault = new OpenAI({
+          apiKey: process.env.OPENROUTER_API_KEY,
+          baseURL: "https://openrouter.ai/api/v1",
         });
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash-image",
-          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-          config: {
-            responseModalities: ["TEXT", "IMAGE"],
-            imageConfig: {
-              aspectRatio: aspectRatio || "16:9",
-            },
-          } as any,
-        });
-
-        const candidate = response.candidates?.[0];
-        const imagePart = candidate?.content?.parts?.find(
-          (part: any) => part.inlineData
-        );
-
-        if (!imagePart?.inlineData?.data) {
-          return res.status(500).json({ error: "No image data in response" });
+        let size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
+        if (aspectRatio === "16:9") {
+          size = "1536x1024";
+        } else if (aspectRatio === "9:16") {
+          size = "1024x1536";
         }
 
-        const mimeType = imagePart.inlineData.mimeType || "image/png";
-        const base64Data = imagePart.inlineData.data;
+        const response = await openaiDefault.images.generate({
+          model: "gpt-image-1",
+          prompt: fullPrompt,
+          n: 1,
+          size: size,
+        });
+
+        const imageData = response.data?.[0]?.b64_json;
+        if (!imageData) {
+          return res.status(500).json({ error: "No image data in response" });
+        }
 
         // Upload to S3 if configured
         if (s3Configured) {
           try {
             const { uploadImageToS3 } = await import("./s3");
-            const extension = mimeType.includes("jpeg") ? "jpg" : "png";
-            const s3Url = await uploadImageToS3(base64Data, undefined, mimeType);
+            const s3Url = await uploadImageToS3(imageData, undefined, "image/png");
             console.log("[Image Generation] Uploaded to S3:", s3Url);
             return res.json({
               imageData: s3Url,
               imageUrl: s3Url,
               imageType: imageType || "featured",
-              provider: "gemini",
+              provider: "openrouter",
               storage: "s3",
             });
           } catch (s3Error) {
@@ -2357,9 +2347,9 @@ Respond in JSON format:
         }
 
         res.json({
-          imageData: `data:${mimeType};base64,${base64Data}`,
+          imageData: `data:image/png;base64,${imageData}`,
           imageType: imageType || "featured",
-          provider: "gemini",
+          provider: "openrouter",
           storage: "base64",
         });
       }
@@ -2570,60 +2560,37 @@ Example response:
 
   // ============ ARTICLE OPTIMIZATION ============
   
-  // Test endpoint to verify Gemini API is working
-  app.get("/api/optimize/test-gemini", async (req, res) => {
+  // Test endpoint to verify AI API is working
+  app.get("/api/optimize/test-ai", async (req, res) => {
     try {
-      console.log("[Gemini Test] Starting Gemini API test...");
-      console.log("[Gemini Test] API Key exists:", !!process.env.GEMINI_API_KEY);
-      console.log("[Gemini Test] Base URL:", process.env.GEMINI_BASE_URL);
-      
-      const { GoogleGenAI } = await import("@google/genai");
-      const genAI = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          apiVersion: "",
-          baseUrl: process.env.GEMINI_BASE_URL,
-        },
+      console.log("[AI Test] Starting OpenRouter API test...");
+      console.log("[AI Test] API Key exists:", !!process.env.OPENROUTER_API_KEY);
+
+      const openaiTest = new OpenAI({
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
-      console.log("[Gemini Test] GoogleGenAI initialized, calling API...");
-      
-      const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: "Say 'Hello, Gemini is working!' in exactly those words." }] }],
+      const response = await openaiTest.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: "Say 'Hello, AI is working!' in exactly those words." }],
+        max_tokens: 50,
       });
 
-      console.log("[Gemini Test] Response received:", JSON.stringify(response).substring(0, 500));
-      
-      // Try to extract text
-      let responseText = "";
-      if (typeof response.text === 'string') {
-        responseText = response.text;
-      } else if (typeof response.text === 'function') {
-        responseText = response.text();
-      }
-      if (!responseText && response.candidates?.[0]) {
-        const candidate = response.candidates[0];
-        const textPart = candidate?.content?.parts?.find((part: any) => part.text);
-        responseText = textPart?.text || "";
-      }
-      
-      console.log("[Gemini Test] Extracted text:", responseText);
-      
-      res.json({ 
-        success: true, 
+      const responseText = response.choices[0]?.message?.content?.trim() || "";
+      console.log("[AI Test] Response:", responseText);
+
+      res.json({
+        success: true,
         message: responseText,
-        apiKeyExists: !!process.env.GEMINI_API_KEY,
-        baseUrl: process.env.GEMINI_BASE_URL,
+        apiKeyExists: !!process.env.OPENROUTER_API_KEY,
       });
     } catch (error: any) {
-      console.error("[Gemini Test] Error:", error);
-      res.status(500).json({ 
-        success: false, 
+      console.error("[AI Test] Error:", error);
+      res.status(500).json({
+        success: false,
         error: error.message,
-        stack: error.stack,
-        apiKeyExists: !!process.env.GEMINI_API_KEY,
-        baseUrl: process.env.GEMINI_BASE_URL,
+        apiKeyExists: !!process.env.OPENROUTER_API_KEY,
       });
     }
   });
@@ -2900,16 +2867,12 @@ Example response:
       console.log(`[Optimize] Found ${keywordsInStrikingDistance.length} keywords in striking distance (positions 10-100)`);
 
       try {
-        const { GoogleGenAI } = await import("@google/genai");
-        const genAI = new GoogleGenAI({
-          apiKey: process.env.GEMINI_API_KEY,
-          httpOptions: {
-            apiVersion: "",
-            baseUrl: process.env.GEMINI_BASE_URL,
-          },
+        const openaiOptimize = new OpenAI({
+          apiKey: process.env.OPENROUTER_API_KEY,
+          baseURL: "https://openrouter.ai/api/v1",
         });
 
-        console.log(`[Optimize] Gemini API initialized, page content: ${pageContent.wordCount} words, competitors: ${competitors.length}`);
+        console.log(`[Optimize] AI initialized, page content: ${pageContent.wordCount} words, competitors: ${competitors.length}`);
 
         // Build data for prompt placeholders
         const keywordsFormatted = keywords.length > 0 
@@ -3017,41 +2980,18 @@ Return your analysis as a JSON object with this exact structure:
 Be extremely specific and actionable. Reference specific competitor content when making suggestions. Prioritize recommendations that will have the biggest impact on rankings for "${targetKeyword}".`;
         }
 
-        console.log(`[Optimize] Sending ${analysisPrompt.length} chars to Gemini for analysis`);
+        console.log(`[Optimize] Sending ${analysisPrompt.length} chars for analysis`);
 
-        const response = await genAI.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [{ role: "user", parts: [{ text: analysisPrompt }] }],
+        const aiResponse = await openaiOptimize.chat.completions.create({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: analysisPrompt }],
+          max_tokens: 8192,
         });
 
-        console.log(`[Optimize] Gemini response received:`, JSON.stringify(response).substring(0, 500));
-
-        // Extract text from Gemini response - try multiple methods
-        let responseText = "";
-        
-        // Method 1: Try response.text property/method
-        if (typeof response.text === 'string') {
-          responseText = response.text;
-        } else if (typeof response.text === 'function') {
-          responseText = response.text();
-        }
-        
-        // Method 2: Try candidates array
-        if (!responseText && response.candidates?.[0]) {
-          const candidate = response.candidates[0];
-          const textPart = candidate?.content?.parts?.find((part: any) => part.text);
-          responseText = textPart?.text || "";
-        }
-        
-        // Method 3: Try response.response.text()
-        if (!responseText && (response as any).response?.text) {
-          const respText = (response as any).response.text;
-          responseText = typeof respText === 'function' ? respText() : respText;
-        }
-
-        console.log(`[Optimize] Gemini response text length: ${responseText.length} chars`);
+        const responseText = aiResponse.choices[0]?.message?.content?.trim() || "";
+        console.log(`[Optimize] AI response text length: ${responseText.length} chars`);
         if (responseText.length > 0) {
-          console.log(`[Optimize] Gemini response preview: ${responseText.substring(0, 300)}`);
+          console.log(`[Optimize] AI response preview: ${responseText.substring(0, 300)}`);
         }
         
         // Extract JSON from response
@@ -3438,13 +3378,9 @@ Be extremely specific and actionable. Reference specific competitor content when
       const keywordsInStrikingDistance = keywordsTyped.filter(k => k.position >= 10 && k.position <= 100);
 
       // Re-run AI analysis
-      const { GoogleGenAI } = await import("@google/genai");
-      const genAI = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          apiVersion: "",
-          baseUrl: process.env.GEMINI_BASE_URL,
-        },
+      const openaiRefresh = new OpenAI({
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
       // Build data for prompt placeholders
@@ -3583,19 +3519,19 @@ Be extremely specific and actionable. Reference specific competitor content when
       console.log("[Optimize Refresh] Page content word count:", pageContentTyped.wordCount);
       console.log("[Optimize Refresh] Prompt length:", analysisPrompt.length);
       
-      let response;
+      let responseText = "";
       try {
-        response = await genAI.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: analysisPrompt,
+        const aiRefreshResponse = await openaiRefresh.chat.completions.create({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: analysisPrompt }],
+          max_tokens: 8192,
         });
-        console.log("[Optimize Refresh] Got response from Gemini");
-      } catch (geminiError) {
-        console.error("[Optimize Refresh] Gemini API error:", geminiError);
-        return res.status(500).json({ error: "AI analysis failed: " + (geminiError instanceof Error ? geminiError.message : "Unknown error") });
+        responseText = aiRefreshResponse.choices[0]?.message?.content?.trim() || "";
+        console.log("[Optimize Refresh] Got response from AI");
+      } catch (aiError) {
+        console.error("[Optimize Refresh] AI API error:", aiError);
+        return res.status(500).json({ error: "AI analysis failed: " + (aiError instanceof Error ? aiError.message : "Unknown error") });
       }
-
-      const responseText = response.text || "";
       console.log("[Optimize Refresh] Raw AI response length:", responseText.length);
       
       let recommendations: Array<{
@@ -3766,14 +3702,10 @@ Be extremely specific and actionable. Reference specific competitor content when
       console.log("[Optimize Implement] Target keyword:", targetKeyword);
       console.log("[Optimize Implement] Prompt ID:", promptId);
 
-      // Use Gemini for content rewriting
-      const { GoogleGenAI } = await import("@google/genai");
-      const genAI = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          apiVersion: "",
-          baseUrl: process.env.GEMINI_BASE_URL,
-        },
+      // Use OpenRouter for content rewriting
+      const openaiImplement = new OpenAI({
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
       // Format recommendations for the prompt (may be empty)
@@ -3863,15 +3795,16 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
         });
       }
 
-      console.log("[Optimize Implement] Sending prompt to Gemini");
+      console.log("[Optimize Implement] Sending prompt to AI");
       console.log("[Optimize Implement] Prompt length:", rewritePrompt.length, "characters");
-      
-      const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: rewritePrompt,
+
+      const implementResponse = await openaiImplement.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: rewritePrompt }],
+        max_tokens: 16384,
       });
 
-      let rewrittenContent = response.text || "";
+      let rewrittenContent = implementResponse.choices[0]?.message?.content?.trim() || "";
       
       // Clean up the response - remove markdown code blocks if present
       if (rewrittenContent.includes("```html")) {
@@ -3956,14 +3889,10 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
 
       console.log("[Direct Apply] Using prompt:", optimizationPrompt.name);
       
-      // Use Gemini for content processing
-      const { GoogleGenAI } = await import("@google/genai");
-      const genAI = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          apiVersion: "",
-          baseUrl: process.env.GEMINI_BASE_URL,
-        },
+      // Use OpenRouter for content processing
+      const openaiDirect = new OpenAI({
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
       });
 
       // Fetch internal links for placeholder replacement
@@ -4003,13 +3932,14 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       }
 
       console.log("[Direct Apply] Processed prompt length:", processedPrompt.length, "chars");
-      
-      const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: processedPrompt,
+
+      const directResponse = await openaiDirect.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: processedPrompt }],
+        max_tokens: 16384,
       });
 
-      let rewrittenContent = response.text || "";
+      let rewrittenContent = directResponse.choices[0]?.message?.content?.trim() || "";
       
       // Clean up the response - remove markdown code blocks if present
       if (rewrittenContent.includes("```html")) {
