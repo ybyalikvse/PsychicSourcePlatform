@@ -3,11 +3,15 @@
   "outputDirectory": "dist/public",
   "framework": null,
   "functions": {
-    "api/**/*.ts": {
+    "api/index.ts": {
       "includeFiles": "server/**,shared/**",
       "maxDuration": 60
     },
-    "api/cron/*.ts": {
+    "api/cron/horoscopes.ts": {
+      "includeFiles": "server/**,shared/**",
+      "maxDuration": 300
+    },
+    "api/cron/video-cleanup.ts": {
       "includeFiles": "server/**,shared/**",
       "maxDuration": 300
     }
