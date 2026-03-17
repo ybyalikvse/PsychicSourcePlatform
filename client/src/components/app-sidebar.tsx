@@ -14,6 +14,9 @@ import {
   Star,
   Users,
   Video,
+  Film,
+  History,
+  CalendarDays,
 } from "lucide-react";
 import {
   Sidebar,
@@ -77,6 +80,29 @@ const videoNavItems = [
     title: "Video Requests",
     url: "/video-requests",
     icon: Video,
+  },
+];
+
+const vspNavItems = [
+  {
+    title: "Script Creator",
+    url: "/vsp",
+    icon: Film,
+  },
+  {
+    title: "VSP History",
+    url: "/vsp/history",
+    icon: History,
+  },
+  {
+    title: "VSP Calendar",
+    url: "/vsp/calendar",
+    icon: CalendarDays,
+  },
+  {
+    title: "VSP Settings",
+    url: "/vsp/settings",
+    icon: Settings,
   },
 ];
 
@@ -148,6 +174,28 @@ export function AppSidebar() {
                     asChild
                     isActive={location === item.url || location.startsWith(item.url + "/")}
                     data-testid={`nav-${item.title.toLowerCase().replace(' ', '-')}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Viral Script Pro</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {vspNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={item.url === "/vsp" ? location === "/vsp" : location.startsWith(item.url)}
+                    data-testid={`nav-${item.title.toLowerCase().replace(/ /g, '-')}`}
                   >
                     <Link href={item.url}>
                       <item.icon className="h-4 w-4" />

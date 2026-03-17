@@ -33,6 +33,10 @@ import PortalRequestsPage from "@/pages/portal/portal-requests";
 import PortalMyRequestsPage from "@/pages/portal/portal-my-requests";
 import PortalRequestDetailPage from "@/pages/portal/portal-request-detail";
 import NotFound from "@/pages/not-found";
+import VspContentCreator from "@/pages/vsp-content-creator";
+import VspHistory from "@/pages/vsp-history";
+import VspCalendar from "@/pages/vsp-calendar";
+import VspSettings from "@/pages/vsp-settings";
 
 interface AuthInfo {
   uid: string;
@@ -64,6 +68,10 @@ function AdminRouter() {
       <Route path="/psychics" component={Psychics} />
       <Route path="/video-requests/:id" component={VideoRequests} />
       <Route path="/video-requests" component={VideoRequests} />
+      <Route path="/vsp" component={VspContentCreator} />
+      <Route path="/vsp/history" component={VspHistory} />
+      <Route path="/vsp/calendar" component={VspCalendar} />
+      <Route path="/vsp/settings" component={VspSettings} />
       <Route component={NotFound} />
     </Switch>
   );

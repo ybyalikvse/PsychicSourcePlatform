@@ -137,4 +137,42 @@ export async function uploadImageFromUrl(
   return uploadImageToS3(buffer, filename, contentType);
 }
 
+/**
+ * Get a presigned URL from a full S3 URL.
+ * Parses the key from the URL and generates a signed download link.
+ */
+export async function getPresignedUrl(s3Url: string, expiresIn: number = 3600): Promise<string> {
+  const bucketName = process.env.AWS_S3_BUCKET;
+  if (!bucketName) {
+    return s3Url;
+  }
+
+  const urlPattern = new RegExp(`https://${bucketName}\\.s3\\..*\\.amazonaws\\.com/(.+)`);
+  const match = s3Url.match(urlPattern);
+  if (!match) {
+    return s3Url;
+  }
+
+  const key = match[1];
+  const s3Client = getS3Client();
+  const command = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+  });
+
+  return getSignedUrl(s3Client, command, { expiresIn });
+}
+
+/**
+ * Download a video (or any file) from a URL and return it as a Buffer.
+ */
+export async function downloadVideoFromUrl(url: string, headers?: Record<string, string>): Promise<Buffer> {
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 export { getS3Client };

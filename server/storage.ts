@@ -20,14 +20,27 @@ import {
   type VideoMessage, type InsertVideoMessage,
   type VideoCaption, type InsertVideoCaption,
   type VideoCaptionPrompt, type InsertVideoCaptionPrompt,
+  type VspContentProject, type InsertVspContentProject,
+  type VspCampaign, type InsertVspCampaign,
+  type VspContentCalendar, type InsertVspContentCalendar,
+  type VspContentTemplate, type InsertVspContentTemplate,
+  type VspCampaignTemplate,
+  type VspBulkGenerationJob, type InsertVspBulkGenerationJob,
+  type VspContentCategory, type InsertVspContentCategory,
+  type VspContentSubtopic, type InsertVspContentSubtopic,
+  type VspScriptStyle, type InsertVspScriptStyle,
+  type VspCaptionStyle, type InsertVspCaptionStyle,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
   writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
   horoscopePrompts, horoscopeEntries,
   psychics, videoRequests, videoMessages, videoCaptions, videoCaptionPrompts,
+  vspContentProjects, vspCampaigns, vspContentCalendar, vspContentTemplates,
+  vspCampaignTemplates, vspBulkGenerationJobs,
+  vspContentCategories, vspContentSubtopics, vspScriptStyles, vspCaptionStyles,
 } from "../shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, gte } from "drizzle-orm";
+import { eq, desc, gte, lte, and } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -164,6 +177,73 @@ export interface IStorage {
   createVideoCaptionPrompt(prompt: InsertVideoCaptionPrompt): Promise<VideoCaptionPrompt>;
   updateVideoCaptionPrompt(id: string, prompt: Partial<InsertVideoCaptionPrompt>): Promise<VideoCaptionPrompt | undefined>;
   deleteVideoCaptionPrompt(id: string): Promise<boolean>;
+
+  // VSP Content Projects
+  getVspProjects(): Promise<VspContentProject[]>;
+  getVspProject(id: string): Promise<VspContentProject | undefined>;
+  getVspProjectsByDateRange(startDate: string, endDate: string): Promise<VspContentProject[]>;
+  createVspProject(project: InsertVspContentProject): Promise<VspContentProject>;
+  updateVspProject(id: string, updates: Partial<VspContentProject>): Promise<VspContentProject | undefined>;
+  deleteVspProject(id: string): Promise<boolean>;
+
+  // VSP Campaigns
+  getVspCampaigns(): Promise<VspCampaign[]>;
+  getVspCampaign(id: string): Promise<VspCampaign | undefined>;
+  getVspActiveCampaigns(): Promise<VspCampaign[]>;
+  createVspCampaign(campaign: InsertVspCampaign): Promise<VspCampaign>;
+  updateVspCampaign(id: string, updates: Partial<VspCampaign>): Promise<VspCampaign | undefined>;
+  deleteVspCampaign(id: string): Promise<boolean>;
+
+  // VSP Content Calendar
+  getVspContentCalendarEvents(): Promise<VspContentCalendar[]>;
+  getVspContentCalendarEventsByDateRange(startDate: string, endDate: string): Promise<VspContentCalendar[]>;
+  createVspContentCalendarEvent(event: InsertVspContentCalendar): Promise<VspContentCalendar>;
+  updateVspContentCalendarEvent(id: string, updates: Partial<VspContentCalendar>): Promise<VspContentCalendar | undefined>;
+  deleteVspContentCalendarEvent(id: string): Promise<boolean>;
+
+  // VSP Content Templates
+  getVspContentTemplates(): Promise<VspContentTemplate[]>;
+  getVspContentTemplatesByCategory(category: string): Promise<VspContentTemplate[]>;
+  createVspContentTemplate(template: InsertVspContentTemplate): Promise<VspContentTemplate>;
+  updateVspContentTemplate(id: string, updates: Partial<VspContentTemplate>): Promise<VspContentTemplate | undefined>;
+  deleteVspContentTemplate(id: string): Promise<boolean>;
+
+  // VSP Campaign Templates (hardcoded)
+  getVspCampaignTemplates(): Promise<VspCampaignTemplate[]>;
+  getVspCampaignTemplate(id: string): Promise<VspCampaignTemplate | undefined>;
+
+  // VSP Bulk Generation Jobs
+  createVspBulkGenerationJob(job: InsertVspBulkGenerationJob): Promise<VspBulkGenerationJob>;
+  getVspBulkGenerationJob(id: string): Promise<VspBulkGenerationJob | undefined>;
+  updateVspBulkGenerationJob(id: string, updates: Partial<VspBulkGenerationJob>): Promise<VspBulkGenerationJob | undefined>;
+
+  // VSP Content Categories
+  getVspContentCategories(): Promise<VspContentCategory[]>;
+  getVspContentCategory(id: string): Promise<VspContentCategory | undefined>;
+  createVspContentCategory(category: InsertVspContentCategory): Promise<VspContentCategory>;
+  updateVspContentCategory(id: string, updates: Partial<VspContentCategory>): Promise<VspContentCategory | undefined>;
+  deleteVspContentCategory(id: string): Promise<boolean>;
+
+  // VSP Content Subtopics
+  getVspContentSubtopics(categoryId?: string): Promise<VspContentSubtopic[]>;
+  getVspContentSubtopic(id: string): Promise<VspContentSubtopic | undefined>;
+  createVspContentSubtopic(subtopic: InsertVspContentSubtopic): Promise<VspContentSubtopic>;
+  updateVspContentSubtopic(id: string, updates: Partial<VspContentSubtopic>): Promise<VspContentSubtopic | undefined>;
+  deleteVspContentSubtopic(id: string): Promise<boolean>;
+
+  // VSP Script Styles
+  getVspScriptStyles(): Promise<VspScriptStyle[]>;
+  getVspScriptStyle(id: string): Promise<VspScriptStyle | undefined>;
+  createVspScriptStyle(style: InsertVspScriptStyle): Promise<VspScriptStyle>;
+  updateVspScriptStyle(id: string, updates: Partial<VspScriptStyle>): Promise<VspScriptStyle | undefined>;
+  deleteVspScriptStyle(id: string): Promise<boolean>;
+
+  // VSP Caption Styles
+  getVspCaptionStyles(): Promise<VspCaptionStyle[]>;
+  getVspCaptionStyle(id: string): Promise<VspCaptionStyle | undefined>;
+  createVspCaptionStyle(style: InsertVspCaptionStyle): Promise<VspCaptionStyle>;
+  updateVspCaptionStyle(id: string, updates: Partial<VspCaptionStyle>): Promise<VspCaptionStyle | undefined>;
+  deleteVspCaptionStyle(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -423,6 +503,73 @@ export class MemStorage implements IStorage {
   async createVideoCaptionPrompt(_prompt: InsertVideoCaptionPrompt): Promise<VideoCaptionPrompt> { throw new Error("Not implemented"); }
   async updateVideoCaptionPrompt(_id: string, _prompt: Partial<InsertVideoCaptionPrompt>): Promise<VideoCaptionPrompt | undefined> { return undefined; }
   async deleteVideoCaptionPrompt(_id: string): Promise<boolean> { return false; }
+
+  // VSP Content Projects stubs
+  async getVspProjects(): Promise<VspContentProject[]> { return []; }
+  async getVspProject(_id: string): Promise<VspContentProject | undefined> { return undefined; }
+  async getVspProjectsByDateRange(_startDate: string, _endDate: string): Promise<VspContentProject[]> { return []; }
+  async createVspProject(_project: InsertVspContentProject): Promise<VspContentProject> { throw new Error("Not implemented"); }
+  async updateVspProject(_id: string, _updates: Partial<VspContentProject>): Promise<VspContentProject | undefined> { return undefined; }
+  async deleteVspProject(_id: string): Promise<boolean> { return false; }
+
+  // VSP Campaigns stubs
+  async getVspCampaigns(): Promise<VspCampaign[]> { return []; }
+  async getVspCampaign(_id: string): Promise<VspCampaign | undefined> { return undefined; }
+  async getVspActiveCampaigns(): Promise<VspCampaign[]> { return []; }
+  async createVspCampaign(_campaign: InsertVspCampaign): Promise<VspCampaign> { throw new Error("Not implemented"); }
+  async updateVspCampaign(_id: string, _updates: Partial<VspCampaign>): Promise<VspCampaign | undefined> { return undefined; }
+  async deleteVspCampaign(_id: string): Promise<boolean> { return false; }
+
+  // VSP Content Calendar stubs
+  async getVspContentCalendarEvents(): Promise<VspContentCalendar[]> { return []; }
+  async getVspContentCalendarEventsByDateRange(_startDate: string, _endDate: string): Promise<VspContentCalendar[]> { return []; }
+  async createVspContentCalendarEvent(_event: InsertVspContentCalendar): Promise<VspContentCalendar> { throw new Error("Not implemented"); }
+  async updateVspContentCalendarEvent(_id: string, _updates: Partial<VspContentCalendar>): Promise<VspContentCalendar | undefined> { return undefined; }
+  async deleteVspContentCalendarEvent(_id: string): Promise<boolean> { return false; }
+
+  // VSP Content Templates stubs
+  async getVspContentTemplates(): Promise<VspContentTemplate[]> { return []; }
+  async getVspContentTemplatesByCategory(_category: string): Promise<VspContentTemplate[]> { return []; }
+  async createVspContentTemplate(_template: InsertVspContentTemplate): Promise<VspContentTemplate> { throw new Error("Not implemented"); }
+  async updateVspContentTemplate(_id: string, _updates: Partial<VspContentTemplate>): Promise<VspContentTemplate | undefined> { return undefined; }
+  async deleteVspContentTemplate(_id: string): Promise<boolean> { return false; }
+
+  // VSP Campaign Templates stubs
+  async getVspCampaignTemplates(): Promise<VspCampaignTemplate[]> { return []; }
+  async getVspCampaignTemplate(_id: string): Promise<VspCampaignTemplate | undefined> { return undefined; }
+
+  // VSP Bulk Generation Jobs stubs
+  async createVspBulkGenerationJob(_job: InsertVspBulkGenerationJob): Promise<VspBulkGenerationJob> { throw new Error("Not implemented"); }
+  async getVspBulkGenerationJob(_id: string): Promise<VspBulkGenerationJob | undefined> { return undefined; }
+  async updateVspBulkGenerationJob(_id: string, _updates: Partial<VspBulkGenerationJob>): Promise<VspBulkGenerationJob | undefined> { return undefined; }
+
+  // VSP Content Categories stubs
+  async getVspContentCategories(): Promise<VspContentCategory[]> { return []; }
+  async getVspContentCategory(_id: string): Promise<VspContentCategory | undefined> { return undefined; }
+  async createVspContentCategory(_category: InsertVspContentCategory): Promise<VspContentCategory> { throw new Error("Not implemented"); }
+  async updateVspContentCategory(_id: string, _updates: Partial<VspContentCategory>): Promise<VspContentCategory | undefined> { return undefined; }
+  async deleteVspContentCategory(_id: string): Promise<boolean> { return false; }
+
+  // VSP Content Subtopics stubs
+  async getVspContentSubtopics(_categoryId?: string): Promise<VspContentSubtopic[]> { return []; }
+  async getVspContentSubtopic(_id: string): Promise<VspContentSubtopic | undefined> { return undefined; }
+  async createVspContentSubtopic(_subtopic: InsertVspContentSubtopic): Promise<VspContentSubtopic> { throw new Error("Not implemented"); }
+  async updateVspContentSubtopic(_id: string, _updates: Partial<VspContentSubtopic>): Promise<VspContentSubtopic | undefined> { return undefined; }
+  async deleteVspContentSubtopic(_id: string): Promise<boolean> { return false; }
+
+  // VSP Script Styles stubs
+  async getVspScriptStyles(): Promise<VspScriptStyle[]> { return []; }
+  async getVspScriptStyle(_id: string): Promise<VspScriptStyle | undefined> { return undefined; }
+  async createVspScriptStyle(_style: InsertVspScriptStyle): Promise<VspScriptStyle> { throw new Error("Not implemented"); }
+  async updateVspScriptStyle(_id: string, _updates: Partial<VspScriptStyle>): Promise<VspScriptStyle | undefined> { return undefined; }
+  async deleteVspScriptStyle(_id: string): Promise<boolean> { return false; }
+
+  // VSP Caption Styles stubs
+  async getVspCaptionStyles(): Promise<VspCaptionStyle[]> { return []; }
+  async getVspCaptionStyle(_id: string): Promise<VspCaptionStyle | undefined> { return undefined; }
+  async createVspCaptionStyle(_style: InsertVspCaptionStyle): Promise<VspCaptionStyle> { throw new Error("Not implemented"); }
+  async updateVspCaptionStyle(_id: string, _updates: Partial<VspCaptionStyle>): Promise<VspCaptionStyle | undefined> { return undefined; }
+  async deleteVspCaptionStyle(_id: string): Promise<boolean> { return false; }
 }
 
 // Database storage implementation - uses PostgreSQL for persistence
@@ -977,6 +1124,538 @@ export class DatabaseStorage implements IStorage {
   async deleteVideoCaptionPrompt(id: string): Promise<boolean> {
     await db.delete(videoCaptionPrompts).where(eq(videoCaptionPrompts.id, id));
     return true;
+  }
+
+  // ===== VSP Content Projects =====
+  async getVspProjects(): Promise<VspContentProject[]> {
+    // Exclude videoUrl and videoSettings for performance (can contain large base64 data)
+    const results = await db.select({
+      id: vspContentProjects.id,
+      category: vspContentProjects.category,
+      subtopic: vspContentProjects.subtopic,
+      campaignId: vspContentProjects.campaignId,
+      scheduledDate: vspContentProjects.scheduledDate,
+      publishedDate: vspContentProjects.publishedDate,
+      priority: vspContentProjects.priority,
+      isTemplate: vspContentProjects.isTemplate,
+      script: vspContentProjects.script,
+      caption: vspContentProjects.caption,
+      revidProjectId: vspContentProjects.revidProjectId,
+      soraJobId: vspContentProjects.soraJobId,
+      veoOperationName: vspContentProjects.veoOperationName,
+      status: vspContentProjects.status,
+      analytics: vspContentProjects.analytics,
+      createdAt: vspContentProjects.createdAt,
+      updatedAt: vspContentProjects.updatedAt,
+    }).from(vspContentProjects).orderBy(desc(vspContentProjects.updatedAt));
+
+    return results.map(project => ({
+      ...project,
+      videoUrl: null,
+      videoSettings: null,
+      script: project.script as any,
+      caption: project.caption as any,
+      analytics: project.analytics as any,
+    })) as VspContentProject[];
+  }
+
+  async getVspProject(id: string): Promise<VspContentProject | undefined> {
+    const [project] = await db.select().from(vspContentProjects).where(eq(vspContentProjects.id, id));
+    if (!project) return undefined;
+    return {
+      ...project,
+      script: project.script as any,
+      caption: project.caption as any,
+      videoSettings: project.videoSettings as any,
+      analytics: project.analytics as any,
+    } as VspContentProject;
+  }
+
+  async getVspProjectsByDateRange(startDate: string, endDate: string): Promise<VspContentProject[]> {
+    const results = await db.select().from(vspContentProjects)
+      .where(and(
+        gte(vspContentProjects.scheduledDate, startDate),
+        lte(vspContentProjects.scheduledDate, endDate)
+      ))
+      .orderBy(vspContentProjects.scheduledDate);
+    return results.map(project => ({
+      ...project,
+      script: project.script as any,
+      caption: project.caption as any,
+      videoSettings: project.videoSettings as any,
+      analytics: project.analytics as any,
+    })) as VspContentProject[];
+  }
+
+  async createVspProject(insertProject: InsertVspContentProject): Promise<VspContentProject> {
+    const id = randomUUID();
+    const now = new Date();
+    const projectData = {
+      id,
+      category: insertProject.category,
+      subtopic: insertProject.subtopic,
+      script: insertProject.script as any ?? null,
+      caption: insertProject.caption as any ?? null,
+      videoSettings: insertProject.videoSettings as any ?? null,
+      videoUrl: insertProject.videoUrl ?? null,
+      revidProjectId: null,
+      status: insertProject.status ?? "draft",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspContentProjects).values(projectData).returning();
+    return {
+      ...result,
+      script: result.script as any,
+      caption: result.caption as any,
+      videoSettings: result.videoSettings as any,
+      analytics: result.analytics as any,
+    } as VspContentProject;
+  }
+
+  async updateVspProject(id: string, updates: Partial<VspContentProject>): Promise<VspContentProject | undefined> {
+    const [result] = await db.update(vspContentProjects)
+      .set({ ...updates, updatedAt: new Date() } as any)
+      .where(eq(vspContentProjects.id, id))
+      .returning();
+    if (!result) return undefined;
+    return {
+      ...result,
+      script: result.script as any,
+      caption: result.caption as any,
+      videoSettings: result.videoSettings as any,
+      analytics: result.analytics as any,
+    } as VspContentProject;
+  }
+
+  async deleteVspProject(id: string): Promise<boolean> {
+    const results = await db.delete(vspContentProjects).where(eq(vspContentProjects.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== VSP Campaigns =====
+  async getVspCampaigns(): Promise<VspCampaign[]> {
+    const results = await db.select().from(vspCampaigns).orderBy(desc(vspCampaigns.createdAt));
+    return results.map(campaign => ({
+      ...campaign,
+      goals: campaign.goals as any,
+    })) as VspCampaign[];
+  }
+
+  async getVspCampaign(id: string): Promise<VspCampaign | undefined> {
+    const [campaign] = await db.select().from(vspCampaigns).where(eq(vspCampaigns.id, id));
+    if (!campaign) return undefined;
+    return {
+      ...campaign,
+      goals: campaign.goals as any,
+    } as VspCampaign;
+  }
+
+  async getVspActiveCampaigns(): Promise<VspCampaign[]> {
+    const results = await db.select().from(vspCampaigns)
+      .where(eq(vspCampaigns.status, 'active'))
+      .orderBy(vspCampaigns.startDate);
+    return results.map(campaign => ({
+      ...campaign,
+      goals: campaign.goals as any,
+    })) as VspCampaign[];
+  }
+
+  async createVspCampaign(insertCampaign: InsertVspCampaign): Promise<VspCampaign> {
+    const id = randomUUID();
+    const now = new Date();
+    const campaignData = {
+      id,
+      name: insertCampaign.name,
+      description: insertCampaign.description ?? null,
+      startDate: insertCampaign.startDate,
+      endDate: insertCampaign.endDate,
+      status: insertCampaign.status ?? "planning",
+      goals: insertCampaign.goals as any ?? null,
+      color: insertCampaign.color ?? "#3b82f6",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspCampaigns).values(campaignData).returning();
+    return {
+      ...result,
+      goals: result.goals as any,
+    } as VspCampaign;
+  }
+
+  async updateVspCampaign(id: string, updates: Partial<VspCampaign>): Promise<VspCampaign | undefined> {
+    const [result] = await db.update(vspCampaigns)
+      .set({ ...updates, updatedAt: new Date() } as any)
+      .where(eq(vspCampaigns.id, id))
+      .returning();
+    if (!result) return undefined;
+    return {
+      ...result,
+      goals: result.goals as any,
+    } as VspCampaign;
+  }
+
+  async deleteVspCampaign(id: string): Promise<boolean> {
+    // Delete associated content projects first
+    await db.delete(vspContentProjects).where(eq(vspContentProjects.campaignId, id));
+    const results = await db.delete(vspCampaigns).where(eq(vspCampaigns.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== VSP Content Calendar =====
+  async getVspContentCalendarEvents(): Promise<VspContentCalendar[]> {
+    return db.select().from(vspContentCalendar).orderBy(vspContentCalendar.scheduledDate);
+  }
+
+  async getVspContentCalendarEventsByDateRange(startDate: string, endDate: string): Promise<VspContentCalendar[]> {
+    return db.select().from(vspContentCalendar)
+      .where(and(
+        gte(vspContentCalendar.scheduledDate, startDate),
+        lte(vspContentCalendar.scheduledDate, endDate)
+      ))
+      .orderBy(vspContentCalendar.scheduledDate);
+  }
+
+  async createVspContentCalendarEvent(insertEvent: InsertVspContentCalendar): Promise<VspContentCalendar> {
+    const id = randomUUID();
+    const now = new Date();
+    const eventData = {
+      id,
+      title: insertEvent.title,
+      description: insertEvent.description ?? null,
+      scheduledDate: insertEvent.scheduledDate,
+      category: insertEvent.category,
+      subtopic: insertEvent.subtopic,
+      campaignId: insertEvent.campaignId ?? null,
+      projectId: null,
+      status: insertEvent.status ?? "planned",
+      notes: insertEvent.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspContentCalendar).values(eventData).returning();
+    return result;
+  }
+
+  async updateVspContentCalendarEvent(id: string, updates: Partial<VspContentCalendar>): Promise<VspContentCalendar | undefined> {
+    const [result] = await db.update(vspContentCalendar)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vspContentCalendar.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteVspContentCalendarEvent(id: string): Promise<boolean> {
+    const results = await db.delete(vspContentCalendar).where(eq(vspContentCalendar.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== VSP Content Templates =====
+  async getVspContentTemplates(): Promise<VspContentTemplate[]> {
+    return db.select().from(vspContentTemplates).orderBy(desc(vspContentTemplates.usageCount));
+  }
+
+  async getVspContentTemplatesByCategory(category: string): Promise<VspContentTemplate[]> {
+    return db.select().from(vspContentTemplates)
+      .where(eq(vspContentTemplates.category, category))
+      .orderBy(desc(vspContentTemplates.usageCount));
+  }
+
+  async createVspContentTemplate(insertTemplate: InsertVspContentTemplate): Promise<VspContentTemplate> {
+    const id = randomUUID();
+    const now = new Date();
+    const templateData = {
+      id,
+      name: insertTemplate.name,
+      category: insertTemplate.category,
+      subtopic: insertTemplate.subtopic,
+      scriptTemplate: insertTemplate.scriptTemplate,
+      captionTemplate: insertTemplate.captionTemplate ?? null,
+      tags: insertTemplate.tags as any ?? [],
+      isPublic: insertTemplate.isPublic ?? false,
+      usageCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspContentTemplates).values(templateData).returning();
+    return result;
+  }
+
+  async updateVspContentTemplate(id: string, updates: Partial<VspContentTemplate>): Promise<VspContentTemplate | undefined> {
+    const [result] = await db.update(vspContentTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vspContentTemplates.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteVspContentTemplate(id: string): Promise<boolean> {
+    const results = await db.delete(vspContentTemplates).where(eq(vspContentTemplates.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== VSP Campaign Templates (hardcoded static data) =====
+  async getVspCampaignTemplates(): Promise<VspCampaignTemplate[]> {
+    return [
+      {
+        id: "viral-trends",
+        name: "Viral Trends",
+        description: "Capitalize on trending topics and hashtags",
+        category: "Entertainment",
+        duration: 30,
+        contentFrequency: 3,
+        contentMix: { mainTheme: 70, related: 20, engagement: 10 },
+        contentTypes: ['script', 'caption'],
+        schedulingPattern: {
+          daysOfWeek: [1, 2, 3, 4, 5],
+          times: ["09:00", "15:00", "21:00"],
+          spacing: 'peak-focus' as const,
+        },
+        subtopics: [
+          "Social Media Trends",
+          "Viral Challenges",
+          "Pop Culture Moments",
+          "Entertainment News",
+          "Celebrity Updates",
+        ],
+        goals: {
+          targetViews: 100000,
+          targetEngagement: 5,
+          platforms: ["TikTok", "Instagram"],
+          objectives: ["Viral", "Trending"],
+        },
+        isPublic: true,
+        usageCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "educational-series",
+        name: "Educational Series",
+        description: "Build authority with educational content",
+        category: "Business",
+        duration: 60,
+        contentFrequency: 1,
+        contentMix: { mainTheme: 80, related: 15, engagement: 5 },
+        contentTypes: ['script', 'caption'],
+        schedulingPattern: {
+          daysOfWeek: [1, 3, 5],
+          times: ["10:00", "16:00"],
+          spacing: 'even' as const,
+        },
+        subtopics: [
+          "Personal Growth & Development",
+          "Self-Improvement Tips",
+          "Mindset & Psychology",
+          "Life Skills & Learning",
+          "Success Habits",
+        ],
+        goals: {
+          targetViews: 50000,
+          targetEngagement: 8,
+          platforms: ["YouTube", "TikTok"],
+          objectives: ["Educational", "Authority"],
+        },
+        isPublic: true,
+        usageCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ] as VspCampaignTemplate[];
+  }
+
+  async getVspCampaignTemplate(id: string): Promise<VspCampaignTemplate | undefined> {
+    const templates = await this.getVspCampaignTemplates();
+    return templates.find(t => t.id === id);
+  }
+
+  // ===== VSP Bulk Generation Jobs =====
+  async createVspBulkGenerationJob(job: InsertVspBulkGenerationJob): Promise<VspBulkGenerationJob> {
+    const id = randomUUID();
+    const now = new Date();
+    const jobData = {
+      id,
+      campaignId: job.campaignId,
+      templateId: job.templateId || null,
+      status: job.status ?? "pending",
+      totalItems: job.totalItems,
+      completedItems: 0,
+      failedItems: 0,
+      generationType: job.generationType,
+      scheduledDates: job.scheduledDates ?? null,
+      progress: null,
+      errors: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspBulkGenerationJobs).values(jobData).returning();
+    return result;
+  }
+
+  async getVspBulkGenerationJob(id: string): Promise<VspBulkGenerationJob | undefined> {
+    const [job] = await db.select().from(vspBulkGenerationJobs).where(eq(vspBulkGenerationJobs.id, id));
+    return job || undefined;
+  }
+
+  async updateVspBulkGenerationJob(id: string, updates: Partial<VspBulkGenerationJob>): Promise<VspBulkGenerationJob | undefined> {
+    const [result] = await db.update(vspBulkGenerationJobs)
+      .set({ ...updates, updatedAt: new Date() } as any)
+      .where(eq(vspBulkGenerationJobs.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  // ===== VSP Content Categories =====
+  async getVspContentCategories(): Promise<VspContentCategory[]> {
+    return db.select().from(vspContentCategories).orderBy(vspContentCategories.sortOrder, vspContentCategories.name);
+  }
+
+  async getVspContentCategory(id: string): Promise<VspContentCategory | undefined> {
+    const [category] = await db.select().from(vspContentCategories).where(eq(vspContentCategories.id, id));
+    return category;
+  }
+
+  async createVspContentCategory(category: InsertVspContentCategory): Promise<VspContentCategory> {
+    const id = randomUUID();
+    const now = new Date();
+    const categoryData = {
+      id,
+      ...category,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspContentCategories).values(categoryData).returning();
+    return result;
+  }
+
+  async updateVspContentCategory(id: string, updates: Partial<VspContentCategory>): Promise<VspContentCategory | undefined> {
+    const [result] = await db.update(vspContentCategories)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vspContentCategories.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteVspContentCategory(id: string): Promise<boolean> {
+    const results = await db.delete(vspContentCategories).where(eq(vspContentCategories.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== VSP Content Subtopics =====
+  async getVspContentSubtopics(categoryId?: string): Promise<VspContentSubtopic[]> {
+    if (categoryId) {
+      return db.select().from(vspContentSubtopics)
+        .where(eq(vspContentSubtopics.categoryId, categoryId))
+        .orderBy(vspContentSubtopics.sortOrder, vspContentSubtopics.name);
+    }
+    return db.select().from(vspContentSubtopics).orderBy(vspContentSubtopics.sortOrder, vspContentSubtopics.name);
+  }
+
+  async getVspContentSubtopic(id: string): Promise<VspContentSubtopic | undefined> {
+    const [subtopic] = await db.select().from(vspContentSubtopics).where(eq(vspContentSubtopics.id, id));
+    return subtopic;
+  }
+
+  async createVspContentSubtopic(subtopic: InsertVspContentSubtopic): Promise<VspContentSubtopic> {
+    const id = randomUUID();
+    const now = new Date();
+    const subtopicData = {
+      id,
+      ...subtopic,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspContentSubtopics).values(subtopicData).returning();
+    return result;
+  }
+
+  async updateVspContentSubtopic(id: string, updates: Partial<VspContentSubtopic>): Promise<VspContentSubtopic | undefined> {
+    const [result] = await db.update(vspContentSubtopics)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vspContentSubtopics.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteVspContentSubtopic(id: string): Promise<boolean> {
+    const results = await db.delete(vspContentSubtopics).where(eq(vspContentSubtopics.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== VSP Script Styles =====
+  async getVspScriptStyles(): Promise<VspScriptStyle[]> {
+    return db.select().from(vspScriptStyles)
+      .where(eq(vspScriptStyles.isActive, true))
+      .orderBy(vspScriptStyles.sortOrder, vspScriptStyles.name);
+  }
+
+  async getVspScriptStyle(id: string): Promise<VspScriptStyle | undefined> {
+    const [style] = await db.select().from(vspScriptStyles).where(eq(vspScriptStyles.id, id));
+    return style;
+  }
+
+  async createVspScriptStyle(style: InsertVspScriptStyle): Promise<VspScriptStyle> {
+    const id = randomUUID();
+    const now = new Date();
+    const styleData = {
+      id,
+      ...style,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspScriptStyles).values(styleData).returning();
+    return result;
+  }
+
+  async updateVspScriptStyle(id: string, updates: Partial<VspScriptStyle>): Promise<VspScriptStyle | undefined> {
+    const [result] = await db.update(vspScriptStyles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vspScriptStyles.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteVspScriptStyle(id: string): Promise<boolean> {
+    const results = await db.delete(vspScriptStyles).where(eq(vspScriptStyles.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== VSP Caption Styles =====
+  async getVspCaptionStyles(): Promise<VspCaptionStyle[]> {
+    return db.select().from(vspCaptionStyles)
+      .where(eq(vspCaptionStyles.isActive, true))
+      .orderBy(vspCaptionStyles.sortOrder, vspCaptionStyles.name);
+  }
+
+  async getVspCaptionStyle(id: string): Promise<VspCaptionStyle | undefined> {
+    const [style] = await db.select().from(vspCaptionStyles).where(eq(vspCaptionStyles.id, id));
+    return style;
+  }
+
+  async createVspCaptionStyle(style: InsertVspCaptionStyle): Promise<VspCaptionStyle> {
+    const id = randomUUID();
+    const now = new Date();
+    const styleData = {
+      id,
+      ...style,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const [result] = await db.insert(vspCaptionStyles).values(styleData).returning();
+    return result;
+  }
+
+  async updateVspCaptionStyle(id: string, updates: Partial<VspCaptionStyle>): Promise<VspCaptionStyle | undefined> {
+    const [result] = await db.update(vspCaptionStyles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(vspCaptionStyles.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteVspCaptionStyle(id: string): Promise<boolean> {
+    const results = await db.delete(vspCaptionStyles).where(eq(vspCaptionStyles.id, id)).returning();
+    return results.length > 0;
   }
 }
 
