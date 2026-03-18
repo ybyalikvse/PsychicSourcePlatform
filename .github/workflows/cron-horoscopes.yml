@@ -21,7 +21,30 @@ on:
           - monthly
 
 jobs:
+  determine-type:
+    runs-on: ubuntu-latest
+    outputs:
+      horoscope_type: ${{ steps.type.outputs.type }}
+    steps:
+      - name: Determine horoscope type
+        id: type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "type=${{ github.event.inputs.type }}" >> $GITHUB_OUTPUT
+          else
+            CRON="${{ github.event.schedule }}"
+            if [ "$CRON" = "0 10 1 * *" ]; then
+              echo "type=monthly" >> $GITHUB_OUTPUT
+            elif [ "$CRON" = "0 10 * * 1" ]; then
+              echo "type=weekly" >> $GITHUB_OUTPUT
+            else
+              echo "type=daily" >> $GITHUB_OUTPUT
+            fi
+          fi
+          echo "Horoscope type: $(cat $GITHUB_OUTPUT)"
+
   generate:
+    needs: determine-type
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 2
@@ -41,33 +64,20 @@ jobs:
           - Capricorn
           - Aquarius
           - Pisces
+    env:
+      HOROSCOPE_TYPE: ${{ needs.determine-type.outputs.horoscope_type }}
     steps:
-      - name: Determine horoscope type
-        id: type
+      - name: Generate ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) - ${{ needs.determine-type.outputs.horoscope_type }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "type=${{ github.event.inputs.type }}" >> $GITHUB_OUTPUT
-          else
-            CRON="${{ github.event.schedule }}"
-            if [ "$CRON" = "0 10 1 * *" ]; then
-              echo "type=monthly" >> $GITHUB_OUTPUT
-            elif [ "$CRON" = "0 10 * * 1" ]; then
-              echo "type=weekly" >> $GITHUB_OUTPUT
-            else
-              echo "type=daily" >> $GITHUB_OUTPUT
-            fi
-          fi
+          echo "Type: $HOROSCOPE_TYPE"
 
-      - name: Generate ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }})
-        run: |
-          # For daily, generate today + next 3 days
-          if [ "${{ steps.type.outputs.type }}" = "daily" ]; then
+          if [ "$HOROSCOPE_TYPE" = "daily" ]; then
             for DAYS_AHEAD in 0 1 2 3; do
               echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) +${DAYS_AHEAD} days..."
-              HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+              HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 \
                 -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
                 -H "Content-Type: application/json" \
-                -d "{\"type\":\"${{ steps.type.outputs.type }}\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\",\"daysAhead\":${DAYS_AHEAD}}")
+                -d "{\"type\":\"daily\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\",\"daysAhead\":${DAYS_AHEAD}}")
               if [ "$HTTP_CODE" = "200" ]; then
                 echo "  ✓ Success"
               else
@@ -76,11 +86,11 @@ jobs:
               sleep 2
             done
           else
-            echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }})..."
-            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) - $HOROSCOPE_TYPE..."
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 \
               -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
               -H "Content-Type: application/json" \
-              -d "{\"type\":\"${{ steps.type.outputs.type }}\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\"}")
+              -d "{\"type\":\"${HOROSCOPE_TYPE}\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\"}")
             if [ "$HTTP_CODE" = "200" ]; then
               echo "  ✓ Success"
             else
