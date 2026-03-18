@@ -29,6 +29,7 @@ interface BriefItem {
   estimated_length?: string;
   difficulty?: string;
   notes_for_creator?: string;
+  videoRequestId?: string;
 }
 
 interface Brief {
@@ -362,34 +363,50 @@ export default function CiBriefs() {
                         {brief.briefData.map((item, index) => {
                           const existingScript = getScriptForItem(brief.id, index);
                           return (
-                            <Card key={index} className="border-dashed">
+                            <Card key={index} className={item.videoRequestId ? "border-green-200 bg-green-50/30" : "border-dashed"}>
                               <CardContent className="pt-4 space-y-3">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="flex-1">
-                                    <h4 className="font-semibold">{item.title}</h4>
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-semibold">{item.title}</h4>
+                                      {item.videoRequestId && (
+                                        <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">
+                                          ✓ Video Request Created
+                                        </Badge>
+                                      )}
+                                    </div>
                                     <p className="text-sm text-muted-foreground mt-1">
                                       {item.topic_description}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <Button
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        convertBriefToVideoRequestMutation.mutate({
-                                          briefId: String(brief.id),
-                                          itemIndex: index,
-                                        });
-                                      }}
-                                      disabled={convertBriefToVideoRequestMutation.isPending}
-                                    >
-                                      {convertBriefToVideoRequestMutation.isPending ? (
-                                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                                      ) : (
-                                        <Video className="h-4 w-4 mr-1" />
-                                      )}
-                                      Convert to Video Request
-                                    </Button>
+                                    {item.videoRequestId ? (
+                                      <Link href={`/video-requests/${item.videoRequestId}`}>
+                                        <Button size="sm" variant="outline">
+                                          <Video className="h-4 w-4 mr-1" />
+                                          View Request
+                                        </Button>
+                                      </Link>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          convertBriefToVideoRequestMutation.mutate({
+                                            briefId: String(brief.id),
+                                            itemIndex: index,
+                                          });
+                                        }}
+                                        disabled={convertBriefToVideoRequestMutation.isPending}
+                                      >
+                                        {convertBriefToVideoRequestMutation.isPending ? (
+                                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                        ) : (
+                                          <Video className="h-4 w-4 mr-1" />
+                                        )}
+                                        Convert to Video Request
+                                      </Button>
+                                    )}
                                     <Button
                                       size="sm"
                                       variant="outline"

@@ -973,6 +973,11 @@ export function registerCiRoutes(app: Express) {
         status: "available",
       });
 
+      // Mark the brief item as converted by updating briefData
+      const updatedItems = [...items];
+      updatedItems[itemIndex] = { ...item, videoRequestId: videoRequest.id };
+      await storage.updateCiContentBrief(brief.id, { briefData: updatedItems });
+
       res.json({ success: true, videoRequestId: videoRequest.id });
     } catch (error: any) {
       console.error("[CI] Error converting brief to video request:", error);
