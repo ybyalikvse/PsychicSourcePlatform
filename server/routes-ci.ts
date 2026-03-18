@@ -57,7 +57,17 @@ export function registerCiRoutes(app: Express) {
 
   router.patch("/competitors/:id", async (req, res) => {
     try {
-      const competitor = await storage.updateCiCompetitor(req.params.id, req.body);
+      const { handle, displayName, platform, isActive, notes } = req.body;
+      const updates: any = {};
+      if (handle !== undefined) updates.handle = handle;
+      if (displayName !== undefined) updates.displayName = displayName;
+      if (platform !== undefined) updates.platform = platform;
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (notes !== undefined) updates.notes = notes;
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+      const competitor = await storage.updateCiCompetitor(req.params.id, updates);
       if (!competitor) {
         return res.status(404).json({ error: "Competitor not found" });
       }
