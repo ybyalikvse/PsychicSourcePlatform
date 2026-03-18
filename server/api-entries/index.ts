@@ -16,6 +16,21 @@ app.use(
 
 app.use(express.urlencoded({ extended: false, limit: "4mb" }));
 
+// Diagnostic endpoint — check env vars without hitting the database
+app.get("/api/health", (_req: any, res: any) => {
+  const dbUrl = process.env.DATABASE_URL || "";
+  res.json({
+    ok: true,
+    env: {
+      DATABASE_URL: dbUrl ? dbUrl.replace(/:[^@]+@/, ":***@") : "NOT SET",
+      FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "NOT SET",
+      VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID || "NOT SET",
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ? "SET" : "NOT SET",
+      NODE_ENV: process.env.NODE_ENV || "NOT SET",
+    },
+  });
+});
+
 let initialized = false;
 
 async function ensureInitialized() {
