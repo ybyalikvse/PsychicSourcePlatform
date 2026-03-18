@@ -57,7 +57,8 @@ Period: ${periodLabel}
 ${languageInstruction}
 
 Generate ONLY the horoscope text content for ${sign}. No title, no sign name, no labels — just the horoscope paragraph(s). Keep it engaging, personal, and specific to ${sign}'s traits.
-Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if the prompt requests them. Output clean HTML with no CSS, no classes, no inline styles. Only use <p> and <h3> tags.`;
+
+OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown ## headings). Wrap all paragraphs in <p> tags. Do NOT use markdown formatting. No CSS, no classes, no inline styles. Only use <p>, <h2>, and <h3> tags.`;
 
   const openai = new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
@@ -70,7 +71,15 @@ Wrap each paragraph in <p> tags. You may use <h3> tags for section headings if t
     max_tokens: type === "daily" ? 4096 : 8192,
     temperature: 0.85,
   });
-  return response.choices[0]?.message?.content?.trim() || "";
+  let content = response.choices[0]?.message?.content?.trim() || "";
+
+  // Post-process: convert any markdown headings to HTML
+  content = content.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  content = content.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  // Wrap bare text lines in <p> tags if they aren't already wrapped
+  content = content.replace(/^(?!<[hpo])((?!<).+)$/gm, '<p>$1</p>');
+
+  return content;
 }
 
 const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
