@@ -178,6 +178,7 @@ export function registerCiRoutes(app: Express) {
         lastScrapedAt: new Date().toISOString(),
       });
 
+      await storage.upsertCiSetting("pipeline_last_run_scrape", new Date().toISOString());
       res.json({ success: true, saved, skipped, total: videos.length });
     } catch (error) {
       console.error("[CI] Pipeline scrape error:", error);
@@ -483,6 +484,197 @@ export function registerCiRoutes(app: Express) {
     } catch (error) {
       console.error("[CI] Pipeline performance-report error:", error);
       res.status(500).json({ error: "Performance report generation failed" });
+    }
+  });
+
+  // ============================================================
+  // PIPELINE STATUS & MANUAL TRIGGERS (no auth required — admin UI)
+  // ============================================================
+
+  // Get last-run timestamps for all pipeline steps
+  router.get("/pipeline/status", async (_req, res) => {
+    try {
+      const steps = ["scrape", "transcripts", "analyze", "brief", "scripts", "performance"];
+      const status: Record<string, string | null> = {};
+      for (const step of steps) {
+        const setting = await storage.getCiSetting(`pipeline_last_run_${step}`);
+        status[step] = setting?.value || null;
+      }
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch pipeline status" });
+    }
+  });
+
+  // Run a single pipeline step from the dashboard (no CRON_SECRET needed)
+  router.post("/pipeline/run-step", async (req, res) => {
+    try {
+      const { step } = req.body;
+      if (!["scrape", "transcripts", "analyze", "brief", "scripts", "performance"].includes(step)) {
+        return res.status(400).json({ error: "Invalid step" });
+      }
+
+      // For scrape: run for all active competitors
+      if (step === "scrape") {
+        const competitors = await storage.getCiCompetitors(true);
+        const apiKeySetting = await storage.getCiSetting("scrape_creators_api_key");
+        const apiKey = apiKeySetting?.value || process.env.SCRAPE_CREATORS_API_KEY;
+        if (!apiKey) return res.status(400).json({ error: "ScrapeCreators API key not configured" });
+
+        const minViewsSetting = await storage.getCiSetting("scrape_min_views");
+        const minViews = minViewsSetting ? parseInt(minViewsSetting.value, 10) : 50000;
+        const maxAgeSetting = await storage.getCiSetting("scrape_max_age_days");
+        const maxAgeDays = maxAgeSetting ? parseInt(maxAgeSetting.value, 10) : 30;
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
+
+        let totalSaved = 0;
+        for (const competitor of competitors) {
+          const videos = await scrapeCompetitorVideos(competitor.handle, apiKey, 30);
+          for (const video of videos) {
+            const externalId = video.aweme_id || video.id;
+            if (!externalId) continue;
+            const existing = await storage.getCiScrapedVideoByExternalId(String(externalId));
+            if (existing) continue;
+            const stats = video.statistics || video.stats || {};
+            const views = stats.play_count ?? stats.playCount ?? 0;
+            if (views < minViews) continue;
+            const postedAt = video.create_time || video.createTime;
+            if (postedAt) {
+              const postedDate = new Date(typeof postedAt === "number" ? postedAt * 1000 : postedAt);
+              if (postedDate < cutoffDate) continue;
+            }
+            await storage.createCiScrapedVideo({
+              competitorId: competitor.id,
+              externalVideoId: String(externalId),
+              url: (video.share_url || `https://www.tiktok.com/@${competitor.handle}/video/${externalId}`).split("?")[0],
+              caption: video.desc || null,
+              viewCount: views,
+              likeCount: stats.digg_count ?? 0,
+              commentCount: stats.comment_count ?? 0,
+              shareCount: stats.share_count ?? 0,
+              duration: video.video?.duration ?? null,
+              postedAt: postedAt ? new Date(typeof postedAt === "number" ? postedAt * 1000 : postedAt).toISOString() : null,
+              transcriptStatus: "pending",
+              analysisStatus: "pending",
+              metadata: video,
+            });
+            totalSaved++;
+          }
+          await storage.updateCiCompetitor(competitor.id, { lastScrapedAt: new Date().toISOString() });
+        }
+        await storage.upsertCiSetting(`pipeline_last_run_scrape`, new Date().toISOString());
+        return res.json({ success: true, step, saved: totalSaved, competitors: competitors.length });
+      }
+
+      // For transcripts: process all pending
+      if (step === "transcripts") {
+        const videos = await storage.getCiScrapedVideos({ transcriptStatus: "pending" });
+        const apiKeySetting = await storage.getCiSetting("scrape_creators_api_key");
+        const apiKey = apiKeySetting?.value || process.env.SCRAPE_CREATORS_API_KEY;
+        let fetched = 0;
+        for (const video of videos.slice(0, 50)) {
+          const transcript = await fetchVideoTranscript(video.url, apiKey || "");
+          await storage.updateCiScrapedVideo(video.id, {
+            transcript: transcript || undefined,
+            transcriptStatus: transcript ? "completed" : "failed",
+          } as any);
+          if (transcript) fetched++;
+        }
+        await storage.upsertCiSetting(`pipeline_last_run_transcripts`, new Date().toISOString());
+        return res.json({ success: true, step, fetched, total: videos.length });
+      }
+
+      // For analyze: process all with transcripts
+      if (step === "analyze") {
+        const videos = await storage.getCiScrapedVideos({ transcriptStatus: "completed", analysisStatus: "pending" });
+        const systemPromptSetting = await storage.getCiSetting("analysis_system_prompt");
+        const userPromptSetting = await storage.getCiSetting("analysis_user_prompt");
+        const modelSetting = await storage.getCiSetting("ai_model");
+        const blockedTopicsSetting = await storage.getCiSetting("blocked_topics");
+        const topicCategoriesSetting = await storage.getCiSetting("topic_categories");
+        const hookTypesSetting = await storage.getCiSetting("hook_types");
+
+        if (!systemPromptSetting?.value || !userPromptSetting?.value) {
+          return res.status(400).json({ error: "Analysis prompts not configured" });
+        }
+
+        let userPromptTemplate = userPromptSetting.value;
+        if (blockedTopicsSetting?.value) userPromptTemplate = userPromptTemplate.replace(/{BLOCKED_TOPICS}/g, JSON.parse(blockedTopicsSetting.value).join("\n"));
+        if (topicCategoriesSetting?.value) userPromptTemplate = userPromptTemplate.replace(/{TOPIC_CATEGORIES}/g, JSON.parse(topicCategoriesSetting.value).join("\n"));
+        if (hookTypesSetting?.value) userPromptTemplate = userPromptTemplate.replace(/{HOOK_TYPES}/g, JSON.parse(hookTypesSetting.value).join("\n"));
+
+        let analyzed = 0;
+        for (const video of videos) {
+          try {
+            const competitor = await storage.getCiCompetitor(video.competitorId);
+            const analysis = await analyzeVideo({
+              transcript: video.transcript || "",
+              caption: video.caption || "",
+              viewCount: video.viewCount ?? 0,
+              likeCount: video.likeCount ?? 0,
+              commentCount: video.commentCount ?? 0,
+              shareCount: video.shareCount ?? 0,
+              handle: competitor?.handle || "unknown",
+              platform: competitor?.platform || "tiktok",
+              systemPrompt: systemPromptSetting.value,
+              userPromptTemplate,
+              model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
+            });
+            await storage.createCiVideoAnalysis({
+              scrapedVideoId: video.id,
+              blocked: analysis.blocked || false,
+              blockReason: analysis.block_reason || null,
+              topicCategory: analysis.topic_category || null,
+              topicSummary: analysis.topic_summary || null,
+              hookText: analysis.hook_text || null,
+              hookType: analysis.hook_type || null,
+              hookSummary: analysis.hook_summary || null,
+              emotionalAngle: analysis.emotional_angle || null,
+              targetAudience: analysis.target_audience || null,
+              format: analysis.format || null,
+              ctaType: analysis.cta_type || null,
+              replicationScore: analysis.replication_score || null,
+              notes: analysis.notes || null,
+              rawAnalysis: analysis,
+              weekAdded: getWeekLabel(),
+            });
+            await storage.updateCiScrapedVideo(video.id, { analysisStatus: "completed" } as any);
+            analyzed++;
+          } catch (err) {
+            console.error(`[CI] Failed to analyze video ${video.id}:`, err);
+          }
+        }
+        await storage.upsertCiSetting(`pipeline_last_run_analyze`, new Date().toISOString());
+        return res.json({ success: true, step, analyzed, total: videos.length });
+      }
+
+      // For brief/scripts/performance — delegate to existing pipeline endpoints
+      // (these are small single calls, not loops)
+      if (step === "brief" || step === "scripts" || step === "performance") {
+        const endpoint = step === "brief" ? "/pipeline/generate-brief"
+          : step === "scripts" ? "/pipeline/generate-script"
+          : "/pipeline/performance-report";
+
+        // Call our own endpoint internally
+        const baseUrl = `${req.protocol}://${req.get("host")}`;
+        const pipelineRes = await fetch(`${baseUrl}/api/ci${endpoint}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.CRON_SECRET || ""}`,
+          },
+          body: step === "scripts" ? JSON.stringify({ briefId: req.body.briefId, itemIndex: req.body.itemIndex || 0 }) : "{}",
+        });
+        const result = await pipelineRes.json();
+        await storage.upsertCiSetting(`pipeline_last_run_${step}`, new Date().toISOString());
+        return res.json({ success: pipelineRes.ok, step, ...result });
+      }
+
+      res.status(400).json({ error: "Step not implemented" });
+    } catch (error: any) {
+      console.error("[CI] Run step error:", error?.message || error);
+      res.status(500).json({ error: "Pipeline step failed: " + (error?.message || "Unknown error") });
     }
   });
 

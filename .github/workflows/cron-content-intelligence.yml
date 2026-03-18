@@ -2,8 +2,10 @@ name: Content Intelligence Pipeline
 
 on:
   schedule:
-    # Weekly Monday at 06:00 UTC (1:00 AM ET)
-    - cron: "0 6 * * 1"
+    # Daily at 10:00 UTC (5:00 AM ET) — scrape, transcripts, analyze, brief, scripts
+    - cron: "0 10 * * *"
+    # Weekly Monday at 09:00 UTC (4:00 AM ET) — performance report (runs before daily pipeline)
+    - cron: "0 9 * * 1"
   workflow_dispatch:
     inputs:
       step:
@@ -25,9 +27,9 @@ env:
   AUTH: "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
 
 jobs:
-  # Step 0: Performance feedback on last week's content
+  # Step 0: Performance feedback on last week's content (weekly Monday only, or manual)
   performance:
-    if: ${{ github.event.inputs.step == 'full' || github.event.inputs.step == 'performance' || github.event_name == 'schedule' }}
+    if: ${{ github.event.inputs.step == 'full' || github.event.inputs.step == 'performance' || (github.event_name == 'schedule' && github.event.schedule == '0 9 * * 1') }}
     runs-on: ubuntu-latest
     steps:
       - name: Generate performance report

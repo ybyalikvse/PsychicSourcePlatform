@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,92 +10,113 @@ import {
 import { Link } from "wouter";
 import {
   Users, Video, BarChart3, FileText, Play, Plus, ArrowRight, TrendingUp,
+  Loader2, CheckCircle, Clock, AlertCircle, Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface CiStats {
-  totalCompetitors: number;
-  videosScraped: number;
-  analysesComplete: number;
-  briefsGenerated: number;
+  competitors: number;
+  videos: number;
+  analyses: number;
+  briefs: number;
 }
 
-interface RecentAnalysis {
-  id: number;
-  creator: string;
-  topicCategory: string;
-  hookType: string;
-  views: number;
-  replicationScore: number;
-}
-
-interface LatestBrief {
-  id: number;
-  weekLabel: string;
-  videoCount: number;
-  status: string;
-  topTopics: string[];
-  itemCount: number;
+interface PipelineStatus {
+  scrape: string | null;
+  transcripts: string | null;
+  analyze: string | null;
+  brief: string | null;
+  scripts: string | null;
+  performance: string | null;
 }
 
 export default function CiDashboard() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [runningStep, setRunningStep] = useState<string | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery<CiStats>({
     queryKey: ["/api/ci/stats"],
   });
 
-  const { data: recentAnalyses = [], isLoading: analysesLoading } = useQuery<RecentAnalysis[]>({
-    queryKey: ["/api/ci/stats", "recent-analyses"],
+  const { data: pipelineStatus } = useQuery<PipelineStatus>({
+    queryKey: ["/api/ci/pipeline/status"],
+    refetchInterval: runningStep ? 5000 : 30000,
+  });
+
+  const { data: recentAnalyses = [] } = useQuery<any[]>({
+    queryKey: ["/api/ci/analyses"],
     queryFn: async () => {
-      const res = await fetch("/api/ci/analyses?limit=10", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch analyses");
-      return res.json();
+      const res = await fetch("/api/ci/analyses", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.slice(0, 10);
     },
   });
 
-  const { data: latestBrief, isLoading: briefLoading } = useQuery<LatestBrief | null>({
-    queryKey: ["/api/ci/stats", "latest-brief"],
+  const { data: latestBrief } = useQuery<any>({
+    queryKey: ["/api/ci/briefs", "latest"],
     queryFn: async () => {
-      const res = await fetch("/api/ci/briefs?limit=1", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch brief");
+      const res = await fetch("/api/ci/briefs", { credentials: "include" });
+      if (!res.ok) return null;
       const briefs = await res.json();
       return Array.isArray(briefs) && briefs.length > 0 ? briefs[0] : null;
     },
   });
 
-  const statCards = [
-    {
-      title: "Total Competitors",
-      value: stats?.totalCompetitors ?? 0,
-      icon: Users,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
+  const runStepMutation = useMutation({
+    mutationFn: async (step: string) => {
+      const res = await apiRequest("POST", "/api/ci/pipeline/run-step", { step });
+      return res.json();
     },
-    {
-      title: "Videos Scraped",
-      value: stats?.videosScraped ?? 0,
-      icon: Video,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
+    onSuccess: (data, step) => {
+      toast({ title: `${step} completed`, description: JSON.stringify(data).slice(0, 100) });
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      setRunningStep(null);
     },
-    {
-      title: "Analyses Complete",
-      value: stats?.analysesComplete ?? 0,
-      icon: BarChart3,
-      color: "text-green-600",
-      bg: "bg-green-50",
+    onError: (err: any, step) => {
+      toast({ title: `${step} failed`, description: err.message, variant: "destructive" });
+      setRunningStep(null);
     },
-    {
-      title: "Briefs Generated",
-      value: stats?.briefsGenerated ?? 0,
-      icon: FileText,
-      color: "text-orange-600",
-      bg: "bg-orange-50",
-    },
-  ];
+  });
+
+  const runFullPipeline = async () => {
+    const steps = ["scrape", "transcripts", "analyze", "brief", "scripts"];
+    for (const step of steps) {
+      setRunningStep(step);
+      try {
+        await runStepMutation.mutateAsync(step);
+      } catch {
+        break;
+      }
+    }
+    setRunningStep(null);
+    queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+  };
+
+  const runStep = (step: string) => {
+    setRunningStep(step);
+    runStepMutation.mutate(step);
+  };
+
+  function formatTimestamp(ts: string | null): string {
+    if (!ts) return "Never";
+    const d = new Date(ts);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString();
+  }
 
   function formatViews(views: number): string {
+    if (!views) return "—";
     if (views >= 1_000_000) return `${(views / 1_000_000).toFixed(1)}M`;
     if (views >= 1_000) return `${(views / 1_000).toFixed(1)}K`;
     return String(views);
@@ -106,6 +127,15 @@ export default function CiDashboard() {
     if (score >= 3) return "bg-yellow-100 text-yellow-800";
     return "bg-red-100 text-red-800";
   }
+
+  const pipelineSteps = [
+    { key: "scrape", label: "Scrape", description: "Pull competitor videos" },
+    { key: "transcripts", label: "Transcripts", description: "Get video transcripts" },
+    { key: "analyze", label: "Analyze", description: "AI analyze each video" },
+    { key: "brief", label: "Brief", description: "Generate content brief" },
+    { key: "scripts", label: "Scripts", description: "Write full scripts" },
+    { key: "performance", label: "Performance", description: "Weekly feedback (Mon)" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -118,20 +148,18 @@ export default function CiDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <Button
-            variant="outline"
-            onClick={() =>
-              toast({
-                title: "Pipeline Info",
-                description:
-                  "The CI pipeline runs automatically on schedule. Use the settings page to configure thresholds.",
-              })
-            }
+            onClick={runFullPipeline}
+            disabled={!!runningStep}
           >
-            <Play className="h-4 w-4 mr-2" />
-            Run Pipeline
+            {runningStep ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4 mr-2" />
+            )}
+            {runningStep ? `Running ${runningStep}...` : "Run Full Pipeline"}
           </Button>
           <Link href="/ci/competitors">
-            <Button>
+            <Button variant="outline">
               <Plus className="h-4 w-4 mr-2" />
               Add Competitor
             </Button>
@@ -141,14 +169,16 @@ export default function CiDashboard() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((stat) => (
+        {[
+          { title: "Competitors", value: stats?.competitors ?? 0, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
+          { title: "Videos Scraped", value: stats?.videos ?? 0, icon: Video, color: "text-purple-600", bg: "bg-purple-50" },
+          { title: "Analyses", value: stats?.analyses ?? 0, icon: BarChart3, color: "text-green-600", bg: "bg-green-50" },
+          { title: "Briefs", value: stats?.briefs ?? 0, icon: FileText, color: "text-orange-600", bg: "bg-orange-50" },
+        ].map((stat) => (
           <Card key={stat.title}>
             <CardContent className="pt-6">
               {statsLoading ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-8 w-16" />
-                </div>
+                <Skeleton className="h-12 w-full" />
               ) : (
                 <div className="flex items-center justify-between">
                   <div>
@@ -165,16 +195,59 @@ export default function CiDashboard() {
         ))}
       </div>
 
+      {/* Pipeline Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pipeline Steps</CardTitle>
+          <CardDescription>Run individual steps or the full pipeline. Daily automation runs at 5:00 AM ET.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pipelineSteps.map((step) => {
+              const lastRun = pipelineStatus?.[step.key as keyof PipelineStatus];
+              const isRunning = runningStep === step.key;
+              return (
+                <div key={step.key} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {lastRun ? (
+                        <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      ) : (
+                        <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      )}
+                      <span className="font-medium text-sm">{step.label}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 ml-6">{step.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 ml-6">
+                      Last run: {formatTimestamp(lastRun || null)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runStep(step.key)}
+                    disabled={!!runningStep}
+                  >
+                    {isRunning ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Play className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Analyses Table */}
+        {/* Recent Analyses */}
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Recent Analyses</CardTitle>
-                  <CardDescription>Last 10 analyzed competitor videos</CardDescription>
-                </div>
+                <CardTitle>Recent Analyses</CardTitle>
                 <Link href="/ci/analyses">
                   <Button variant="ghost" size="sm">
                     View All <ArrowRight className="h-4 w-4 ml-1" />
@@ -183,15 +256,9 @@ export default function CiDashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              {analysesLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
-                  ))}
-                </div>
-              ) : recentAnalyses.length === 0 ? (
+              {recentAnalyses.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  No analyses yet. Add competitors and run the pipeline to get started.
+                  No analyses yet. Add competitors and run the pipeline.
                 </p>
               ) : (
                 <Table>
@@ -199,30 +266,20 @@ export default function CiDashboard() {
                     <TableRow>
                       <TableHead>Creator</TableHead>
                       <TableHead>Topic</TableHead>
-                      <TableHead>Hook Type</TableHead>
+                      <TableHead>Hook</TableHead>
                       <TableHead className="text-right">Views</TableHead>
                       <TableHead className="text-center">Score</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {recentAnalyses.map((analysis) => (
-                      <TableRow key={analysis.id}>
-                        <TableCell className="font-medium">
-                          {analysis.creator}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{analysis.topicCategory}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{analysis.hookType}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatViews(analysis.views)}
-                        </TableCell>
+                    {recentAnalyses.map((a: any) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="font-medium">{a.creator ? `@${a.creator}` : "—"}</TableCell>
+                        <TableCell><Badge variant="outline">{a.topicCategory}</Badge></TableCell>
+                        <TableCell><Badge variant="secondary">{a.hookType}</Badge></TableCell>
+                        <TableCell className="text-right">{formatViews(a.views)}</TableCell>
                         <TableCell className="text-center">
-                          <Badge className={getScoreColor(analysis.replicationScore)}>
-                            {analysis.replicationScore}/5
-                          </Badge>
+                          <Badge className={getScoreColor(a.replicationScore)}>{a.replicationScore}/5</Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -233,101 +290,51 @@ export default function CiDashboard() {
           </Card>
         </div>
 
-        {/* Latest Brief Summary */}
-        <div>
+        {/* Latest Brief + Quick Links */}
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Latest Brief</CardTitle>
-                  <CardDescription>Most recent weekly brief</CardDescription>
-                </div>
+                <CardTitle>Latest Brief</CardTitle>
                 <Link href="/ci/briefs">
-                  <Button variant="ghost" size="sm">
-                    All Briefs <ArrowRight className="h-4 w-4 ml-1" />
-                  </Button>
+                  <Button variant="ghost" size="sm">All <ArrowRight className="h-4 w-4 ml-1" /></Button>
                 </Link>
               </div>
             </CardHeader>
             <CardContent>
-              {briefLoading ? (
+              {latestBrief ? (
                 <div className="space-y-3">
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-full" />
-                </div>
-              ) : latestBrief ? (
-                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-lg font-semibold">{latestBrief.weekLabel}</p>
-                    <Badge variant={latestBrief.status === "complete" ? "default" : "secondary"}>
-                      {latestBrief.status}
-                    </Badge>
+                    <p className="font-semibold">{latestBrief.weekLabel}</p>
+                    <Badge>{latestBrief.status}</Badge>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-muted/50 rounded-lg text-center">
-                      <p className="text-2xl font-bold">{latestBrief.videoCount}</p>
-                      <p className="text-xs text-muted-foreground">Videos Analyzed</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-muted/50 rounded text-center">
+                      <p className="text-xl font-bold">{latestBrief.videoCount || 0}</p>
+                      <p className="text-xs text-muted-foreground">Videos</p>
                     </div>
-                    <div className="p-3 bg-muted/50 rounded-lg text-center">
-                      <p className="text-2xl font-bold">{latestBrief.itemCount}</p>
-                      <p className="text-xs text-muted-foreground">Brief Items</p>
+                    <div className="p-2 bg-muted/50 rounded text-center">
+                      <p className="text-xl font-bold">{Array.isArray(latestBrief.briefData) ? latestBrief.briefData.length : 0}</p>
+                      <p className="text-xs text-muted-foreground">Briefs</p>
                     </div>
                   </div>
-                  {latestBrief.topTopics && latestBrief.topTopics.length > 0 && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Top Topics</p>
-                      <div className="flex flex-wrap gap-1">
-                        {latestBrief.topTopics.map((topic, i) => (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            {topic}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    No briefs generated yet. Run the pipeline to create your first brief.
-                  </p>
+                <div className="text-center py-6">
+                  <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No briefs yet. Run the pipeline.</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Quick Navigation */}
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="text-base">Quick Links</CardTitle>
-            </CardHeader>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Quick Links</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              <Link href="/ci/competitors">
-                <Button variant="outline" className="w-full justify-start">
-                  <Users className="h-4 w-4 mr-2" />
-                  Manage Competitors
-                </Button>
-              </Link>
-              <Link href="/ci/analyses">
-                <Button variant="outline" className="w-full justify-start">
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  View Analyses
-                </Button>
-              </Link>
-              <Link href="/ci/briefs">
-                <Button variant="outline" className="w-full justify-start">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Content Briefs
-                </Button>
-              </Link>
-              <Link href="/ci/settings">
-                <Button variant="outline" className="w-full justify-start">
-                  <Play className="h-4 w-4 mr-2" />
-                  CI Settings
-                </Button>
-              </Link>
+              <Link href="/ci/competitors"><Button variant="outline" className="w-full justify-start"><Users className="h-4 w-4 mr-2" />Competitors</Button></Link>
+              <Link href="/ci/analyses"><Button variant="outline" className="w-full justify-start"><BarChart3 className="h-4 w-4 mr-2" />Analyses</Button></Link>
+              <Link href="/ci/briefs"><Button variant="outline" className="w-full justify-start"><FileText className="h-4 w-4 mr-2" />Briefs</Button></Link>
+              <Link href="/ci/settings"><Button variant="outline" className="w-full justify-start"><Play className="h-4 w-4 mr-2" />Settings</Button></Link>
             </CardContent>
           </Card>
         </div>
