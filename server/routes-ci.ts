@@ -57,12 +57,12 @@ export function registerCiRoutes(app: Express) {
 
   router.patch("/competitors/:id", async (req, res) => {
     try {
-      const { handle, displayName, platform, isActive, notes } = req.body;
+      const { handle, displayName, display_name, platform, isActive, active, is_active, notes } = req.body;
       const updates: any = {};
       if (handle !== undefined) updates.handle = handle;
-      if (displayName !== undefined) updates.displayName = displayName;
+      if (displayName !== undefined || display_name !== undefined) updates.displayName = displayName ?? display_name;
       if (platform !== undefined) updates.platform = platform;
-      if (isActive !== undefined) updates.isActive = isActive;
+      if (isActive !== undefined || active !== undefined || is_active !== undefined) updates.isActive = isActive ?? active ?? is_active;
       if (notes !== undefined) updates.notes = notes;
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });
