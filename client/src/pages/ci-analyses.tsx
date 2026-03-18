@@ -54,6 +54,9 @@ const SCORE_OPTIONS = [
 ];
 
 function formatLabel(value: string): string {
+  // If already has spaces/proper case, return as-is
+  if (value.includes(" ") || value.includes("&")) return value;
+  // Otherwise convert snake_case to Title Case
   return value.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
