@@ -87,7 +87,7 @@ jobs:
             done
           else
             echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) - $HOROSCOPE_TYPE..."
-            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 \
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
               -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
               -H "Content-Type: application/json" \
               -d "{\"type\":\"${HOROSCOPE_TYPE}\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\"}")
