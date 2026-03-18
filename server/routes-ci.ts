@@ -835,6 +835,7 @@ export function registerCiRoutes(app: Express) {
           comments: video?.commentCount ?? 0,
           postedAt: video?.postedAt || null,
           transcriptPreview: video?.transcript ? video.transcript.substring(0, 200) + (video.transcript.length > 200 ? "..." : "") : null,
+          transcript: video?.transcript || null,
         };
       }));
 

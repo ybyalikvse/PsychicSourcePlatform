@@ -15,7 +15,11 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, ChevronDown, ChevronRight, BarChart3, Filter, Play, Loader2, CheckCircle, Clock, Trash2, ExternalLink } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { ArrowLeft, ChevronDown, ChevronRight, BarChart3, Filter, Play, Loader2, CheckCircle, Clock, Trash2, ExternalLink, FileText } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -41,6 +45,7 @@ interface Analysis {
   comments: number;
   postedAt: string | null;
   transcriptPreview: string | null;
+  transcript: string | null;
 }
 
 interface CiVideo {
@@ -478,11 +483,23 @@ export default function CiAnalyses() {
                                   </p>
                                 </div>
                               </div>
-                              {analysis.transcriptPreview && (
-                                <div className="p-3 bg-muted/50 rounded-lg">
-                                  <p className="text-xs font-medium text-muted-foreground mb-1">Transcript Preview</p>
-                                  <p className="text-sm text-muted-foreground">{analysis.transcriptPreview}</p>
-                                </div>
+                              {analysis.transcript && (
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                      <FileText className="h-4 w-4 mr-1" />
+                                      View Transcript
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-2xl max-h-[80vh]">
+                                    <DialogHeader>
+                                      <DialogTitle>Video Transcript — @{analysis.creator}</DialogTitle>
+                                    </DialogHeader>
+                                    <ScrollArea className="max-h-[60vh]">
+                                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{analysis.transcript}</p>
+                                    </ScrollArea>
+                                  </DialogContent>
+                                </Dialog>
                               )}
                             </div>
                           </TableCell>
