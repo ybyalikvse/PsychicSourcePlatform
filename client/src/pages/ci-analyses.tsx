@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, ChevronDown, ChevronRight, BarChart3, Filter } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, BarChart3, Filter, Play, Loader2, CheckCircle, Clock } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -62,9 +63,42 @@ function formatLabel(value: string): string {
 
 export default function CiAnalyses() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [topicFilter, setTopicFilter] = useState("all");
   const [hookFilter, setHookFilter] = useState("all");
   const [scoreFilter, setScoreFilter] = useState("0");
+  const [runningStep, setRunningStep] = useState<string | null>(null);
+
+  const { data: pipelineStatus } = useQuery<Record<string, string | null>>({
+    queryKey: ["/api/ci/pipeline/status"],
+  });
+
+  const runStepMutation = useMutation({
+    mutationFn: async (step: string) => {
+      const res = await apiRequest("POST", "/api/ci/pipeline/run-step", { step });
+      return res.json();
+    },
+    onSuccess: (_data, step) => {
+      toast({ title: `${step} completed` });
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      setRunningStep(null);
+    },
+    onError: (err: Error, step) => {
+      toast({ title: `${step} failed`, description: err.message, variant: "destructive" });
+      setRunningStep(null);
+    },
+  });
+
+  function formatTimestamp(ts: string | null | undefined): string {
+    if (!ts) return "Never";
+    const d = new Date(ts);
+    const diffMs = Date.now() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    return `${Math.floor(diffMins / 1440)}d ago`;
+  }
 
   // Load dynamic filter options from CI settings
   const { data: settings } = useQuery<Array<{ key: string; value: string }>>({
@@ -161,11 +195,26 @@ export default function CiAnalyses() {
             <p className="text-muted-foreground">Browse and filter analyzed competitor videos</p>
           </div>
         </div>
-        {hasActiveFilters && (
-          <Button variant="outline" size="sm" onClick={clearFilters}>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mr-2">
+            {pipelineStatus?.analyze ? <CheckCircle className="h-3 w-3 text-green-500" /> : <Clock className="h-3 w-3" />}
+            Analyze: {formatTimestamp(pipelineStatus?.analyze)}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setRunningStep("analyze"); runStepMutation.mutate("analyze"); }}
+            disabled={!!runningStep}
+          >
+            {runningStep === "analyze" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+            Run Analyze
+          </Button>
+          {hasActiveFilters && (
+            <Button variant="outline" size="sm" onClick={clearFilters}>
             Clear Filters
           </Button>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Filters */}

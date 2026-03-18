@@ -19,7 +19,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Loader2, Users, ArrowLeft } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, Users, ArrowLeft, Play, CheckCircle, Clock } from "lucide-react";
 import { Link } from "wouter";
 
 interface Competitor {
@@ -54,9 +54,42 @@ export default function CiCompetitors() {
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
   const [formData, setFormData] = useState<CompetitorForm>(EMPTY_FORM);
 
+  const [runningStep, setRunningStep] = useState<string | null>(null);
+
   const { data: competitors = [], isLoading } = useQuery<Competitor[]>({
     queryKey: ["/api/ci/competitors"],
   });
+
+  const { data: pipelineStatus } = useQuery<Record<string, string | null>>({
+    queryKey: ["/api/ci/pipeline/status"],
+  });
+
+  const runStepMutation = useMutation({
+    mutationFn: async (step: string) => {
+      const res = await apiRequest("POST", "/api/ci/pipeline/run-step", { step });
+      return res.json();
+    },
+    onSuccess: (_data, step) => {
+      toast({ title: `${step} completed` });
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      setRunningStep(null);
+    },
+    onError: (err: Error, step) => {
+      toast({ title: `${step} failed`, description: err.message, variant: "destructive" });
+      setRunningStep(null);
+    },
+  });
+
+  function formatTimestamp(ts: string | null | undefined): string {
+    if (!ts) return "Never";
+    const d = new Date(ts);
+    const diffMs = Date.now() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    return `${Math.floor(diffMins / 1440)}d ago`;
+  }
 
   const createMutation = useMutation({
     mutationFn: async (data: CompetitorForm) => {
@@ -157,10 +190,34 @@ export default function CiCompetitors() {
             <p className="text-muted-foreground">Track and manage competitor accounts for content intelligence</p>
           </div>
         </div>
-        <Button onClick={openAddDialog}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Competitor
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mr-2">
+            {pipelineStatus?.scrape ? <CheckCircle className="h-3 w-3 text-green-500" /> : <Clock className="h-3 w-3" />}
+            Scrape: {formatTimestamp(pipelineStatus?.scrape)}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setRunningStep("scrape"); runStepMutation.mutate("scrape"); }}
+            disabled={!!runningStep}
+          >
+            {runningStep === "scrape" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+            Run Scrape
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setRunningStep("transcripts"); runStepMutation.mutate("transcripts"); }}
+            disabled={!!runningStep}
+          >
+            {runningStep === "transcripts" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+            Run Transcripts
+          </Button>
+          <Button onClick={openAddDialog}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Competitor
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

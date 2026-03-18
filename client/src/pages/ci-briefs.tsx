@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Loader2,
-  ArrowRightCircle, ScrollText, Video,
+  ArrowRightCircle, ScrollText, Video, Play, CheckCircle, Clock,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -48,6 +48,38 @@ export default function CiBriefs() {
   const queryClient = useQueryClient();
   const [expandedBriefs, setExpandedBriefs] = useState<Set<number>>(new Set());
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
+  const [runningStep, setRunningStep] = useState<string | null>(null);
+
+  const { data: pipelineStatus } = useQuery<Record<string, string | null>>({
+    queryKey: ["/api/ci/pipeline/status"],
+  });
+
+  const runStepMutation = useMutation({
+    mutationFn: async (step: string) => {
+      const res = await apiRequest("POST", "/api/ci/pipeline/run-step", { step });
+      return res.json();
+    },
+    onSuccess: (_data, step) => {
+      toast({ title: `${step} completed` });
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      setRunningStep(null);
+    },
+    onError: (err: Error, step) => {
+      toast({ title: `${step} failed`, description: err.message, variant: "destructive" });
+      setRunningStep(null);
+    },
+  });
+
+  function formatTimestamp(ts: string | null | undefined): string {
+    if (!ts) return "Never";
+    const d = new Date(ts);
+    const diffMs = Date.now() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    return `${Math.floor(diffMins / 1440)}d ago`;
+  }
 
   const { data: briefs = [], isLoading } = useQuery<Brief[]>({
     queryKey: ["/api/ci/briefs"],
@@ -151,6 +183,34 @@ export default function CiBriefs() {
               Weekly content briefs generated from competitor analysis
             </p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mr-1">
+            {pipelineStatus?.brief ? <CheckCircle className="h-3 w-3 text-green-500" /> : <Clock className="h-3 w-3" />}
+            Brief: {formatTimestamp(pipelineStatus?.brief)}
+          </div>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mr-1">
+            {pipelineStatus?.scripts ? <CheckCircle className="h-3 w-3 text-green-500" /> : <Clock className="h-3 w-3" />}
+            Scripts: {formatTimestamp(pipelineStatus?.scripts)}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setRunningStep("brief"); runStepMutation.mutate("brief"); }}
+            disabled={!!runningStep}
+          >
+            {runningStep === "brief" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+            Run Brief
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setRunningStep("scripts"); runStepMutation.mutate("scripts"); }}
+            disabled={!!runningStep}
+          >
+            {runningStep === "scripts" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+            Run Scripts
+          </Button>
         </div>
       </div>
 
