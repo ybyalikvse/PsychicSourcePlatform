@@ -649,26 +649,114 @@ export function registerCiRoutes(app: Express) {
         return res.json({ success: true, step, analyzed, total: videos.length });
       }
 
-      // For brief/scripts/performance — delegate to existing pipeline endpoints
-      // (these are small single calls, not loops)
-      if (step === "brief" || step === "scripts" || step === "performance") {
-        const endpoint = step === "brief" ? "/pipeline/generate-brief"
-          : step === "scripts" ? "/pipeline/generate-script"
-          : "/pipeline/performance-report";
-
-        // Call our own endpoint internally
-        const baseUrl = `${req.protocol}://${req.get("host")}`;
-        const pipelineRes = await fetch(`${baseUrl}/api/ci${endpoint}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${process.env.CRON_SECRET || ""}`,
-          },
-          body: step === "scripts" ? JSON.stringify({ briefId: req.body.briefId, itemIndex: req.body.itemIndex || 0 }) : "{}",
+      // For brief: generate weekly brief directly
+      if (step === "brief") {
+        const analyses = await storage.getCiVideoAnalyses({ weekAdded: getWeekLabel() });
+        if (analyses.length === 0) {
+          return res.status(400).json({ error: "No analyses found for this week" });
+        }
+        const briefSystemPrompt = await storage.getCiSetting("brief_system_prompt");
+        const briefUserPrompt = await storage.getCiSetting("brief_user_prompt");
+        const modelSetting = await storage.getCiSetting("ai_model");
+        const briefResult = await generateWeeklyBrief({
+          analyses: analyses.map(a => ({
+            topicCategory: a.topicCategory,
+            hookType: a.hookType,
+            emotionalAngle: a.emotionalAngle,
+            replicationScore: a.replicationScore,
+            topicSummary: a.topicSummary,
+          })),
+          systemPrompt: briefSystemPrompt?.value || "",
+          userPromptTemplate: briefUserPrompt?.value || "",
+          model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
         });
-        const result = await pipelineRes.json();
-        await storage.upsertCiSetting(`pipeline_last_run_${step}`, new Date().toISOString());
-        return res.json({ success: pipelineRes.ok, step, ...result });
+        const briefData = Array.isArray(briefResult) ? briefResult : briefResult?.briefs || briefResult?.items || [briefResult];
+        const topicCounts: Record<string, number> = {};
+        const hookCounts: Record<string, number> = {};
+        const emotionCounts: Record<string, number> = {};
+        for (const a of analyses) {
+          if (a.topicCategory) topicCounts[a.topicCategory] = (topicCounts[a.topicCategory] || 0) + 1;
+          if (a.hookType) hookCounts[a.hookType] = (hookCounts[a.hookType] || 0) + 1;
+          if (a.emotionalAngle) emotionCounts[a.emotionalAngle] = (emotionCounts[a.emotionalAngle] || 0) + 1;
+        }
+        const saved = await storage.createCiContentBrief({
+          weekLabel: getWeekLabel(),
+          briefData: briefData,
+          topTopics: Object.entries(topicCounts).sort((a, b) => b[1] - a[1]),
+          topHookTypes: Object.entries(hookCounts).sort((a, b) => b[1] - a[1]),
+          topEmotionalAngles: Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]),
+          videoCount: analyses.length,
+          status: "draft",
+        });
+        await storage.upsertCiSetting("pipeline_last_run_brief", new Date().toISOString());
+        return res.json({ success: true, step, brief: saved });
+      }
+
+      // For scripts: generate from latest brief
+      if (step === "scripts") {
+        const briefs = await storage.getCiContentBriefs();
+        const brief = briefs[0];
+        if (!brief) return res.status(400).json({ error: "No brief found" });
+        const scriptSystemPrompt = await storage.getCiSetting("script_system_prompt");
+        const scriptUserPrompt = await storage.getCiSetting("script_user_prompt");
+        const modelSetting = await storage.getCiSetting("ai_model");
+        const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+        let generated = 0;
+        for (let i = 0; i < items.length; i++) {
+          try {
+            const script = await generateScript({
+              briefItem: items[i],
+              systemPrompt: scriptSystemPrompt?.value || "",
+              userPromptTemplate: scriptUserPrompt?.value || "",
+              creatorName: "Creator",
+              creatorStyle: "warm and nurturing",
+              platform: "TikTok",
+              duration: items[i]?.estimated_length || "60-90 seconds",
+              model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
+            });
+            const scriptText = typeof script === "string" ? script : JSON.stringify(script);
+            const hookMatch = scriptText.match(/HOOK[:\s]*\n?([\s\S]*?)(?=BODY|$)/i);
+            const bodyMatch = scriptText.match(/BODY[:\s]*\n?([\s\S]*?)(?=CLOSE|CTA|$)/i);
+            const ctaMatch = scriptText.match(/(?:CLOSE|CTA)[:\s]*\n?([\s\S]*?)$/i);
+            await storage.createCiBriefScript({
+              briefId: brief.id,
+              briefItemIndex: i,
+              title: items[i]?.title || `Script ${i + 1}`,
+              hook: hookMatch?.[1]?.trim() || null,
+              body: bodyMatch?.[1]?.trim() || scriptText,
+              closeCta: ctaMatch?.[1]?.trim() || null,
+              status: "draft",
+              rawScript: { full: scriptText },
+            });
+            generated++;
+          } catch (err) {
+            console.error(`[CI] Script generation failed for item ${i}:`, err);
+          }
+        }
+        await storage.upsertCiSetting("pipeline_last_run_scripts", new Date().toISOString());
+        return res.json({ success: true, step, generated, total: items.length });
+      }
+
+      // For performance
+      if (step === "performance") {
+        const perfSystemPrompt = await storage.getCiSetting("performance_system_prompt");
+        const perfUserPrompt = await storage.getCiSetting("performance_user_prompt");
+        const modelSetting = await storage.getCiSetting("ai_model");
+        const report = await generatePerformanceReport({
+          ownVideos: [],
+          briefs: [],
+          systemPrompt: perfSystemPrompt?.value || "",
+          userPromptTemplate: perfUserPrompt?.value || "",
+          model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
+        });
+        await storage.createCiPerformanceReport({
+          weekLabel: getWeekLabel(),
+          rawReport: report,
+          patterns: report?.patterns || null,
+          recommendation: report?.recommendation || null,
+        });
+        await storage.upsertCiSetting("pipeline_last_run_performance", new Date().toISOString());
+        return res.json({ success: true, step });
       }
 
       res.status(400).json({ error: "Step not implemented" });

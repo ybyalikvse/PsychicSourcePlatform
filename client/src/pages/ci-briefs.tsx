@@ -28,8 +28,8 @@ interface Brief {
   weekLabel: string;
   videoCount: number;
   status: string;
-  topTopics: string[];
-  items: BriefItem[];
+  topTopics: any;
+  briefData: BriefItem[];
   createdAt: string;
 }
 
@@ -272,9 +272,9 @@ export default function CiBriefs() {
                         <Badge variant={getStatusColor(brief.status)}>{brief.status}</Badge>
                         {brief.topTopics && brief.topTopics.length > 0 && (
                           <div className="hidden sm:flex gap-1">
-                            {brief.topTopics.slice(0, 3).map((topic, i) => (
+                            {brief.topTopics.slice(0, 3).map((topic: any, i: number) => (
                               <Badge key={i} variant="outline" className="text-xs">
-                                {topic}
+                                {Array.isArray(topic) ? `${topic[0]}${topic[1] ? ` (${topic[1]})` : ""}` : topic}
                               </Badge>
                             ))}
                             {brief.topTopics.length > 3 && (
@@ -293,12 +293,12 @@ export default function CiBriefs() {
                     <Separator />
 
                     {/* Brief Items */}
-                    {brief.items && brief.items.length > 0 ? (
+                    {brief.briefData && brief.briefData.length > 0 ? (
                       <div className="space-y-4">
                         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                          Brief Items ({brief.items.length})
+                          Brief Items ({brief.briefData.length})
                         </h3>
-                        {brief.items.map((item, index) => {
+                        {brief.briefData.map((item, index) => {
                           const existingScript = getScriptForItem(brief.id, index);
                           return (
                             <Card key={index} className="border-dashed">
