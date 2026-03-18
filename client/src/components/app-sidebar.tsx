@@ -84,32 +84,6 @@ const videoNavItems = [
     url: "/video-requests",
     icon: Video,
   },
-];
-
-const vspNavItems = [
-  {
-    title: "Script Creator",
-    url: "/vsp",
-    icon: Film,
-  },
-  {
-    title: "VSP History",
-    url: "/vsp/history",
-    icon: History,
-  },
-  {
-    title: "VSP Calendar",
-    url: "/vsp/calendar",
-    icon: CalendarDays,
-  },
-  {
-    title: "VSP Settings",
-    url: "/vsp/settings",
-    icon: Settings,
-  },
-];
-
-const ciNavItems = [
   {
     title: "CI Dashboard",
     url: "/ci",
@@ -138,6 +112,29 @@ const ciNavItems = [
   {
     title: "CI Settings",
     url: "/ci/settings",
+    icon: Settings,
+  },
+];
+
+const vspNavItems = [
+  {
+    title: "Script Creator",
+    url: "/vsp",
+    icon: Film,
+  },
+  {
+    title: "VSP History",
+    url: "/vsp/history",
+    icon: History,
+  },
+  {
+    title: "VSP Calendar",
+    url: "/vsp/calendar",
+    icon: CalendarDays,
+  },
+  {
+    title: "VSP Settings",
+    url: "/vsp/settings",
     icon: Settings,
   },
 ];
@@ -231,28 +228,6 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     asChild
                     isActive={item.url === "/vsp" ? location === "/vsp" : location.startsWith(item.url)}
-                    data-testid={`nav-${item.title.toLowerCase().replace(/ /g, '-')}`}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Content Intelligence</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {ciNavItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={item.url === "/ci" ? location === "/ci" : location.startsWith(item.url)}
                     data-testid={`nav-${item.title.toLowerCase().replace(/ /g, '-')}`}
                   >
                     <Link href={item.url}>
