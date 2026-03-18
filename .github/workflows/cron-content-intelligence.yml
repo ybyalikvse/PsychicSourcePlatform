@@ -52,7 +52,7 @@ jobs:
       - name: Fetch active competitors
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/competitors?active=true" -H "${AUTH}")
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/competitors?active=true")
           COMPETITORS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           echo "competitors=$COMPETITORS" >> $GITHUB_OUTPUT
           echo "Found competitors: $COMPETITORS"
@@ -91,7 +91,7 @@ jobs:
       - name: Fetch videos needing transcripts
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?transcriptStatus=pending" -H "${AUTH}")
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?transcriptStatus=pending")
           VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           # Limit to 50 per run to avoid excessive API usage
           VIDEOS=$(echo "$VIDEOS" | jq -c '.[0:50]')
@@ -132,7 +132,7 @@ jobs:
       - name: Fetch videos needing analysis
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=completed" -H "${AUTH}")
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=completed")
           VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           echo "videos=$VIDEOS" >> $GITHUB_OUTPUT
           echo "Found $(echo "$VIDEOS" | jq length) videos needing analysis"
@@ -193,7 +193,7 @@ jobs:
       - name: Generate script for brief item ${{ matrix.itemIndex }}
         run: |
           # Get the latest brief ID
-          BRIEFS=$(curl -s -L "${APP_URL}/api/ci/briefs" -H "${AUTH}")
+          BRIEFS=$(curl -s -L "${APP_URL}/api/ci/briefs")
           BRIEF_ID=$(echo "$BRIEFS" | jq -r '.[0].id // empty' 2>/dev/null)
           if [ -z "$BRIEF_ID" ]; then
             echo "No brief found, skipping"
