@@ -132,7 +132,7 @@ jobs:
       - name: Fetch videos needing analysis
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=fetched" -H "${AUTH}")
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=completed" -H "${AUTH}")
           VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           echo "videos=$VIDEOS" >> $GITHUB_OUTPUT
           echo "Found $(echo "$VIDEOS" | jq length) videos needing analysis"
