@@ -27,7 +27,7 @@ interface Competitor {
   handle: string;
   displayName: string | null;
   platform: string;
-  active: boolean;
+  isActive: boolean;
   lastScrapedAt: string | null;
   notes: string | null;
   createdAt: string;
@@ -81,7 +81,7 @@ export default function CiCompetitors() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<CompetitorForm & { active: boolean }> }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<CompetitorForm & { isActive: boolean }> }) => {
       const res = await apiRequest("PATCH", `/api/ci/competitors/${id}`, data);
       return res.json();
     },
@@ -134,7 +134,7 @@ export default function CiCompetitors() {
   function handleToggleActive(competitor: Competitor) {
     updateMutation.mutate({
       id: competitor.id,
-      data: { active: !competitor.active },
+      data: { isActive: !competitor.isActive },
     });
   }
 
@@ -214,7 +214,7 @@ export default function CiCompetitors() {
                   </TableCell>
                   <TableCell>
                     <Switch
-                      checked={competitor.active}
+                      checked={competitor.isActive}
                       onCheckedChange={() => handleToggleActive(competitor)}
                       disabled={updateMutation.isPending}
                     />
