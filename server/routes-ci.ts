@@ -104,7 +104,8 @@ export function registerCiRoutes(app: Express) {
       }
 
       const apiKeySetting = await storage.getCiSetting("scrape_creators_api_key");
-      if (!apiKeySetting?.value) {
+      const apiKey = apiKeySetting?.value || process.env.SCRAPE_CREATORS_API_KEY;
+      if (!apiKey) {
         return res.status(400).json({ error: "ScrapeCreators API key not configured" });
       }
 
@@ -117,7 +118,7 @@ export function registerCiRoutes(app: Express) {
       const limitSetting = await storage.getCiSetting("scrape_limit");
       const limit = limitSetting ? parseInt(limitSetting.value, 10) : 30;
 
-      const videos = await scrapeCompetitorVideos(competitor.handle, apiKeySetting.value, limit);
+      const videos = await scrapeCompetitorVideos(competitor.handle, apiKey, limit);
 
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
@@ -126,7 +127,8 @@ export function registerCiRoutes(app: Express) {
       let skipped = 0;
 
       for (const video of videos) {
-        const externalId = video.id || video.video_id || video.videoId;
+        // Support ScrapeCreators aweme_list format and generic formats
+        const externalId = video.aweme_id || video.id || video.video_id || video.videoId;
         if (!externalId) continue;
 
         // Skip if already scraped
@@ -136,14 +138,15 @@ export function registerCiRoutes(app: Express) {
           continue;
         }
 
-        const views = video.stats?.playCount ?? video.views ?? video.viewCount ?? 0;
+        const stats = video.statistics || video.stats || {};
+        const views = stats.play_count ?? stats.playCount ?? video.views ?? video.viewCount ?? 0;
         if (views < minViews) {
           skipped++;
           continue;
         }
 
         // Skip old videos
-        const postedAt = video.createTime || video.posted_at || video.postedAt;
+        const postedAt = video.create_time || video.createTime || video.posted_at || video.postedAt;
         if (postedAt) {
           const postedDate = new Date(typeof postedAt === "number" ? postedAt * 1000 : postedAt);
           if (postedDate < cutoffDate) {
@@ -155,13 +158,13 @@ export function registerCiRoutes(app: Express) {
         await storage.createCiScrapedVideo({
           competitorId: competitor.id,
           externalVideoId: String(externalId),
-          url: video.url || video.video_url || `https://www.tiktok.com/@${competitor.handle}/video/${externalId}`,
+          url: video.share_url || video.url || video.video_url || `https://www.tiktok.com/@${competitor.handle}/video/${externalId}`,
           caption: video.desc || video.caption || video.description || null,
           viewCount: views,
-          likeCount: video.stats?.diggCount ?? video.likes ?? video.likeCount ?? 0,
-          commentCount: video.stats?.commentCount ?? video.comments ?? video.commentCount ?? 0,
-          shareCount: video.stats?.shareCount ?? video.shares ?? video.shareCount ?? 0,
-          duration: video.duration ?? video.video_duration ?? null,
+          likeCount: stats.digg_count ?? stats.diggCount ?? video.likes ?? video.likeCount ?? 0,
+          commentCount: stats.comment_count ?? stats.commentCount ?? video.comments ?? video.commentCount ?? 0,
+          shareCount: stats.share_count ?? stats.shareCount ?? video.shares ?? video.shareCount ?? 0,
+          duration: video.video?.duration ?? video.duration ?? null,
           postedAt: postedAt ? new Date(typeof postedAt === "number" ? postedAt * 1000 : postedAt).toISOString() : null,
           transcriptStatus: "pending",
           analysisStatus: "pending",
@@ -191,11 +194,12 @@ export function registerCiRoutes(app: Express) {
       }
 
       const apiKeySetting = await storage.getCiSetting("scrape_creators_api_key");
-      if (!apiKeySetting?.value) {
+      const apiKey = apiKeySetting?.value || process.env.SCRAPE_CREATORS_API_KEY;
+      if (!apiKey) {
         return res.status(400).json({ error: "ScrapeCreators API key not configured" });
       }
 
-      const transcript = await fetchVideoTranscript(video.url, apiKeySetting.value);
+      const transcript = await fetchVideoTranscript(video.url, apiKey);
 
       if (transcript) {
         await storage.updateCiScrapedVideo(video.id, {
@@ -439,7 +443,7 @@ export function registerCiRoutes(app: Express) {
 
       let ownVideos: any[] = [];
       if (ownHandleSetting?.value && apiKeySetting?.value) {
-        ownVideos = await scrapeCompetitorVideos(ownHandleSetting.value, apiKeySetting.value, 20);
+        ownVideos = await scrapeCompetitorVideos(ownHandleSetting.value, apiKey, 20);
       }
 
       // Get recent briefs

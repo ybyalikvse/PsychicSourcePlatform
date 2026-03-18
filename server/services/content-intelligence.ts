@@ -20,7 +20,7 @@ export async function scrapeCompetitorVideos(
     }
 
     const data = await response.json();
-    return data?.items || data?.videos || [];
+    return data?.aweme_list || data?.items || data?.videos || [];
   } catch (error) {
     console.error(`[CI] Failed to scrape videos for @${handle}:`, error);
     return [];
