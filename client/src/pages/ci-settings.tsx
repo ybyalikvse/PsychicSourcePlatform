@@ -57,7 +57,11 @@ export default function CiSettings() {
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
   const [seeded, setSeeded] = useState(false);
 
-  // Seed defaults on mount
+  const { data: settings = [], isLoading } = useQuery<CiSetting[]>({
+    queryKey: ["/api/ci/settings"],
+  });
+
+  // Seed defaults only if no settings exist
   const seedMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/ci/settings/seed");
@@ -66,20 +70,13 @@ export default function CiSettings() {
       setSeeded(true);
       queryClient.invalidateQueries({ queryKey: ["/api/ci/settings"] });
     },
-    onError: () => {
-      // Seed may fail if already seeded, that's fine
-      setSeeded(true);
-    },
   });
 
   useEffect(() => {
-    seedMutation.mutate();
-  }, []);
-
-  const { data: settings = [], isLoading } = useQuery<CiSetting[]>({
-    queryKey: ["/api/ci/settings"],
-    enabled: seeded,
-  });
+    if (!isLoading && settings.length === 0 && !seeded) {
+      seedMutation.mutate();
+    }
+  }, [isLoading, settings.length]);
 
   // Sync fetched settings into local state
   useEffect(() => {

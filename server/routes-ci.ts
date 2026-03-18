@@ -826,20 +826,19 @@ export function registerCiRoutes(app: Express) {
 
       const analyses = await storage.getCiVideoAnalyses(filters);
 
-      // Enrich with video and competitor data
-      const enriched = await Promise.all(analyses.map(async (a) => {
-        const video = await storage.getCiScrapedVideo(a.scrapedVideoId);
-        let creatorHandle = "unknown";
-        let viewCount = 0;
-        if (video) {
-          viewCount = video.viewCount ?? 0;
-          const competitor = await storage.getCiCompetitor(video.competitorId);
-          creatorHandle = competitor?.handle || "unknown";
-        }
+      // Batch-load all videos and competitors upfront (avoids N+1 queries)
+      const allVideos = await storage.getCiScrapedVideos({});
+      const allCompetitors = await storage.getCiCompetitors();
+      const videoMap = new Map(allVideos.map(v => [v.id, v]));
+      const competitorMap = new Map(allCompetitors.map(c => [c.id, c]));
+
+      const enriched = analyses.map((a) => {
+        const video = videoMap.get(a.scrapedVideoId);
+        const competitor = video ? competitorMap.get(video.competitorId) : null;
         return {
           ...a,
-          creator: creatorHandle,
-          views: viewCount,
+          creator: competitor?.handle || "unknown",
+          views: video?.viewCount ?? 0,
           videoUrl: video?.url || null,
           likes: video?.likeCount ?? 0,
           shares: video?.shareCount ?? 0,
@@ -848,7 +847,7 @@ export function registerCiRoutes(app: Express) {
           transcriptPreview: video?.transcript ? video.transcript.substring(0, 200) + (video.transcript.length > 200 ? "..." : "") : null,
           transcript: video?.transcript || null,
         };
-      }));
+      });
 
       res.json(enriched);
     } catch (error) {
