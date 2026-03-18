@@ -44,34 +44,6 @@ interface CiVideo {
   views: number;
 }
 
-const HOOK_TYPES = [
-  { value: "all", label: "All Hook Types" },
-  { value: "question", label: "Question" },
-  { value: "statistic", label: "Statistic" },
-  { value: "story", label: "Story" },
-  { value: "controversy", label: "Controversy" },
-  { value: "shock", label: "Shock" },
-  { value: "relatable", label: "Relatable" },
-  { value: "curiosity", label: "Curiosity Gap" },
-  { value: "challenge", label: "Challenge" },
-  { value: "list", label: "List / Countdown" },
-  { value: "other", label: "Other" },
-];
-
-const TOPIC_CATEGORIES = [
-  { value: "all", label: "All Topics" },
-  { value: "love_readings", label: "Love Readings" },
-  { value: "tarot", label: "Tarot" },
-  { value: "astrology", label: "Astrology" },
-  { value: "spiritual_guidance", label: "Spiritual Guidance" },
-  { value: "psychic_abilities", label: "Psychic Abilities" },
-  { value: "manifestation", label: "Manifestation" },
-  { value: "zodiac", label: "Zodiac" },
-  { value: "energy_healing", label: "Energy Healing" },
-  { value: "numerology", label: "Numerology" },
-  { value: "other", label: "Other" },
-];
-
 const SCORE_OPTIONS = [
   { value: "0", label: "All Scores" },
   { value: "1", label: "1+" },
@@ -81,11 +53,42 @@ const SCORE_OPTIONS = [
   { value: "5", label: "5 only" },
 ];
 
+function formatLabel(value: string): string {
+  return value.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 export default function CiAnalyses() {
   const { toast } = useToast();
   const [topicFilter, setTopicFilter] = useState("all");
   const [hookFilter, setHookFilter] = useState("all");
   const [scoreFilter, setScoreFilter] = useState("0");
+
+  // Load dynamic filter options from CI settings
+  const { data: settings } = useQuery<Array<{ key: string; value: string }>>({
+    queryKey: ["/api/ci/settings"],
+  });
+
+  const TOPIC_CATEGORIES = (() => {
+    const setting = settings?.find(s => s.key === "topic_categories");
+    if (setting) {
+      try {
+        const items: string[] = JSON.parse(setting.value);
+        return [{ value: "all", label: "All Topics" }, ...items.map(v => ({ value: v, label: formatLabel(v) }))];
+      } catch {}
+    }
+    return [{ value: "all", label: "All Topics" }];
+  })();
+
+  const HOOK_TYPES = (() => {
+    const setting = settings?.find(s => s.key === "hook_types");
+    if (setting) {
+      try {
+        const items: string[] = JSON.parse(setting.value);
+        return [{ value: "all", label: "All Hook Types" }, ...items.map(v => ({ value: v, label: formatLabel(v) }))];
+      } catch {}
+    }
+    return [{ value: "all", label: "All Hook Types" }];
+  })();
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   // Build query params
