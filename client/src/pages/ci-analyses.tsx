@@ -46,6 +46,7 @@ interface Analysis {
   postedAt: string | null;
   transcriptPreview: string | null;
   transcript: string | null;
+  platform: string;
 }
 
 interface CiVideo {
@@ -340,12 +341,14 @@ export default function CiAnalyses() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8"></TableHead>
+                  <TableHead>Post Date</TableHead>
                   <TableHead>Creator</TableHead>
+                  <TableHead>Platform</TableHead>
                   <TableHead>Topic Category</TableHead>
                   <TableHead>Hook Type</TableHead>
                   <TableHead>Emotional Angle</TableHead>
                   <TableHead className="text-right">Views</TableHead>
-                  <TableHead className="text-center">Score</TableHead>
+                  <TableHead className="text-center">Replication Score</TableHead>
                   <TableHead>Format</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
@@ -366,7 +369,9 @@ export default function CiAnalyses() {
                               <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             )}
                           </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{analysis.postedAt ? new Date(analysis.postedAt).toLocaleDateString() : "—"}</TableCell>
                           <TableCell className="font-medium">{analysis.creator ? `@${analysis.creator}` : "—"}</TableCell>
+                          <TableCell className="text-sm capitalize">{analysis.platform || "—"}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{analysis.topicCategory}</Badge>
                           </TableCell>
@@ -413,7 +418,7 @@ export default function CiAnalyses() {
                       </CollapsibleTrigger>
                       <CollapsibleContent asChild>
                         <TableRow className="bg-muted/30">
-                          <TableCell colSpan={9}>
+                          <TableCell colSpan={11}>
                             <div className="py-4 px-2 space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>

@@ -838,6 +838,7 @@ export function registerCiRoutes(app: Express) {
         return {
           ...a,
           creator: competitor?.handle || "unknown",
+          platform: competitor?.platform || "tiktok",
           views: video?.viewCount ?? 0,
           videoUrl: video?.url || null,
           likes: video?.likeCount ?? 0,
