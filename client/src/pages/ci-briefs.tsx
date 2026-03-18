@@ -106,7 +106,8 @@ export default function CiBriefs() {
 
   const generateScriptMutation = useMutation({
     mutationFn: async ({ briefId, itemIndex }: { briefId: number; itemIndex: number }) => {
-      const res = await apiRequest("POST", "/api/ci/pipeline/generate-script", {
+      const res = await apiRequest("POST", "/api/ci/pipeline/run-step", {
+        step: "scripts",
         briefId,
         itemIndex,
       });

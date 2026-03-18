@@ -694,24 +694,35 @@ export function registerCiRoutes(app: Express) {
 
       // For scripts: generate from latest brief
       if (step === "scripts") {
-        const briefs = await storage.getCiContentBriefs();
-        const brief = briefs[0];
+        // Support generating a single script by briefId + itemIndex, or all scripts for latest brief
+        const targetBriefId = req.body.briefId;
+        const targetItemIndex = req.body.itemIndex !== undefined ? Number(req.body.itemIndex) : undefined;
+
+        let brief;
+        if (targetBriefId) {
+          brief = await storage.getCiContentBrief(targetBriefId);
+        } else {
+          const briefs = await storage.getCiContentBriefs();
+          brief = briefs[0];
+        }
         if (!brief) return res.status(400).json({ error: "No brief found" });
         const scriptSystemPrompt = await storage.getCiSetting("script_system_prompt");
         const scriptUserPrompt = await storage.getCiSetting("script_user_prompt");
         const modelSetting = await storage.getCiSetting("ai_model");
-        const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+        const allItems = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+        const items = targetItemIndex !== undefined ? [{ item: allItems[targetItemIndex], index: targetItemIndex }] : allItems.map((item, index) => ({ item, index }));
         let generated = 0;
-        for (let i = 0; i < items.length; i++) {
+        for (const { item, index: i } of items) {
+          if (!item) continue;
           try {
             const script = await generateScript({
-              briefItem: items[i],
+              briefItem: item,
               systemPrompt: scriptSystemPrompt?.value || "",
               userPromptTemplate: scriptUserPrompt?.value || "",
               creatorName: "Creator",
               creatorStyle: "warm and nurturing",
               platform: "TikTok",
-              duration: items[i]?.estimated_length || "60-90 seconds",
+              duration: item?.estimated_length || "60-90 seconds",
               model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
             });
             const scriptText = typeof script === "string" ? script : JSON.stringify(script);
@@ -721,7 +732,7 @@ export function registerCiRoutes(app: Express) {
             await storage.createCiBriefScript({
               briefId: brief.id,
               briefItemIndex: i,
-              title: items[i]?.title || `Script ${i + 1}`,
+              title: item?.title || `Script ${i + 1}`,
               hook: hookMatch?.[1]?.trim() || null,
               body: bodyMatch?.[1]?.trim() || scriptText,
               closeCta: ctaMatch?.[1]?.trim() || null,
