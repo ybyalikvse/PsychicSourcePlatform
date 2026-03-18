@@ -300,9 +300,9 @@ export function registerCiRoutes(app: Express) {
       });
 
       res.json({ success: true, analysis });
-    } catch (error) {
-      console.error("[CI] Pipeline analyze error:", error);
-      res.status(500).json({ error: "Analysis pipeline failed" });
+    } catch (error: any) {
+      console.error("[CI] Pipeline analyze error:", error?.message || error);
+      res.status(500).json({ error: "Analysis pipeline failed: " + (error?.message || "Unknown error") });
     }
   });
 
