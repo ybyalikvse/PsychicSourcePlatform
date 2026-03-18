@@ -1,0 +1,214 @@
+name: Content Intelligence Pipeline
+
+on:
+  schedule:
+    # Weekly Monday at 06:00 UTC (1:00 AM ET)
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      step:
+        description: "Which step to run"
+        required: true
+        default: "full"
+        type: choice
+        options:
+          - full
+          - scrape
+          - transcripts
+          - analyze
+          - brief
+          - scripts
+          - performance
+
+env:
+  APP_URL: ${{ secrets.VERCEL_APP_URL }}
+  AUTH: "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+jobs:
+  # Step 0: Performance feedback on last week's content
+  performance:
+    if: ${{ github.event.inputs.step == 'full' || github.event.inputs.step == 'performance' || github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate performance report
+        run: |
+          echo "Generating performance report..."
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            -X POST "${APP_URL}/api/ci/pipeline/performance-report" \
+            -H "Content-Type: application/json" \
+            -H "${AUTH}")
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/response.json | head -c 500
+          echo ""
+
+  # Step 1: Scrape each active competitor
+  setup-scrape:
+    if: ${{ github.event.inputs.step == 'full' || github.event.inputs.step == 'scrape' || github.event_name == 'schedule' }}
+    needs: [performance]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      competitors: ${{ steps.fetch.outputs.competitors }}
+    steps:
+      - name: Fetch active competitors
+        id: fetch
+        run: |
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/competitors?active=true" -H "${AUTH}")
+          COMPETITORS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
+          echo "competitors=$COMPETITORS" >> $GITHUB_OUTPUT
+          echo "Found competitors: $COMPETITORS"
+
+  scrape:
+    needs: setup-scrape
+    if: ${{ needs.setup-scrape.outputs.competitors != '[]' && needs.setup-scrape.outputs.competitors != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        competitorId: ${{ fromJson(needs.setup-scrape.outputs.competitors) }}
+    steps:
+      - name: Scrape competitor ${{ matrix.competitorId }}
+        run: |
+          echo "Scraping ${{ matrix.competitorId }}..."
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            -X POST "${APP_URL}/api/ci/pipeline/scrape" \
+            -H "Content-Type: application/json" \
+            -H "${AUTH}" \
+            -d '{"competitorId": "${{ matrix.competitorId }}"}')
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "  ✓ Success"
+          else
+            echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json)"
+          fi
+
+  # Step 2-3: Fetch transcripts for pending videos
+  setup-transcripts:
+    needs: scrape
+    if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'transcripts' || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    outputs:
+      videos: ${{ steps.fetch.outputs.videos }}
+    steps:
+      - name: Fetch videos needing transcripts
+        id: fetch
+        run: |
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?transcriptStatus=pending" -H "${AUTH}")
+          VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
+          # Limit to 50 per run to avoid excessive API usage
+          VIDEOS=$(echo "$VIDEOS" | jq -c '.[0:50]')
+          echo "videos=$VIDEOS" >> $GITHUB_OUTPUT
+          echo "Found $(echo "$VIDEOS" | jq length) videos needing transcripts"
+
+  transcripts:
+    needs: setup-transcripts
+    if: ${{ needs.setup-transcripts.outputs.videos != '[]' && needs.setup-transcripts.outputs.videos != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        videoId: ${{ fromJson(needs.setup-transcripts.outputs.videos) }}
+    steps:
+      - name: Fetch transcript for ${{ matrix.videoId }}
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            -X POST "${APP_URL}/api/ci/pipeline/transcript" \
+            -H "Content-Type: application/json" \
+            -H "${AUTH}" \
+            -d '{"videoId": "${{ matrix.videoId }}"}')
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "  ✓ Success"
+          else
+            echo "  ✗ Failed (HTTP $HTTP_CODE)"
+          fi
+          sleep 1
+
+  # Step 4: AI analyze each video
+  setup-analyze:
+    needs: transcripts
+    if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'analyze' || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    outputs:
+      videos: ${{ steps.fetch.outputs.videos }}
+    steps:
+      - name: Fetch videos needing analysis
+        id: fetch
+        run: |
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=fetched" -H "${AUTH}")
+          VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
+          echo "videos=$VIDEOS" >> $GITHUB_OUTPUT
+          echo "Found $(echo "$VIDEOS" | jq length) videos needing analysis"
+
+  analyze:
+    needs: setup-analyze
+    if: ${{ needs.setup-analyze.outputs.videos != '[]' && needs.setup-analyze.outputs.videos != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        videoId: ${{ fromJson(needs.setup-analyze.outputs.videos) }}
+    steps:
+      - name: Analyze video ${{ matrix.videoId }}
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            -X POST "${APP_URL}/api/ci/pipeline/analyze" \
+            -H "Content-Type: application/json" \
+            -H "${AUTH}" \
+            -d '{"videoId": "${{ matrix.videoId }}"}')
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "  ✓ Success"
+          else
+            echo "  ✗ Failed (HTTP $HTTP_CODE)"
+          fi
+          sleep 2
+
+  # Step 5: Generate weekly brief
+  brief:
+    needs: analyze
+    if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'brief' || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate weekly brief
+        run: |
+          echo "Generating weekly content brief..."
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            -X POST "${APP_URL}/api/ci/pipeline/generate-brief" \
+            -H "Content-Type: application/json" \
+            -H "${AUTH}")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "  ✓ Brief generated"
+            cat /tmp/response.json | jq '.brief.weekLabel // "unknown"' 2>/dev/null
+          else
+            echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json)"
+          fi
+
+  # Step 6: Generate scripts from brief
+  scripts:
+    needs: brief
+    if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'scripts' || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        itemIndex: [0, 1, 2, 3, 4]
+    steps:
+      - name: Generate script for brief item ${{ matrix.itemIndex }}
+        run: |
+          # Get the latest brief ID
+          BRIEFS=$(curl -s -L "${APP_URL}/api/ci/briefs" -H "${AUTH}")
+          BRIEF_ID=$(echo "$BRIEFS" | jq -r '.[0].id // empty' 2>/dev/null)
+          if [ -z "$BRIEF_ID" ]; then
+            echo "No brief found, skipping"
+            exit 0
+          fi
+          echo "Generating script for brief $BRIEF_ID, item ${{ matrix.itemIndex }}..."
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            -X POST "${APP_URL}/api/ci/pipeline/generate-script" \
+            -H "Content-Type: application/json" \
+            -H "${AUTH}" \
+            -d "{\"briefId\": \"$BRIEF_ID\", \"itemIndex\": ${{ matrix.itemIndex }}}")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "  ✓ Script generated"
+          else
+            echo "  ✗ Failed (HTTP $HTTP_CODE)"
+          fi
+          sleep 3

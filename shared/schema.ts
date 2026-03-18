@@ -780,3 +780,142 @@ export const vspPublishToPostBridgeSchema = z.object({
   }).optional(),
 });
 export type VspPublishToPostBridge = z.infer<typeof vspPublishToPostBridgeSchema>;
+
+// ============================================================
+// CONTENT INTELLIGENCE (CI) TABLES
+// ============================================================
+
+export const ciCompetitors = pgTable("ci_competitors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  handle: text("handle").notNull().unique(),
+  displayName: text("display_name"),
+  platform: text("platform").notNull().default("tiktok"),
+  isActive: boolean("is_active").default(true),
+  lastScrapedAt: text("last_scraped_at"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertCiCompetitorSchema = createInsertSchema(ciCompetitors).omit({ id: true, createdAt: true });
+export type InsertCiCompetitor = z.infer<typeof insertCiCompetitorSchema>;
+export type CiCompetitor = typeof ciCompetitors.$inferSelect;
+
+export const ciScrapedVideos = pgTable("ci_scraped_videos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitorId: varchar("competitor_id").notNull().references(() => ciCompetitors.id, { onDelete: "cascade" }),
+  externalVideoId: text("external_video_id").notNull().unique(),
+  url: text("url").notNull(),
+  caption: text("caption"),
+  viewCount: integer("view_count").default(0),
+  likeCount: integer("like_count").default(0),
+  commentCount: integer("comment_count").default(0),
+  shareCount: integer("share_count").default(0),
+  duration: integer("duration"),
+  postedAt: text("posted_at"),
+  transcript: text("transcript"),
+  transcriptStatus: text("transcript_status").notNull().default("pending"),
+  analysisStatus: text("analysis_status").notNull().default("pending"),
+  metadata: jsonb("metadata"),
+  scrapedAt: text("scraped_at").notNull().default(sql`now()`),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertCiScrapedVideoSchema = createInsertSchema(ciScrapedVideos).omit({ id: true, createdAt: true, scrapedAt: true });
+export type InsertCiScrapedVideo = z.infer<typeof insertCiScrapedVideoSchema>;
+export type CiScrapedVideo = typeof ciScrapedVideos.$inferSelect;
+
+export const ciVideoAnalyses = pgTable("ci_video_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scrapedVideoId: varchar("scraped_video_id").notNull().references(() => ciScrapedVideos.id, { onDelete: "cascade" }),
+  blocked: boolean("blocked").default(false),
+  blockReason: text("block_reason"),
+  topicCategory: text("topic_category"),
+  topicSummary: text("topic_summary"),
+  hookText: text("hook_text"),
+  hookType: text("hook_type"),
+  hookSummary: text("hook_summary"),
+  emotionalAngle: text("emotional_angle"),
+  targetAudience: text("target_audience"),
+  format: text("format"),
+  ctaType: text("cta_type"),
+  replicationScore: integer("replication_score"),
+  notes: text("notes"),
+  rawAnalysis: jsonb("raw_analysis"),
+  weekAdded: text("week_added"),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertCiVideoAnalysisSchema = createInsertSchema(ciVideoAnalyses).omit({ id: true, createdAt: true });
+export type InsertCiVideoAnalysis = z.infer<typeof insertCiVideoAnalysisSchema>;
+export type CiVideoAnalysis = typeof ciVideoAnalyses.$inferSelect;
+
+export const ciContentBriefs = pgTable("ci_content_briefs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekLabel: text("week_label").notNull(),
+  briefData: jsonb("brief_data").notNull(),
+  topTopics: jsonb("top_topics"),
+  topHookTypes: jsonb("top_hook_types"),
+  topEmotionalAngles: jsonb("top_emotional_angles"),
+  videoCount: integer("video_count").default(0),
+  status: text("status").notNull().default("draft"),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertCiContentBriefSchema = createInsertSchema(ciContentBriefs).omit({ id: true, createdAt: true });
+export type InsertCiContentBrief = z.infer<typeof insertCiContentBriefSchema>;
+export type CiContentBrief = typeof ciContentBriefs.$inferSelect;
+
+export const ciBriefScripts = pgTable("ci_brief_scripts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefId: varchar("brief_id").notNull().references(() => ciContentBriefs.id, { onDelete: "cascade" }),
+  briefItemIndex: integer("brief_item_index"),
+  title: text("title").notNull(),
+  hook: text("hook"),
+  body: text("body"),
+  closeCta: text("close_cta"),
+  creatorName: text("creator_name"),
+  creatorStyle: text("creator_style"),
+  platform: text("platform"),
+  duration: text("duration"),
+  rawScript: jsonb("raw_script"),
+  status: text("status").notNull().default("draft"),
+  videoRequestId: varchar("video_request_id"),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertCiBriefScriptSchema = createInsertSchema(ciBriefScripts).omit({ id: true, createdAt: true });
+export type InsertCiBriefScript = z.infer<typeof insertCiBriefScriptSchema>;
+export type CiBriefScript = typeof ciBriefScripts.$inferSelect;
+
+export const ciPerformanceReports = pgTable("ci_performance_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekLabel: text("week_label").notNull(),
+  ownVideosData: jsonb("own_videos_data"),
+  matchingBriefs: jsonb("matching_briefs"),
+  topPerformingTopics: jsonb("top_performing_topics"),
+  topPerformingHookTypes: jsonb("top_performing_hook_types"),
+  underperformingTopics: jsonb("underperforming_topics"),
+  patterns: text("patterns"),
+  recommendation: text("recommendation"),
+  rawReport: jsonb("raw_report"),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertCiPerformanceReportSchema = createInsertSchema(ciPerformanceReports).omit({ id: true, createdAt: true });
+export type InsertCiPerformanceReport = z.infer<typeof insertCiPerformanceReportSchema>;
+export type CiPerformanceReport = typeof ciPerformanceReports.$inferSelect;
+
+export const ciSettings = pgTable("ci_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  category: text("category").notNull().default("general"),
+  label: text("label"),
+  description: text("description"),
+  valueType: text("value_type").notNull().default("text"),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertCiSettingSchema = createInsertSchema(ciSettings).omit({ id: true, updatedAt: true });
+export type InsertCiSetting = z.infer<typeof insertCiSettingSchema>;
+export type CiSetting = typeof ciSettings.$inferSelect;

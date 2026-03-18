@@ -5377,6 +5377,13 @@ var schema_exports = {};
 __export(schema_exports, {
   analyticsSnapshots: () => analyticsSnapshots,
   articles: () => articles,
+  ciBriefScripts: () => ciBriefScripts,
+  ciCompetitors: () => ciCompetitors,
+  ciContentBriefs: () => ciContentBriefs,
+  ciPerformanceReports: () => ciPerformanceReports,
+  ciScrapedVideos: () => ciScrapedVideos,
+  ciSettings: () => ciSettings,
+  ciVideoAnalyses: () => ciVideoAnalyses,
   contentSuggestions: () => contentSuggestions,
   conversations: () => conversations,
   horoscopeEntries: () => horoscopeEntries,
@@ -5384,6 +5391,13 @@ __export(schema_exports, {
   imageStyles: () => imageStyles,
   insertAnalyticsSnapshotSchema: () => insertAnalyticsSnapshotSchema,
   insertArticleSchema: () => insertArticleSchema,
+  insertCiBriefScriptSchema: () => insertCiBriefScriptSchema,
+  insertCiCompetitorSchema: () => insertCiCompetitorSchema,
+  insertCiContentBriefSchema: () => insertCiContentBriefSchema,
+  insertCiPerformanceReportSchema: () => insertCiPerformanceReportSchema,
+  insertCiScrapedVideoSchema: () => insertCiScrapedVideoSchema,
+  insertCiSettingSchema: () => insertCiSettingSchema,
+  insertCiVideoAnalysisSchema: () => insertCiVideoAnalysisSchema,
   insertContentSuggestionSchema: () => insertContentSuggestionSchema,
   insertConversationSchema: () => insertConversationSchema,
   insertHoroscopeEntrySchema: () => insertHoroscopeEntrySchema,
@@ -16658,6 +16672,113 @@ var vspPublishToPostBridgeSchema = external_exports.object({
     youtube: external_exports.object({ title: external_exports.string().optional(), caption: external_exports.string().optional() }).optional()
   }).optional()
 });
+var ciCompetitors = pgTable("ci_competitors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  handle: text("handle").notNull().unique(),
+  displayName: text("display_name"),
+  platform: text("platform").notNull().default("tiktok"),
+  isActive: boolean("is_active").default(true),
+  lastScrapedAt: text("last_scraped_at"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertCiCompetitorSchema = createInsertSchema(ciCompetitors).omit({ id: true, createdAt: true });
+var ciScrapedVideos = pgTable("ci_scraped_videos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitorId: varchar("competitor_id").notNull().references(() => ciCompetitors.id, { onDelete: "cascade" }),
+  externalVideoId: text("external_video_id").notNull().unique(),
+  url: text("url").notNull(),
+  caption: text("caption"),
+  viewCount: integer("view_count").default(0),
+  likeCount: integer("like_count").default(0),
+  commentCount: integer("comment_count").default(0),
+  shareCount: integer("share_count").default(0),
+  duration: integer("duration"),
+  postedAt: text("posted_at"),
+  transcript: text("transcript"),
+  transcriptStatus: text("transcript_status").notNull().default("pending"),
+  analysisStatus: text("analysis_status").notNull().default("pending"),
+  metadata: jsonb("metadata"),
+  scrapedAt: text("scraped_at").notNull().default(sql`now()`),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertCiScrapedVideoSchema = createInsertSchema(ciScrapedVideos).omit({ id: true, createdAt: true, scrapedAt: true });
+var ciVideoAnalyses = pgTable("ci_video_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scrapedVideoId: varchar("scraped_video_id").notNull().references(() => ciScrapedVideos.id, { onDelete: "cascade" }),
+  blocked: boolean("blocked").default(false),
+  blockReason: text("block_reason"),
+  topicCategory: text("topic_category"),
+  topicSummary: text("topic_summary"),
+  hookText: text("hook_text"),
+  hookType: text("hook_type"),
+  hookSummary: text("hook_summary"),
+  emotionalAngle: text("emotional_angle"),
+  targetAudience: text("target_audience"),
+  format: text("format"),
+  ctaType: text("cta_type"),
+  replicationScore: integer("replication_score"),
+  notes: text("notes"),
+  rawAnalysis: jsonb("raw_analysis"),
+  weekAdded: text("week_added"),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertCiVideoAnalysisSchema = createInsertSchema(ciVideoAnalyses).omit({ id: true, createdAt: true });
+var ciContentBriefs = pgTable("ci_content_briefs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekLabel: text("week_label").notNull(),
+  briefData: jsonb("brief_data").notNull(),
+  topTopics: jsonb("top_topics"),
+  topHookTypes: jsonb("top_hook_types"),
+  topEmotionalAngles: jsonb("top_emotional_angles"),
+  videoCount: integer("video_count").default(0),
+  status: text("status").notNull().default("draft"),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertCiContentBriefSchema = createInsertSchema(ciContentBriefs).omit({ id: true, createdAt: true });
+var ciBriefScripts = pgTable("ci_brief_scripts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefId: varchar("brief_id").notNull().references(() => ciContentBriefs.id, { onDelete: "cascade" }),
+  briefItemIndex: integer("brief_item_index"),
+  title: text("title").notNull(),
+  hook: text("hook"),
+  body: text("body"),
+  closeCta: text("close_cta"),
+  creatorName: text("creator_name"),
+  creatorStyle: text("creator_style"),
+  platform: text("platform"),
+  duration: text("duration"),
+  rawScript: jsonb("raw_script"),
+  status: text("status").notNull().default("draft"),
+  videoRequestId: varchar("video_request_id"),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertCiBriefScriptSchema = createInsertSchema(ciBriefScripts).omit({ id: true, createdAt: true });
+var ciPerformanceReports = pgTable("ci_performance_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekLabel: text("week_label").notNull(),
+  ownVideosData: jsonb("own_videos_data"),
+  matchingBriefs: jsonb("matching_briefs"),
+  topPerformingTopics: jsonb("top_performing_topics"),
+  topPerformingHookTypes: jsonb("top_performing_hook_types"),
+  underperformingTopics: jsonb("underperforming_topics"),
+  patterns: text("patterns"),
+  recommendation: text("recommendation"),
+  rawReport: jsonb("raw_report"),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertCiPerformanceReportSchema = createInsertSchema(ciPerformanceReports).omit({ id: true, createdAt: true });
+var ciSettings = pgTable("ci_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  category: text("category").notNull().default("general"),
+  label: text("label"),
+  description: text("description"),
+  valueType: text("value_type").notNull().default("text"),
+  updatedAt: text("updated_at").notNull().default(sql`now()`)
+});
+var insertCiSettingSchema = createInsertSchema(ciSettings).omit({ id: true, updatedAt: true });
 
 // server/storage.ts
 import { randomUUID } from "crypto";
@@ -17778,6 +17899,161 @@ var DatabaseStorage = class {
   async deleteVspCaptionStyle(id) {
     const results = await db.delete(vspCaptionStyles).where(eq(vspCaptionStyles.id, id)).returning();
     return results.length > 0;
+  }
+  // ===== CI Competitors =====
+  async getCiCompetitors(activeOnly) {
+    if (activeOnly) {
+      return db.select().from(ciCompetitors).where(eq(ciCompetitors.isActive, true)).orderBy(asc(ciCompetitors.handle));
+    }
+    return db.select().from(ciCompetitors).orderBy(asc(ciCompetitors.handle));
+  }
+  async getCiCompetitor(id) {
+    const [result] = await db.select().from(ciCompetitors).where(eq(ciCompetitors.id, id));
+    return result;
+  }
+  async createCiCompetitor(data) {
+    const [result] = await db.insert(ciCompetitors).values(data).returning();
+    return result;
+  }
+  async updateCiCompetitor(id, data) {
+    const [result] = await db.update(ciCompetitors).set(data).where(eq(ciCompetitors.id, id)).returning();
+    return result;
+  }
+  async deleteCiCompetitor(id) {
+    const results = await db.delete(ciCompetitors).where(eq(ciCompetitors.id, id)).returning();
+    return results.length > 0;
+  }
+  // ===== CI Scraped Videos =====
+  async getCiScrapedVideos(filters) {
+    const all = await db.select().from(ciScrapedVideos).orderBy(desc(ciScrapedVideos.createdAt));
+    if (!filters) return all;
+    return all.filter((v) => {
+      if (filters.competitorId && v.competitorId !== filters.competitorId) return false;
+      if (filters.transcriptStatus && v.transcriptStatus !== filters.transcriptStatus) return false;
+      if (filters.analysisStatus && v.analysisStatus !== filters.analysisStatus) return false;
+      if (filters.minViews && (v.viewCount || 0) < filters.minViews) return false;
+      return true;
+    });
+  }
+  async getCiScrapedVideo(id) {
+    const [result] = await db.select().from(ciScrapedVideos).where(eq(ciScrapedVideos.id, id));
+    return result;
+  }
+  async getCiScrapedVideoByExternalId(externalVideoId) {
+    const [result] = await db.select().from(ciScrapedVideos).where(eq(ciScrapedVideos.externalVideoId, externalVideoId));
+    return result;
+  }
+  async createCiScrapedVideo(data) {
+    const [result] = await db.insert(ciScrapedVideos).values(data).returning();
+    return result;
+  }
+  async updateCiScrapedVideo(id, data) {
+    const [result] = await db.update(ciScrapedVideos).set(data).where(eq(ciScrapedVideos.id, id)).returning();
+    return result;
+  }
+  // ===== CI Video Analyses =====
+  async getCiVideoAnalyses(filters) {
+    const all = await db.select().from(ciVideoAnalyses).orderBy(desc(ciVideoAnalyses.createdAt));
+    if (!filters) return all;
+    return all.filter((a) => {
+      if (filters.hookType && a.hookType !== filters.hookType) return false;
+      if (filters.topicCategory && a.topicCategory !== filters.topicCategory) return false;
+      if (filters.minReplicationScore && (a.replicationScore || 0) < filters.minReplicationScore) return false;
+      if (filters.weekAdded && a.weekAdded !== filters.weekAdded) return false;
+      return true;
+    });
+  }
+  async getCiVideoAnalysis(id) {
+    const [result] = await db.select().from(ciVideoAnalyses).where(eq(ciVideoAnalyses.id, id));
+    return result;
+  }
+  async getCiVideoAnalysisByVideoId(scrapedVideoId) {
+    const [result] = await db.select().from(ciVideoAnalyses).where(eq(ciVideoAnalyses.scrapedVideoId, scrapedVideoId));
+    return result;
+  }
+  async createCiVideoAnalysis(data) {
+    const [result] = await db.insert(ciVideoAnalyses).values(data).returning();
+    return result;
+  }
+  // ===== CI Content Briefs =====
+  async getCiContentBriefs(status) {
+    const all = await db.select().from(ciContentBriefs).orderBy(desc(ciContentBriefs.createdAt));
+    if (status) return all.filter((b) => b.status === status);
+    return all;
+  }
+  async getCiContentBrief(id) {
+    const [result] = await db.select().from(ciContentBriefs).where(eq(ciContentBriefs.id, id));
+    return result;
+  }
+  async createCiContentBrief(data) {
+    const [result] = await db.insert(ciContentBriefs).values(data).returning();
+    return result;
+  }
+  async updateCiContentBrief(id, data) {
+    const [result] = await db.update(ciContentBriefs).set(data).where(eq(ciContentBriefs.id, id)).returning();
+    return result;
+  }
+  // ===== CI Brief Scripts =====
+  async getCiBriefScripts(briefId) {
+    if (briefId) {
+      return db.select().from(ciBriefScripts).where(eq(ciBriefScripts.briefId, briefId)).orderBy(desc(ciBriefScripts.createdAt));
+    }
+    return db.select().from(ciBriefScripts).orderBy(desc(ciBriefScripts.createdAt));
+  }
+  async getCiBriefScript(id) {
+    const [result] = await db.select().from(ciBriefScripts).where(eq(ciBriefScripts.id, id));
+    return result;
+  }
+  async createCiBriefScript(data) {
+    const [result] = await db.insert(ciBriefScripts).values(data).returning();
+    return result;
+  }
+  async updateCiBriefScript(id, data) {
+    const [result] = await db.update(ciBriefScripts).set(data).where(eq(ciBriefScripts.id, id)).returning();
+    return result;
+  }
+  // ===== CI Performance Reports =====
+  async getCiPerformanceReports() {
+    return db.select().from(ciPerformanceReports).orderBy(desc(ciPerformanceReports.createdAt));
+  }
+  async getCiPerformanceReport(id) {
+    const [result] = await db.select().from(ciPerformanceReports).where(eq(ciPerformanceReports.id, id));
+    return result;
+  }
+  async createCiPerformanceReport(data) {
+    const [result] = await db.insert(ciPerformanceReports).values(data).returning();
+    return result;
+  }
+  // ===== CI Settings =====
+  async getCiSettings(category) {
+    if (category) {
+      return db.select().from(ciSettings).where(eq(ciSettings.category, category));
+    }
+    return db.select().from(ciSettings);
+  }
+  async getCiSetting(key) {
+    const [result] = await db.select().from(ciSettings).where(eq(ciSettings.key, key));
+    return result;
+  }
+  async upsertCiSetting(key, value, meta) {
+    const existing = await this.getCiSetting(key);
+    if (existing) {
+      const [result2] = await db.update(ciSettings).set({
+        value,
+        ...meta,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      }).where(eq(ciSettings.key, key)).returning();
+      return result2;
+    }
+    const [result] = await db.insert(ciSettings).values({
+      key,
+      value,
+      category: meta?.category ?? "general",
+      label: meta?.label,
+      description: meta?.description,
+      valueType: meta?.valueType ?? "text"
+    }).returning();
+    return result;
   }
 };
 var storage = new DatabaseStorage();

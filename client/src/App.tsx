@@ -37,6 +37,11 @@ import VspContentCreator from "@/pages/vsp-content-creator";
 import VspHistory from "@/pages/vsp-history";
 import VspCalendar from "@/pages/vsp-calendar";
 import VspSettings from "@/pages/vsp-settings";
+import CiDashboard from "@/pages/ci-dashboard";
+import CiCompetitors from "@/pages/ci-competitors";
+import CiAnalyses from "@/pages/ci-analyses";
+import CiBriefs from "@/pages/ci-briefs";
+import CiSettingsPage from "@/pages/ci-settings";
 
 interface AuthInfo {
   uid: string;
@@ -72,6 +77,11 @@ function AdminRouter() {
       <Route path="/vsp/history" component={VspHistory} />
       <Route path="/vsp/calendar" component={VspCalendar} />
       <Route path="/vsp/settings" component={VspSettings} />
+      <Route path="/ci" component={CiDashboard} />
+      <Route path="/ci/competitors" component={CiCompetitors} />
+      <Route path="/ci/analyses" component={CiAnalyses} />
+      <Route path="/ci/briefs" component={CiBriefs} />
+      <Route path="/ci/settings" component={CiSettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );

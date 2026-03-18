@@ -30,6 +30,13 @@ import {
   type VspContentSubtopic, type InsertVspContentSubtopic,
   type VspScriptStyle, type InsertVspScriptStyle,
   type VspCaptionStyle, type InsertVspCaptionStyle,
+  type CiCompetitor, type InsertCiCompetitor,
+  type CiScrapedVideo, type InsertCiScrapedVideo,
+  type CiVideoAnalysis, type InsertCiVideoAnalysis,
+  type CiContentBrief, type InsertCiContentBrief,
+  type CiBriefScript, type InsertCiBriefScript,
+  type CiPerformanceReport, type InsertCiPerformanceReport,
+  type CiSetting, type InsertCiSetting,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
   writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
   horoscopePrompts, horoscopeEntries,
@@ -37,10 +44,11 @@ import {
   vspContentProjects, vspCampaigns, vspContentCalendar, vspContentTemplates,
   vspCampaignTemplates, vspBulkGenerationJobs,
   vspContentCategories, vspContentSubtopics, vspScriptStyles, vspCaptionStyles,
+  ciCompetitors, ciScrapedVideos, ciVideoAnalyses, ciContentBriefs, ciBriefScripts, ciPerformanceReports, ciSettings,
 } from "../shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, gte, lte, and } from "drizzle-orm";
+import { eq, desc, asc, gte, lte, and } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -244,6 +252,48 @@ export interface IStorage {
   createVspCaptionStyle(style: InsertVspCaptionStyle): Promise<VspCaptionStyle>;
   updateVspCaptionStyle(id: string, updates: Partial<VspCaptionStyle>): Promise<VspCaptionStyle | undefined>;
   deleteVspCaptionStyle(id: string): Promise<boolean>;
+
+  // CI Competitors
+  getCiCompetitors(activeOnly?: boolean): Promise<CiCompetitor[]>;
+  getCiCompetitor(id: string): Promise<CiCompetitor | undefined>;
+  createCiCompetitor(data: InsertCiCompetitor): Promise<CiCompetitor>;
+  updateCiCompetitor(id: string, data: Partial<InsertCiCompetitor>): Promise<CiCompetitor | undefined>;
+  deleteCiCompetitor(id: string): Promise<boolean>;
+
+  // CI Scraped Videos
+  getCiScrapedVideos(filters?: { competitorId?: string, transcriptStatus?: string, analysisStatus?: string, minViews?: number }): Promise<CiScrapedVideo[]>;
+  getCiScrapedVideo(id: string): Promise<CiScrapedVideo | undefined>;
+  getCiScrapedVideoByExternalId(externalVideoId: string): Promise<CiScrapedVideo | undefined>;
+  createCiScrapedVideo(data: InsertCiScrapedVideo): Promise<CiScrapedVideo>;
+  updateCiScrapedVideo(id: string, data: Partial<CiScrapedVideo>): Promise<CiScrapedVideo | undefined>;
+
+  // CI Video Analyses
+  getCiVideoAnalyses(filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string }): Promise<CiVideoAnalysis[]>;
+  getCiVideoAnalysis(id: string): Promise<CiVideoAnalysis | undefined>;
+  getCiVideoAnalysisByVideoId(scrapedVideoId: string): Promise<CiVideoAnalysis | undefined>;
+  createCiVideoAnalysis(data: InsertCiVideoAnalysis): Promise<CiVideoAnalysis>;
+
+  // CI Content Briefs
+  getCiContentBriefs(status?: string): Promise<CiContentBrief[]>;
+  getCiContentBrief(id: string): Promise<CiContentBrief | undefined>;
+  createCiContentBrief(data: InsertCiContentBrief): Promise<CiContentBrief>;
+  updateCiContentBrief(id: string, data: Partial<InsertCiContentBrief>): Promise<CiContentBrief | undefined>;
+
+  // CI Brief Scripts
+  getCiBriefScripts(briefId?: string): Promise<CiBriefScript[]>;
+  getCiBriefScript(id: string): Promise<CiBriefScript | undefined>;
+  createCiBriefScript(data: InsertCiBriefScript): Promise<CiBriefScript>;
+  updateCiBriefScript(id: string, data: Partial<CiBriefScript>): Promise<CiBriefScript | undefined>;
+
+  // CI Performance Reports
+  getCiPerformanceReports(): Promise<CiPerformanceReport[]>;
+  getCiPerformanceReport(id: string): Promise<CiPerformanceReport | undefined>;
+  createCiPerformanceReport(data: InsertCiPerformanceReport): Promise<CiPerformanceReport>;
+
+  // CI Settings
+  getCiSettings(category?: string): Promise<CiSetting[]>;
+  getCiSetting(key: string): Promise<CiSetting | undefined>;
+  upsertCiSetting(key: string, value: string, meta?: { category?: string, label?: string, description?: string, valueType?: string }): Promise<CiSetting>;
 }
 
 export class MemStorage implements IStorage {
@@ -570,6 +620,48 @@ export class MemStorage implements IStorage {
   async createVspCaptionStyle(_style: InsertVspCaptionStyle): Promise<VspCaptionStyle> { throw new Error("Not implemented"); }
   async updateVspCaptionStyle(_id: string, _updates: Partial<VspCaptionStyle>): Promise<VspCaptionStyle | undefined> { return undefined; }
   async deleteVspCaptionStyle(_id: string): Promise<boolean> { return false; }
+
+  // CI Competitors stubs
+  async getCiCompetitors(_activeOnly?: boolean): Promise<CiCompetitor[]> { return []; }
+  async getCiCompetitor(_id: string): Promise<CiCompetitor | undefined> { return undefined; }
+  async createCiCompetitor(_data: InsertCiCompetitor): Promise<CiCompetitor> { throw new Error("Not implemented"); }
+  async updateCiCompetitor(_id: string, _data: Partial<InsertCiCompetitor>): Promise<CiCompetitor | undefined> { return undefined; }
+  async deleteCiCompetitor(_id: string): Promise<boolean> { return false; }
+
+  // CI Scraped Videos stubs
+  async getCiScrapedVideos(_filters?: { competitorId?: string, transcriptStatus?: string, analysisStatus?: string, minViews?: number }): Promise<CiScrapedVideo[]> { return []; }
+  async getCiScrapedVideo(_id: string): Promise<CiScrapedVideo | undefined> { return undefined; }
+  async getCiScrapedVideoByExternalId(_externalVideoId: string): Promise<CiScrapedVideo | undefined> { return undefined; }
+  async createCiScrapedVideo(_data: InsertCiScrapedVideo): Promise<CiScrapedVideo> { throw new Error("Not implemented"); }
+  async updateCiScrapedVideo(_id: string, _data: Partial<CiScrapedVideo>): Promise<CiScrapedVideo | undefined> { return undefined; }
+
+  // CI Video Analyses stubs
+  async getCiVideoAnalyses(_filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string }): Promise<CiVideoAnalysis[]> { return []; }
+  async getCiVideoAnalysis(_id: string): Promise<CiVideoAnalysis | undefined> { return undefined; }
+  async getCiVideoAnalysisByVideoId(_scrapedVideoId: string): Promise<CiVideoAnalysis | undefined> { return undefined; }
+  async createCiVideoAnalysis(_data: InsertCiVideoAnalysis): Promise<CiVideoAnalysis> { throw new Error("Not implemented"); }
+
+  // CI Content Briefs stubs
+  async getCiContentBriefs(_status?: string): Promise<CiContentBrief[]> { return []; }
+  async getCiContentBrief(_id: string): Promise<CiContentBrief | undefined> { return undefined; }
+  async createCiContentBrief(_data: InsertCiContentBrief): Promise<CiContentBrief> { throw new Error("Not implemented"); }
+  async updateCiContentBrief(_id: string, _data: Partial<InsertCiContentBrief>): Promise<CiContentBrief | undefined> { return undefined; }
+
+  // CI Brief Scripts stubs
+  async getCiBriefScripts(_briefId?: string): Promise<CiBriefScript[]> { return []; }
+  async getCiBriefScript(_id: string): Promise<CiBriefScript | undefined> { return undefined; }
+  async createCiBriefScript(_data: InsertCiBriefScript): Promise<CiBriefScript> { throw new Error("Not implemented"); }
+  async updateCiBriefScript(_id: string, _data: Partial<CiBriefScript>): Promise<CiBriefScript | undefined> { return undefined; }
+
+  // CI Performance Reports stubs
+  async getCiPerformanceReports(): Promise<CiPerformanceReport[]> { return []; }
+  async getCiPerformanceReport(_id: string): Promise<CiPerformanceReport | undefined> { return undefined; }
+  async createCiPerformanceReport(_data: InsertCiPerformanceReport): Promise<CiPerformanceReport> { throw new Error("Not implemented"); }
+
+  // CI Settings stubs
+  async getCiSettings(_category?: string): Promise<CiSetting[]> { return []; }
+  async getCiSetting(_key: string): Promise<CiSetting | undefined> { return undefined; }
+  async upsertCiSetting(_key: string, _value: string, _meta?: { category?: string, label?: string, description?: string, valueType?: string }): Promise<CiSetting> { throw new Error("Not implemented"); }
 }
 
 // Database storage implementation - uses PostgreSQL for persistence
@@ -1656,6 +1748,208 @@ export class DatabaseStorage implements IStorage {
   async deleteVspCaptionStyle(id: string): Promise<boolean> {
     const results = await db.delete(vspCaptionStyles).where(eq(vspCaptionStyles.id, id)).returning();
     return results.length > 0;
+  }
+
+  // ===== CI Competitors =====
+  async getCiCompetitors(activeOnly?: boolean): Promise<CiCompetitor[]> {
+    if (activeOnly) {
+      return db.select().from(ciCompetitors)
+        .where(eq(ciCompetitors.isActive, true))
+        .orderBy(asc(ciCompetitors.handle));
+    }
+    return db.select().from(ciCompetitors).orderBy(asc(ciCompetitors.handle));
+  }
+
+  async getCiCompetitor(id: string): Promise<CiCompetitor | undefined> {
+    const [result] = await db.select().from(ciCompetitors).where(eq(ciCompetitors.id, id));
+    return result;
+  }
+
+  async createCiCompetitor(data: InsertCiCompetitor): Promise<CiCompetitor> {
+    const [result] = await db.insert(ciCompetitors).values(data).returning();
+    return result;
+  }
+
+  async updateCiCompetitor(id: string, data: Partial<InsertCiCompetitor>): Promise<CiCompetitor | undefined> {
+    const [result] = await db.update(ciCompetitors)
+      .set(data)
+      .where(eq(ciCompetitors.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteCiCompetitor(id: string): Promise<boolean> {
+    const results = await db.delete(ciCompetitors).where(eq(ciCompetitors.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ===== CI Scraped Videos =====
+  async getCiScrapedVideos(filters?: { competitorId?: string, transcriptStatus?: string, analysisStatus?: string, minViews?: number }): Promise<CiScrapedVideo[]> {
+    const all = await db.select().from(ciScrapedVideos).orderBy(desc(ciScrapedVideos.createdAt));
+    if (!filters) return all;
+    return all.filter(v => {
+      if (filters.competitorId && v.competitorId !== filters.competitorId) return false;
+      if (filters.transcriptStatus && v.transcriptStatus !== filters.transcriptStatus) return false;
+      if (filters.analysisStatus && v.analysisStatus !== filters.analysisStatus) return false;
+      if (filters.minViews && (v.viewCount || 0) < filters.minViews) return false;
+      return true;
+    });
+  }
+
+  async getCiScrapedVideo(id: string): Promise<CiScrapedVideo | undefined> {
+    const [result] = await db.select().from(ciScrapedVideos).where(eq(ciScrapedVideos.id, id));
+    return result;
+  }
+
+  async getCiScrapedVideoByExternalId(externalVideoId: string): Promise<CiScrapedVideo | undefined> {
+    const [result] = await db.select().from(ciScrapedVideos).where(eq(ciScrapedVideos.externalVideoId, externalVideoId));
+    return result;
+  }
+
+  async createCiScrapedVideo(data: InsertCiScrapedVideo): Promise<CiScrapedVideo> {
+    const [result] = await db.insert(ciScrapedVideos).values(data).returning();
+    return result;
+  }
+
+  async updateCiScrapedVideo(id: string, data: Partial<CiScrapedVideo>): Promise<CiScrapedVideo | undefined> {
+    const [result] = await db.update(ciScrapedVideos)
+      .set(data)
+      .where(eq(ciScrapedVideos.id, id))
+      .returning();
+    return result;
+  }
+
+  // ===== CI Video Analyses =====
+  async getCiVideoAnalyses(filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string }): Promise<CiVideoAnalysis[]> {
+    const all = await db.select().from(ciVideoAnalyses).orderBy(desc(ciVideoAnalyses.createdAt));
+    if (!filters) return all;
+    return all.filter(a => {
+      if (filters.hookType && a.hookType !== filters.hookType) return false;
+      if (filters.topicCategory && a.topicCategory !== filters.topicCategory) return false;
+      if (filters.minReplicationScore && (a.replicationScore || 0) < filters.minReplicationScore) return false;
+      if (filters.weekAdded && a.weekAdded !== filters.weekAdded) return false;
+      return true;
+    });
+  }
+
+  async getCiVideoAnalysis(id: string): Promise<CiVideoAnalysis | undefined> {
+    const [result] = await db.select().from(ciVideoAnalyses).where(eq(ciVideoAnalyses.id, id));
+    return result;
+  }
+
+  async getCiVideoAnalysisByVideoId(scrapedVideoId: string): Promise<CiVideoAnalysis | undefined> {
+    const [result] = await db.select().from(ciVideoAnalyses).where(eq(ciVideoAnalyses.scrapedVideoId, scrapedVideoId));
+    return result;
+  }
+
+  async createCiVideoAnalysis(data: InsertCiVideoAnalysis): Promise<CiVideoAnalysis> {
+    const [result] = await db.insert(ciVideoAnalyses).values(data).returning();
+    return result;
+  }
+
+  // ===== CI Content Briefs =====
+  async getCiContentBriefs(status?: string): Promise<CiContentBrief[]> {
+    const all = await db.select().from(ciContentBriefs).orderBy(desc(ciContentBriefs.createdAt));
+    if (status) return all.filter(b => b.status === status);
+    return all;
+  }
+
+  async getCiContentBrief(id: string): Promise<CiContentBrief | undefined> {
+    const [result] = await db.select().from(ciContentBriefs).where(eq(ciContentBriefs.id, id));
+    return result;
+  }
+
+  async createCiContentBrief(data: InsertCiContentBrief): Promise<CiContentBrief> {
+    const [result] = await db.insert(ciContentBriefs).values(data).returning();
+    return result;
+  }
+
+  async updateCiContentBrief(id: string, data: Partial<InsertCiContentBrief>): Promise<CiContentBrief | undefined> {
+    const [result] = await db.update(ciContentBriefs)
+      .set(data)
+      .where(eq(ciContentBriefs.id, id))
+      .returning();
+    return result;
+  }
+
+  // ===== CI Brief Scripts =====
+  async getCiBriefScripts(briefId?: string): Promise<CiBriefScript[]> {
+    if (briefId) {
+      return db.select().from(ciBriefScripts)
+        .where(eq(ciBriefScripts.briefId, briefId))
+        .orderBy(desc(ciBriefScripts.createdAt));
+    }
+    return db.select().from(ciBriefScripts).orderBy(desc(ciBriefScripts.createdAt));
+  }
+
+  async getCiBriefScript(id: string): Promise<CiBriefScript | undefined> {
+    const [result] = await db.select().from(ciBriefScripts).where(eq(ciBriefScripts.id, id));
+    return result;
+  }
+
+  async createCiBriefScript(data: InsertCiBriefScript): Promise<CiBriefScript> {
+    const [result] = await db.insert(ciBriefScripts).values(data).returning();
+    return result;
+  }
+
+  async updateCiBriefScript(id: string, data: Partial<CiBriefScript>): Promise<CiBriefScript | undefined> {
+    const [result] = await db.update(ciBriefScripts)
+      .set(data)
+      .where(eq(ciBriefScripts.id, id))
+      .returning();
+    return result;
+  }
+
+  // ===== CI Performance Reports =====
+  async getCiPerformanceReports(): Promise<CiPerformanceReport[]> {
+    return db.select().from(ciPerformanceReports).orderBy(desc(ciPerformanceReports.createdAt));
+  }
+
+  async getCiPerformanceReport(id: string): Promise<CiPerformanceReport | undefined> {
+    const [result] = await db.select().from(ciPerformanceReports).where(eq(ciPerformanceReports.id, id));
+    return result;
+  }
+
+  async createCiPerformanceReport(data: InsertCiPerformanceReport): Promise<CiPerformanceReport> {
+    const [result] = await db.insert(ciPerformanceReports).values(data).returning();
+    return result;
+  }
+
+  // ===== CI Settings =====
+  async getCiSettings(category?: string): Promise<CiSetting[]> {
+    if (category) {
+      return db.select().from(ciSettings).where(eq(ciSettings.category, category));
+    }
+    return db.select().from(ciSettings);
+  }
+
+  async getCiSetting(key: string): Promise<CiSetting | undefined> {
+    const [result] = await db.select().from(ciSettings).where(eq(ciSettings.key, key));
+    return result;
+  }
+
+  async upsertCiSetting(key: string, value: string, meta?: { category?: string, label?: string, description?: string, valueType?: string }): Promise<CiSetting> {
+    const existing = await this.getCiSetting(key);
+    if (existing) {
+      const [result] = await db.update(ciSettings)
+        .set({
+          value,
+          ...meta,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(ciSettings.key, key))
+        .returning();
+      return result;
+    }
+    const [result] = await db.insert(ciSettings).values({
+      key,
+      value,
+      category: meta?.category ?? "general",
+      label: meta?.label,
+      description: meta?.description,
+      valueType: meta?.valueType ?? "text",
+    }).returning();
+    return result;
   }
 }
 

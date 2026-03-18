@@ -17,6 +17,9 @@ import {
   Film,
   History,
   CalendarDays,
+  Brain,
+  Eye,
+  Search,
 } from "lucide-react";
 import {
   Sidebar,
@@ -102,6 +105,34 @@ const vspNavItems = [
   {
     title: "VSP Settings",
     url: "/vsp/settings",
+    icon: Settings,
+  },
+];
+
+const ciNavItems = [
+  {
+    title: "CI Dashboard",
+    url: "/ci",
+    icon: Brain,
+  },
+  {
+    title: "Competitors",
+    url: "/ci/competitors",
+    icon: Eye,
+  },
+  {
+    title: "Analyses",
+    url: "/ci/analyses",
+    icon: Search,
+  },
+  {
+    title: "Briefs",
+    url: "/ci/briefs",
+    icon: FileText,
+  },
+  {
+    title: "CI Settings",
+    url: "/ci/settings",
     icon: Settings,
   },
 ];
@@ -195,6 +226,28 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     asChild
                     isActive={item.url === "/vsp" ? location === "/vsp" : location.startsWith(item.url)}
+                    data-testid={`nav-${item.title.toLowerCase().replace(/ /g, '-')}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Content Intelligence</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {ciNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={item.url === "/ci" ? location === "/ci" : location.startsWith(item.url)}
                     data-testid={`nav-${item.title.toLowerCase().replace(/ /g, '-')}`}
                   >
                     <Link href={item.url}>

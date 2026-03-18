@@ -7,6 +7,7 @@ import crypto from "crypto";
 import OpenAI from "openai";
 
 import { registerVspRoutes } from "./routes-vsp";
+import { registerCiRoutes } from "./routes-ci";
 import FirecrawlAppModule from "@mendable/firecrawl-js";
 const FirecrawlApp = (FirecrawlAppModule as any).default || FirecrawlAppModule;
 
@@ -318,6 +319,7 @@ export async function registerRoutes(
   
   // ============ VIRAL SCRIPT PRO ============
   registerVspRoutes(app);
+  registerCiRoutes(app);
 
   // ============ STATS ============
   app.get("/api/stats", async (req, res) => {
