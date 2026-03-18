@@ -74,7 +74,7 @@ jobs:
           if [ "$HOROSCOPE_TYPE" = "daily" ]; then
             for DAYS_AHEAD in 0 1 2 3; do
               echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) +${DAYS_AHEAD} days..."
-              HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 \
+              HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
                 -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
                 -H "Content-Type: application/json" \
                 -d "{\"type\":\"daily\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\",\"daysAhead\":${DAYS_AHEAD}}")
