@@ -3,23 +3,20 @@
   "outputDirectory": "dist/public",
   "framework": null,
   "functions": {
-    "api/index.ts": {
-      "includeFiles": "server/**,shared/**",
+    "api/index.js": {
       "maxDuration": 60
     },
-    "api/cron/horoscopes.ts": {
-      "includeFiles": "server/**,shared/**",
+    "api/cron/horoscopes.js": {
       "maxDuration": 300
     },
-    "api/cron/video-cleanup.ts": {
-      "includeFiles": "server/**,shared/**",
+    "api/cron/video-cleanup.js": {
       "maxDuration": 300
     }
   },
   "rewrites": [
-    { "source": "/api/cron/horoscopes", "destination": "/api/cron/horoscopes.ts" },
-    { "source": "/api/cron/video-cleanup", "destination": "/api/cron/video-cleanup.ts" },
-    { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/api/cron/horoscopes", "destination": "/api/cron/horoscopes.js" },
+    { "source": "/api/cron/video-cleanup", "destination": "/api/cron/video-cleanup.js" },
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

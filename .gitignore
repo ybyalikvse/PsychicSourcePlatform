@@ -9,6 +9,9 @@ vite.config.ts.*
 .env
 client/.env
 
+# API bundles (generated during build)
+api/**/*.js
+
 # Replit (legacy)
 .replit
 replit.md
