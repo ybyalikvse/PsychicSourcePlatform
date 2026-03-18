@@ -23,6 +23,24 @@ on:
 jobs:
   generate:
     runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        site: [psychicsource, pathforward]
+        language: [en, es]
+        sign:
+          - Aries
+          - Taurus
+          - Gemini
+          - Cancer
+          - Leo
+          - Virgo
+          - Libra
+          - Scorpio
+          - Sagittarius
+          - Capricorn
+          - Aquarius
+          - Pisces
     steps:
       - name: Determine horoscope type
         id: type
@@ -40,8 +58,32 @@ jobs:
             fi
           fi
 
-      - name: Trigger horoscope generation
+      - name: Generate ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }})
         run: |
-          curl -f -X GET \
-            "${{ secrets.VERCEL_APP_URL }}/api/cron/horoscopes?type=${{ steps.type.outputs.type }}" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          # For daily, generate today + next 3 days
+          if [ "${{ steps.type.outputs.type }}" = "daily" ]; then
+            for DAYS_AHEAD in 0 1 2 3; do
+              echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) +${DAYS_AHEAD} days..."
+              HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+                -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
+                -H "Content-Type: application/json" \
+                -d "{\"type\":\"${{ steps.type.outputs.type }}\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\",\"daysAhead\":${DAYS_AHEAD}}")
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "  ✓ Success"
+              else
+                echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json)"
+              fi
+              sleep 2
+            done
+          else
+            echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }})..."
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+              -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"${{ steps.type.outputs.type }}\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\"}")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "  ✓ Success"
+            else
+              echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json)"
+            fi
+          fi
