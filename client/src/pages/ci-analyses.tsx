@@ -292,7 +292,7 @@ export default function CiAnalyses() {
                               <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             )}
                           </TableCell>
-                          <TableCell className="font-medium">@{analysis.creator}</TableCell>
+                          <TableCell className="font-medium">{analysis.creator ? `@${analysis.creator}` : "—"}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{analysis.topicCategory}</Badge>
                           </TableCell>
@@ -300,13 +300,13 @@ export default function CiAnalyses() {
                             <Badge variant="secondary">{analysis.hookType}</Badge>
                           </TableCell>
                           <TableCell className="text-sm">{analysis.emotionalAngle}</TableCell>
-                          <TableCell className="text-right">{formatViews(analysis.views)}</TableCell>
+                          <TableCell className="text-right">{analysis.views ? formatViews(analysis.views) : "—"}</TableCell>
                           <TableCell className="text-center">
                             <Badge className={getScoreColor(analysis.replicationScore)}>
                               {analysis.replicationScore}/5
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-sm">{analysis.format}</TableCell>
+                          <TableCell className="text-sm">{formatLabel(analysis.format || "")}</TableCell>
                         </TableRow>
                       </CollapsibleTrigger>
                       <CollapsibleContent asChild>

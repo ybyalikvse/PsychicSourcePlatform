@@ -534,7 +534,21 @@ export function registerCiRoutes(app: Express) {
       if (req.query.weekAdded) filters.weekAdded = req.query.weekAdded as string;
 
       const analyses = await storage.getCiVideoAnalyses(filters);
-      res.json(analyses);
+
+      // Enrich with video and competitor data
+      const enriched = await Promise.all(analyses.map(async (a) => {
+        const video = await storage.getCiScrapedVideo(a.scrapedVideoId);
+        let creatorHandle = "unknown";
+        let viewCount = 0;
+        if (video) {
+          viewCount = video.viewCount ?? 0;
+          const competitor = await storage.getCiCompetitor(video.competitorId);
+          creatorHandle = competitor?.handle || "unknown";
+        }
+        return { ...a, creator: creatorHandle, views: viewCount };
+      }));
+
+      res.json(enriched);
     } catch (error) {
       console.error("[CI] Error fetching analyses:", error);
       res.status(500).json({ error: "Failed to fetch analyses" });
