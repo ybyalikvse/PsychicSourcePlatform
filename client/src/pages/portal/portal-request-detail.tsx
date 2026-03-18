@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { VideoRequestDescription } from "@/components/video-request-description";
 import { Skeleton } from "@/components/ui/skeleton";
 import { portalApiRequest, portalFetch } from "@/lib/portal-api";
 import { queryClient } from "@/lib/queryClient";
@@ -200,7 +201,9 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
               {request.description && (
                 <div>
                   <span className="text-sm font-medium">Description</span>
-                  <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap" data-testid="text-request-description">{request.description}</p>
+                  <div className="mt-1" data-testid="text-request-description">
+                    <VideoRequestDescription description={request.description} />
+                  </div>
                 </div>
               )}
               <div className="flex flex-wrap gap-3">

@@ -939,37 +939,32 @@ export function registerCiRoutes(app: Express) {
       const scripts = await storage.getCiBriefScripts(brief.id);
       const script = scripts.find(s => s.briefItemIndex === itemIndex);
 
-      // Build description from brief details
-      const parts: string[] = [];
-      if (item.topic_description) parts.push(`Topic: ${item.topic_description}`);
-      if (item.hook_options?.length) parts.push(`\nHook Options:\n${item.hook_options.map((h: string, i: number) => `${i + 1}) ${h}`).join("\n")}`);
-      if (item.talking_points?.length) parts.push(`\nTalking Points:\n${item.talking_points.map((p: string) => `• ${p}`).join("\n")}`);
-      if (item.emotional_journey) parts.push(`\nEmotional Journey: ${item.emotional_journey}`);
-      if (item.suggested_cta) parts.push(`\nSuggested CTA: ${item.suggested_cta}`);
-      if (item.format_suggestion) parts.push(`\nFormat: ${item.format_suggestion}`);
-      if (item.estimated_length) parts.push(`Estimated Length: ${item.estimated_length}`);
-      if (item.difficulty) parts.push(`Difficulty: ${item.difficulty}`);
-      if (item.notes_for_creator) parts.push(`\nNotes: ${item.notes_for_creator}`);
-
-      // Append full script if available
-      if (script) {
-        const scriptParts: string[] = [];
-        if (script.hook) scriptParts.push(`HOOK:\n${script.hook}`);
-        if (script.body) scriptParts.push(`BODY:\n${script.body}`);
-        if (script.closeCta) scriptParts.push(`CLOSE + CTA:\n${script.closeCta}`);
-        if (scriptParts.length > 0) {
-          parts.push(`\n--- FULL SCRIPT (optional) ---\n${scriptParts.join("\n\n")}`);
-        } else if (script.rawScript?.full) {
-          parts.push(`\n--- FULL SCRIPT (optional) ---\n${script.rawScript.full}`);
-        }
-      }
+      // Build structured description as JSON for rich rendering on frontend
+      const structuredDescription = JSON.stringify({
+        _type: "ci_brief",
+        topic_description: item.topic_description || null,
+        hook_options: item.hook_options || [],
+        talking_points: item.talking_points || [],
+        emotional_journey: item.emotional_journey || null,
+        suggested_cta: item.suggested_cta || null,
+        format_suggestion: item.format_suggestion || null,
+        estimated_length: item.estimated_length || null,
+        difficulty: item.difficulty || null,
+        notes_for_creator: item.notes_for_creator || null,
+        script: script ? {
+          hook: script.hook || null,
+          body: script.body || null,
+          closeCta: script.closeCta || null,
+          full: script.rawScript?.full || null,
+        } : null,
+      });
 
       const videoRequest = await storage.createVideoRequest({
         title: item.title || `Brief ${brief.weekLabel} Item ${itemIndex + 1}`,
         topic: item.topic_category || item.title,
         hook: item.hook_options?.[0] || undefined,
         videoDuration: item.estimated_length || "60s",
-        description: parts.join("\n"),
+        description: structuredDescription,
         status: "available",
       });
 

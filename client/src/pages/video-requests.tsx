@@ -27,6 +27,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VideoRequestDescription } from "@/components/video-request-description";
 import {
   Plus, Video, Send, Loader2, Trash2, Eye, CheckCircle, RotateCw,
   DollarSign, Clock, Copy, Sparkles, ArrowLeft, MessageSquare,
@@ -354,7 +355,7 @@ export default function VideoRequests() {
                     <Separator />
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Description</p>
-                      <p className="text-sm whitespace-pre-wrap" data-testid="text-description">{selectedRequest.description}</p>
+                      <VideoRequestDescription description={selectedRequest.description} />
                     </div>
                   </>
                 )}
