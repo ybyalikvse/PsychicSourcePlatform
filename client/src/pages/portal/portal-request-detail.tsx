@@ -200,7 +200,7 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
               {request.description && (
                 <div>
                   <span className="text-sm font-medium">Description</span>
-                  <p className="text-sm text-muted-foreground mt-1" data-testid="text-request-description">{request.description}</p>
+                  <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap" data-testid="text-request-description">{request.description}</p>
                 </div>
               )}
               <div className="flex flex-wrap gap-3">

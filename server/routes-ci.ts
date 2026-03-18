@@ -1253,6 +1253,22 @@ export function registerCiRoutes(app: Express) {
           description: "OpenRouter model ID used for all CI AI calls",
           valueType: "text",
         },
+        {
+          key: "show_pay_amount",
+          value: "false",
+          category: "general",
+          label: "Show Pay Amount",
+          description: "Show or hide the pay amount field on video requests (for admin and psychic views)",
+          valueType: "text",
+        },
+        {
+          key: "claim_deadline_days",
+          value: "7",
+          category: "general",
+          label: "Claim Deadline (Days)",
+          description: "Auto-set required date to this many days after a psychic claims a request",
+          valueType: "number",
+        },
       ];
 
       const results = [];

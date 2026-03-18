@@ -5027,10 +5027,27 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
         return res.status(400).json({ error: "This video request is no longer available" });
       }
 
+      // Auto-set required date if not already set
+      let requiredDate = request.requiredDate;
+      if (!requiredDate) {
+        try {
+          const deadlineSetting = await storage.getCiSetting("claim_deadline_days");
+          const days = deadlineSetting ? parseInt(deadlineSetting.value, 10) : 7;
+          const deadline = new Date();
+          deadline.setDate(deadline.getDate() + days);
+          requiredDate = deadline.toISOString().split("T")[0];
+        } catch {
+          const deadline = new Date();
+          deadline.setDate(deadline.getDate() + 7);
+          requiredDate = deadline.toISOString().split("T")[0];
+        }
+      }
+
       const updated = await storage.updateVideoRequest(req.params.id, {
         status: "claimed",
         claimedBy: psychic.id,
         claimedAt: new Date().toISOString(),
+        requiredDate,
       });
       res.json(updated);
     } catch (error) {

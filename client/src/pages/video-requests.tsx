@@ -102,6 +102,11 @@ export default function VideoRequests() {
     queryKey: ["/api/psychics"],
   });
 
+  const { data: ciSettings = [] } = useQuery<Array<{ key: string; value: string }>>({
+    queryKey: ["/api/ci/settings"],
+  });
+  const showPayAmount = ciSettings.find(s => s.key === "show_pay_amount")?.value === "true";
+
   const { data: messages = [], isLoading: messagesLoading } = useQuery<VideoMessage[]>({
     queryKey: ["/api/video-requests", selectedRequest?.id, "messages"],
     queryFn: async () => {
@@ -330,8 +335,10 @@ export default function VideoRequests() {
                     <p className="text-sm" data-testid="text-required-date">{selectedRequest.requiredDate || "—"}</p>
                   </div>
                   <div>
+                    {showPayAmount && <>
                     <p className="text-sm text-muted-foreground">Pay Amount</p>
                     <p className="text-sm" data-testid="text-pay-amount">{selectedRequest.payAmount ? `$${selectedRequest.payAmount}` : "—"}</p>
+                    </>}
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Claimed By</p>
@@ -347,7 +354,7 @@ export default function VideoRequests() {
                     <Separator />
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Description</p>
-                      <p className="text-sm" data-testid="text-description">{selectedRequest.description}</p>
+                      <p className="text-sm whitespace-pre-wrap" data-testid="text-description">{selectedRequest.description}</p>
                     </div>
                   </>
                 )}
@@ -680,7 +687,7 @@ export default function VideoRequests() {
                 <TableHead>Title</TableHead>
                 <TableHead>Topic</TableHead>
                 <TableHead>Duration</TableHead>
-                <TableHead>Pay</TableHead>
+                {showPayAmount && <TableHead>Pay</TableHead>}
                 <TableHead>Required Date</TableHead>
                 <TableHead>Claimed By</TableHead>
                 <TableHead>Status</TableHead>
@@ -693,7 +700,7 @@ export default function VideoRequests() {
                   <TableCell className="font-medium" data-testid={`text-title-${req.id}`}>{req.title}</TableCell>
                   <TableCell data-testid={`text-topic-${req.id}`}>{req.topic}</TableCell>
                   <TableCell data-testid={`text-duration-${req.id}`}>{req.videoDuration || "—"}</TableCell>
-                  <TableCell data-testid={`text-pay-${req.id}`}>{req.payAmount ? `$${req.payAmount}` : "—"}</TableCell>
+                  {showPayAmount && <TableCell data-testid={`text-pay-${req.id}`}>{req.payAmount ? `$${req.payAmount}` : "—"}</TableCell>}
                   <TableCell data-testid={`text-date-${req.id}`}>{req.requiredDate || "—"}</TableCell>
                   <TableCell data-testid={`text-psychic-${req.id}`}>{getPsychicName(req.claimedBy)}</TableCell>
                   <TableCell>
@@ -780,13 +787,13 @@ export default function VideoRequests() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="payAmount" render={({ field }) => (
+                {showPayAmount && <FormField control={form.control} name="payAmount" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Pay Amount ($)</FormLabel>
                     <FormControl><Input {...field} placeholder="50" type="text" data-testid="input-pay" /></FormControl>
                     <FormMessage />
                   </FormItem>
-                )} />
+                )} />}
               </div>
               <FormField control={form.control} name="requiredDate" render={({ field }) => (
                 <FormItem>
@@ -864,13 +871,13 @@ export default function VideoRequests() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={editForm.control} name="payAmount" render={({ field }) => (
+                {showPayAmount && <FormField control={editForm.control} name="payAmount" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Pay Amount ($)</FormLabel>
                     <FormControl><Input {...field} type="text" data-testid="input-edit-pay" /></FormControl>
                     <FormMessage />
                   </FormItem>
-                )} />
+                )} />}
               </div>
               <FormField control={editForm.control} name="requiredDate" render={({ field }) => (
                 <FormItem>
