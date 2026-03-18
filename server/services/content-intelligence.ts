@@ -46,7 +46,18 @@ export async function fetchVideoTranscript(
     }
 
     const data = await response.json();
-    return data?.transcript || data?.text || null;
+    let transcript = data?.transcript || data?.text || null;
+    if (!transcript) return null;
+
+    // If transcript is WebVTT format, extract just the text lines
+    if (transcript.includes("WEBVTT") || transcript.includes("-->")) {
+      transcript = transcript
+        .split("\n")
+        .filter((line: string) => line.trim() && !line.includes("-->") && !line.startsWith("WEBVTT") && !/^\d+$/.test(line.trim()))
+        .join(" ")
+        .trim();
+    }
+    return transcript;
   } catch (error) {
     console.error(`[CI] Failed to fetch transcript for ${videoUrl}:`, error);
     return null;

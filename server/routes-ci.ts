@@ -158,7 +158,7 @@ export function registerCiRoutes(app: Express) {
         await storage.createCiScrapedVideo({
           competitorId: competitor.id,
           externalVideoId: String(externalId),
-          url: video.share_url || video.url || video.video_url || `https://www.tiktok.com/@${competitor.handle}/video/${externalId}`,
+          url: (video.share_url || video.url || video.video_url || `https://www.tiktok.com/@${competitor.handle}/video/${externalId}`).split("?")[0],
           caption: video.desc || video.caption || video.description || null,
           viewCount: views,
           likeCount: stats.digg_count ?? stats.diggCount ?? video.likes ?? video.likeCount ?? 0,
