@@ -1,8 +1,7 @@
 import "dotenv/config";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { runHoroscopeGeneration } from "../../server/horoscope-cron";
+import { runHoroscopeGeneration } from "../horoscope-cron";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   // Verify cron secret for security
   const authHeader = req.headers.authorization;
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

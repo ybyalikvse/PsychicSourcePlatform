@@ -1,8 +1,7 @@
 import "dotenv/config";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { releaseExpiredClaims } from "../../server/video-cron";
+import { releaseExpiredClaims } from "../video-cron";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   const authHeader = req.headers.authorization;
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: "Unauthorized" });
