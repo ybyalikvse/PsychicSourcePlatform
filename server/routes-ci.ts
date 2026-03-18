@@ -825,13 +825,31 @@ export function registerCiRoutes(app: Express) {
           const competitor = await storage.getCiCompetitor(video.competitorId);
           creatorHandle = competitor?.handle || "unknown";
         }
-        return { ...a, creator: creatorHandle, views: viewCount };
+        return { ...a, creator: creatorHandle, views: viewCount, videoUrl: video?.url || null };
       }));
 
       res.json(enriched);
     } catch (error) {
       console.error("[CI] Error fetching analyses:", error);
       res.status(500).json({ error: "Failed to fetch analyses" });
+    }
+  });
+
+  router.delete("/analyses/:id", async (req, res) => {
+    try {
+      await storage.deleteCiVideoAnalysis(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete analysis" });
+    }
+  });
+
+  router.delete("/videos/:id", async (req, res) => {
+    try {
+      await storage.deleteCiScrapedVideo(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete video" });
     }
   });
 
@@ -882,6 +900,24 @@ export function registerCiRoutes(app: Express) {
     } catch (error) {
       console.error("[CI] Error updating script:", error);
       res.status(500).json({ error: "Failed to update script" });
+    }
+  });
+
+  router.delete("/briefs/:id", async (req, res) => {
+    try {
+      await storage.deleteCiContentBrief(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete brief" });
+    }
+  });
+
+  router.delete("/scripts/:id", async (req, res) => {
+    try {
+      await storage.deleteCiBriefScript(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete script" });
     }
   });
 

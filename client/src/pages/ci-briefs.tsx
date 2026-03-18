@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Loader2,
-  ArrowRightCircle, ScrollText, Video, Play, CheckCircle, Clock,
+  ArrowRightCircle, ScrollText, Video, Play, CheckCircle, Clock, Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -124,6 +124,32 @@ export default function CiBriefs() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to convert", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteBriefMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/ci/briefs/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      toast({ title: "Brief deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteScriptMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/ci/scripts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      toast({ title: "Script deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -270,6 +296,17 @@ export default function CiBriefs() {
                       </div>
                       <div className="flex items-center gap-3">
                         <Badge variant={getStatusColor(brief.status)}>{brief.status}</Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Are you sure?")) deleteBriefMutation.mutate(String(brief.id));
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                         {brief.topTopics && brief.topTopics.length > 0 && (
                           <div className="hidden sm:flex gap-1">
                             {brief.topTopics.slice(0, 3).map((topic: any, i: number) => (
@@ -426,6 +463,17 @@ export default function CiBriefs() {
                                           <Video className="h-4 w-4 mr-1" />
                                         )}
                                         Convert to Video Request
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (confirm("Are you sure?")) deleteScriptMutation.mutate(String(script.id));
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
                                       </Button>
                                     </div>
                                   </div>

@@ -272,18 +272,22 @@ export interface IStorage {
   getCiVideoAnalysis(id: string): Promise<CiVideoAnalysis | undefined>;
   getCiVideoAnalysisByVideoId(scrapedVideoId: string): Promise<CiVideoAnalysis | undefined>;
   createCiVideoAnalysis(data: InsertCiVideoAnalysis): Promise<CiVideoAnalysis>;
+  deleteCiVideoAnalysis(id: string): Promise<boolean>;
+  deleteCiScrapedVideo(id: string): Promise<boolean>;
 
   // CI Content Briefs
   getCiContentBriefs(status?: string): Promise<CiContentBrief[]>;
   getCiContentBrief(id: string): Promise<CiContentBrief | undefined>;
   createCiContentBrief(data: InsertCiContentBrief): Promise<CiContentBrief>;
   updateCiContentBrief(id: string, data: Partial<InsertCiContentBrief>): Promise<CiContentBrief | undefined>;
+  deleteCiContentBrief(id: string): Promise<boolean>;
 
   // CI Brief Scripts
   getCiBriefScripts(briefId?: string): Promise<CiBriefScript[]>;
   getCiBriefScript(id: string): Promise<CiBriefScript | undefined>;
   createCiBriefScript(data: InsertCiBriefScript): Promise<CiBriefScript>;
   updateCiBriefScript(id: string, data: Partial<CiBriefScript>): Promise<CiBriefScript | undefined>;
+  deleteCiBriefScript(id: string): Promise<boolean>;
 
   // CI Performance Reports
   getCiPerformanceReports(): Promise<CiPerformanceReport[]>;
@@ -640,18 +644,22 @@ export class MemStorage implements IStorage {
   async getCiVideoAnalysis(_id: string): Promise<CiVideoAnalysis | undefined> { return undefined; }
   async getCiVideoAnalysisByVideoId(_scrapedVideoId: string): Promise<CiVideoAnalysis | undefined> { return undefined; }
   async createCiVideoAnalysis(_data: InsertCiVideoAnalysis): Promise<CiVideoAnalysis> { throw new Error("Not implemented"); }
+  async deleteCiVideoAnalysis(_id: string): Promise<boolean> { return false; }
+  async deleteCiScrapedVideo(_id: string): Promise<boolean> { return false; }
 
   // CI Content Briefs stubs
   async getCiContentBriefs(_status?: string): Promise<CiContentBrief[]> { return []; }
   async getCiContentBrief(_id: string): Promise<CiContentBrief | undefined> { return undefined; }
   async createCiContentBrief(_data: InsertCiContentBrief): Promise<CiContentBrief> { throw new Error("Not implemented"); }
   async updateCiContentBrief(_id: string, _data: Partial<InsertCiContentBrief>): Promise<CiContentBrief | undefined> { return undefined; }
+  async deleteCiContentBrief(_id: string): Promise<boolean> { return false; }
 
   // CI Brief Scripts stubs
   async getCiBriefScripts(_briefId?: string): Promise<CiBriefScript[]> { return []; }
   async getCiBriefScript(_id: string): Promise<CiBriefScript | undefined> { return undefined; }
   async createCiBriefScript(_data: InsertCiBriefScript): Promise<CiBriefScript> { throw new Error("Not implemented"); }
   async updateCiBriefScript(_id: string, _data: Partial<CiBriefScript>): Promise<CiBriefScript | undefined> { return undefined; }
+  async deleteCiBriefScript(_id: string): Promise<boolean> { return false; }
 
   // CI Performance Reports stubs
   async getCiPerformanceReports(): Promise<CiPerformanceReport[]> { return []; }
@@ -1847,6 +1855,16 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async deleteCiVideoAnalysis(id: string): Promise<boolean> {
+    await db.delete(ciVideoAnalyses).where(eq(ciVideoAnalyses.id, id));
+    return true;
+  }
+
+  async deleteCiScrapedVideo(id: string): Promise<boolean> {
+    await db.delete(ciScrapedVideos).where(eq(ciScrapedVideos.id, id));
+    return true;
+  }
+
   // ===== CI Content Briefs =====
   async getCiContentBriefs(status?: string): Promise<CiContentBrief[]> {
     const all = await db.select().from(ciContentBriefs).orderBy(desc(ciContentBriefs.createdAt));
@@ -1870,6 +1888,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ciContentBriefs.id, id))
       .returning();
     return result;
+  }
+
+  async deleteCiContentBrief(id: string): Promise<boolean> {
+    await db.delete(ciContentBriefs).where(eq(ciContentBriefs.id, id));
+    return true;
   }
 
   // ===== CI Brief Scripts =====
@@ -1898,6 +1921,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ciBriefScripts.id, id))
       .returning();
     return result;
+  }
+
+  async deleteCiBriefScript(id: string): Promise<boolean> {
+    await db.delete(ciBriefScripts).where(eq(ciBriefScripts.id, id));
+    return true;
   }
 
   // ===== CI Performance Reports =====

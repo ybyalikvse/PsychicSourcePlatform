@@ -15,7 +15,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, ChevronDown, ChevronRight, BarChart3, Filter, Play, Loader2, CheckCircle, Clock } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, BarChart3, Filter, Play, Loader2, CheckCircle, Clock, Trash2, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -35,6 +35,7 @@ interface Analysis {
   replicationScore: number;
   notes: string | null;
   creator: string;
+  videoUrl: string | null;
 }
 
 interface CiVideo {
@@ -86,6 +87,19 @@ export default function CiAnalyses() {
     onError: (err: Error, step) => {
       toast({ title: `${step} failed`, description: err.message, variant: "destructive" });
       setRunningStep(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/ci/analyses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      toast({ title: "Analysis deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -323,6 +337,7 @@ export default function CiAnalyses() {
                   <TableHead className="text-right">Views</TableHead>
                   <TableHead className="text-center">Score</TableHead>
                   <TableHead>Format</TableHead>
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -356,11 +371,39 @@ export default function CiAnalyses() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-sm">{formatLabel(analysis.format || "")}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {analysis.videoUrl && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(analysis.videoUrl!, "_blank");
+                                  }}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm("Are you sure?")) deleteMutation.mutate(String(analysis.id));
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       </CollapsibleTrigger>
                       <CollapsibleContent asChild>
                         <TableRow className="bg-muted/30">
-                          <TableCell colSpan={8}>
+                          <TableCell colSpan={9}>
                             <div className="py-4 px-2 space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
