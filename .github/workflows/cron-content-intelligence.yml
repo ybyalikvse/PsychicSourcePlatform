@@ -100,26 +100,30 @@ jobs:
 
   transcripts:
     needs: setup-transcripts
-    if: ${{ needs.setup-transcripts.outputs.videos != '[]' && needs.setup-transcripts.outputs.videos != '' }}
+    if: always() && needs.setup-transcripts.result == 'success'
     runs-on: ubuntu-latest
-    strategy:
-      max-parallel: 2
-      matrix:
-        videoId: ${{ fromJson(needs.setup-transcripts.outputs.videos) }}
     steps:
-      - name: Fetch transcript for ${{ matrix.videoId }}
+      - name: Fetch all pending transcripts
         run: |
-          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
-            -X POST "${APP_URL}/api/ci/pipeline/transcript" \
-            -H "Content-Type: application/json" \
-            -H "${AUTH}" \
-            -d '{"videoId": "${{ matrix.videoId }}"}')
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "  ✓ Success"
-          else
-            echo "  ✗ Failed (HTTP $HTTP_CODE)"
-          fi
-          sleep 1
+          VIDEOS='${{ needs.setup-transcripts.outputs.videos }}'
+          COUNT=$(echo "$VIDEOS" | jq length 2>/dev/null || echo 0)
+          echo "Total videos needing transcripts: $COUNT"
+
+          for i in $(seq 0 $(($COUNT - 1))); do
+            VIDEO_ID=$(echo "$VIDEOS" | jq -r ".[$i]")
+            echo "Fetching transcript for $VIDEO_ID ($((i+1))/$COUNT)..."
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+              -X POST "${APP_URL}/api/ci/pipeline/transcript" \
+              -H "Content-Type: application/json" \
+              -H "${AUTH}" \
+              -d "{\"videoId\": \"$VIDEO_ID\"}")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "  ✓ Success"
+            else
+              echo "  ✗ Failed (HTTP $HTTP_CODE)"
+            fi
+            sleep 1
+          done
 
   # Step 4: AI analyze each video
   setup-analyze:
@@ -139,26 +143,31 @@ jobs:
 
   analyze:
     needs: setup-analyze
-    if: ${{ needs.setup-analyze.outputs.videos != '[]' && needs.setup-analyze.outputs.videos != '' }}
+    if: always() && needs.setup-analyze.result == 'success'
     runs-on: ubuntu-latest
-    strategy:
-      max-parallel: 2
-      matrix:
-        videoId: ${{ fromJson(needs.setup-analyze.outputs.videos) }}
     steps:
-      - name: Analyze video ${{ matrix.videoId }}
+      - name: Analyze all pending videos
         run: |
-          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
-            -X POST "${APP_URL}/api/ci/pipeline/analyze" \
-            -H "Content-Type: application/json" \
-            -H "${AUTH}" \
-            -d '{"videoId": "${{ matrix.videoId }}"}')
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "  ✓ Success"
-          else
-            echo "  ✗ Failed (HTTP $HTTP_CODE)"
-          fi
-          sleep 2
+          VIDEOS='${{ needs.setup-analyze.outputs.videos }}'
+          echo "Videos to analyze: $VIDEOS"
+          COUNT=$(echo "$VIDEOS" | jq length 2>/dev/null || echo 0)
+          echo "Total: $COUNT"
+
+          for i in $(seq 0 $(($COUNT - 1))); do
+            VIDEO_ID=$(echo "$VIDEOS" | jq -r ".[$i]")
+            echo "Analyzing video $VIDEO_ID ($((i+1))/$COUNT)..."
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+              -X POST "${APP_URL}/api/ci/pipeline/analyze" \
+              -H "Content-Type: application/json" \
+              -H "${AUTH}" \
+              -d "{\"videoId\": \"$VIDEO_ID\"}")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "  ✓ Success"
+            else
+              echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json | head -c 200)"
+            fi
+            sleep 3
+          done
 
   # Step 5: Generate weekly brief
   brief:
