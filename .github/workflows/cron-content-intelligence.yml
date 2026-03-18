@@ -91,7 +91,7 @@ jobs:
       - name: Fetch videos needing transcripts
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?transcriptStatus=pending")
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?transcriptStatus=pending&fields=id")
           VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           # Limit to 50 per run to avoid excessive API usage
           VIDEOS=$(echo "$VIDEOS" | jq -c '.[0:50]')
@@ -132,7 +132,7 @@ jobs:
       - name: Fetch videos needing analysis
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=completed")
+          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=completed&fields=id")
           VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           echo "videos=$VIDEOS" >> $GITHUB_OUTPUT
           echo "Found $(echo "$VIDEOS" | jq length) videos needing analysis"

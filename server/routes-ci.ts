@@ -499,6 +499,10 @@ export function registerCiRoutes(app: Express) {
       if (req.query.minViews) filters.minViews = parseInt(req.query.minViews as string, 10);
 
       const videos = await storage.getCiScrapedVideos(filters);
+      // Support ?fields=id to return only IDs (for GitHub Actions workflow)
+      if (req.query.fields === "id") {
+        return res.json(videos.map(v => ({ id: v.id })));
+      }
       res.json(videos);
     } catch (error) {
       console.error("[CI] Error fetching videos:", error);
