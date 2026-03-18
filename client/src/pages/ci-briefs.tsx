@@ -43,11 +43,15 @@ interface Brief {
 
 interface Script {
   id: number;
-  briefId: number;
-  itemIndex: number;
+  briefId: string;
+  briefItemIndex: number | null;
   title: string;
-  script: string;
+  hook: string | null;
+  body: string | null;
+  closeCta: string | null;
+  rawScript: any;
   status: string;
+  videoRequestId: string | null;
   createdAt: string;
 }
 
@@ -500,7 +504,7 @@ export default function CiBriefs() {
                                     <div className="flex-1">
                                       <h4 className="font-semibold">{script.title}</h4>
                                       <p className="text-xs text-muted-foreground">
-                                        Item #{script.itemIndex + 1} -- {formatDate(script.createdAt)}
+                                        Item #{(script.briefItemIndex ?? 0) + 1} -- {formatDate(script.createdAt)}
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -531,7 +535,29 @@ export default function CiBriefs() {
                                     </div>
                                   </div>
                                   <div className="p-3 bg-muted/50 rounded-lg">
-                                    <p className="text-sm whitespace-pre-wrap">{script.script}</p>
+                                    <div className="text-sm whitespace-pre-wrap space-y-3">
+                                      {script.hook && (
+                                        <div>
+                                          <p className="text-xs font-semibold text-primary mb-1">HOOK</p>
+                                          <p>{script.hook}</p>
+                                        </div>
+                                      )}
+                                      {script.body && (
+                                        <div>
+                                          <p className="text-xs font-semibold text-primary mb-1">BODY</p>
+                                          <p>{script.body}</p>
+                                        </div>
+                                      )}
+                                      {script.closeCta && (
+                                        <div>
+                                          <p className="text-xs font-semibold text-primary mb-1">CLOSE + CTA</p>
+                                          <p>{script.closeCta}</p>
+                                        </div>
+                                      )}
+                                      {!script.hook && !script.body && !script.closeCta && script.rawScript?.full && (
+                                        <p>{script.rawScript.full}</p>
+                                      )}
+                                    </div>
                                   </div>
                                 </CardContent>
                               </Card>
