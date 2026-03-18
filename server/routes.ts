@@ -4785,7 +4785,7 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
   const firebaseAdmin = firebaseAdminModule.default;
   if (!firebaseAdmin.apps.length) {
     firebaseAdmin.initializeApp({
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+      projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
     });
   }
 
