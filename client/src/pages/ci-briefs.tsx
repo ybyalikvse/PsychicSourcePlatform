@@ -308,7 +308,6 @@ export default function CiBriefs() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Badge variant={getStatusColor(brief.status)}>{brief.status}</Badge>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -508,7 +507,6 @@ export default function CiBriefs() {
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <Badge variant="outline">{script.status}</Badge>
                                       <Button
                                         size="sm"
                                         onClick={() => convertToVideoRequestMutation.mutate(script.id)}
