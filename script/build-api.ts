@@ -22,6 +22,7 @@ async function buildApi() {
         "sharp",
         "pg-native",
         "@opentelemetry/*",
+        "node-cron",
       ],
       logLevel: "info",
       banner: {

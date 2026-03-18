@@ -1,7 +1,7 @@
-import cron from "node-cron";
 import { storage } from "./storage";
 
-export function startVideoCrons() {
+export async function startVideoCrons() {
+  const cron = (await import("node-cron")).default;
   cron.schedule("0 */6 * * *", async () => {
     console.log("[Video Cron] Checking for expired claimed video requests...");
     try {

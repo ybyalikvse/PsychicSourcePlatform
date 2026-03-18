@@ -1,4 +1,3 @@
-import cron from "node-cron";
 import { storage } from "./storage";
 import OpenAI from "openai";
 
@@ -188,7 +187,8 @@ async function runStartupCatchup() {
   console.log("[Horoscope Cron] Startup catchup check complete.");
 }
 
-export function startHoroscopeCrons() {
+export async function startHoroscopeCrons() {
+  const cron = (await import("node-cron")).default;
   console.log("[Horoscope Cron] Initializing cron jobs...");
 
   cron.schedule("0 5 * * *", () => {
