@@ -825,7 +825,17 @@ export function registerCiRoutes(app: Express) {
           const competitor = await storage.getCiCompetitor(video.competitorId);
           creatorHandle = competitor?.handle || "unknown";
         }
-        return { ...a, creator: creatorHandle, views: viewCount, videoUrl: video?.url || null };
+        return {
+          ...a,
+          creator: creatorHandle,
+          views: viewCount,
+          videoUrl: video?.url || null,
+          likes: video?.likeCount ?? 0,
+          shares: video?.shareCount ?? 0,
+          comments: video?.commentCount ?? 0,
+          postedAt: video?.postedAt || null,
+          transcriptPreview: video?.transcript ? video.transcript.substring(0, 200) + (video.transcript.length > 200 ? "..." : "") : null,
+        };
       }));
 
       res.json(enriched);

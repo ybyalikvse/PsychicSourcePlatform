@@ -17,10 +17,18 @@ import {
 import { Link } from "wouter";
 
 interface BriefItem {
+  brief_id?: string;
+  topic_category?: string;
   title: string;
   topic_description: string;
   hook_options: string[];
   talking_points: string[];
+  emotional_journey?: string;
+  suggested_cta?: string;
+  format_suggestion?: string;
+  estimated_length?: string;
+  difficulty?: string;
+  notes_for_creator?: string;
 }
 
 interface Brief {
@@ -395,6 +403,50 @@ export default function CiBriefs() {
                                         </li>
                                       ))}
                                     </ul>
+                                  </div>
+                                )}
+
+                                {(item.topic_category || item.format_suggestion || item.estimated_length || item.difficulty) && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {item.topic_category && (
+                                      <Badge variant="outline">{item.topic_category}</Badge>
+                                    )}
+                                    {item.format_suggestion && (
+                                      <Badge variant="secondary">{item.format_suggestion}</Badge>
+                                    )}
+                                    {item.estimated_length && (
+                                      <Badge variant="secondary">{item.estimated_length}</Badge>
+                                    )}
+                                    {item.difficulty && (
+                                      <Badge variant="secondary">Difficulty: {item.difficulty}</Badge>
+                                    )}
+                                  </div>
+                                )}
+
+                                {item.emotional_journey && (
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                      Emotional Journey
+                                    </p>
+                                    <p className="text-sm">{item.emotional_journey}</p>
+                                  </div>
+                                )}
+
+                                {item.suggested_cta && (
+                                  <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                      Suggested CTA
+                                    </p>
+                                    <p className="text-sm font-medium">{item.suggested_cta}</p>
+                                  </div>
+                                )}
+
+                                {item.notes_for_creator && (
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                      Notes for Creator
+                                    </p>
+                                    <p className="text-sm italic text-muted-foreground">{item.notes_for_creator}</p>
                                   </div>
                                 )}
 

@@ -131,6 +131,11 @@ const ciNavItems = [
     icon: FileText,
   },
   {
+    title: "Performance",
+    url: "/ci/performance",
+    icon: TrendingUp,
+  },
+  {
     title: "CI Settings",
     url: "/ci/settings",
     icon: Settings,

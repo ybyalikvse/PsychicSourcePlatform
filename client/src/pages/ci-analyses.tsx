@@ -36,6 +36,11 @@ interface Analysis {
   notes: string | null;
   creator: string;
   videoUrl: string | null;
+  likes: number;
+  shares: number;
+  comments: number;
+  postedAt: string | null;
+  transcriptPreview: string | null;
 }
 
 interface CiVideo {
@@ -450,6 +455,35 @@ export default function CiAnalyses() {
                                   </div>
                                 )}
                               </div>
+                              <Separator />
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="p-3 bg-muted/50 rounded-lg text-center">
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">Likes</p>
+                                  <p className="text-lg font-semibold">{formatViews(analysis.likes)}</p>
+                                </div>
+                                <div className="p-3 bg-muted/50 rounded-lg text-center">
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">Shares</p>
+                                  <p className="text-lg font-semibold">{formatViews(analysis.shares)}</p>
+                                </div>
+                                <div className="p-3 bg-muted/50 rounded-lg text-center">
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
+                                  <p className="text-lg font-semibold">{formatViews(analysis.comments)}</p>
+                                </div>
+                                <div className="p-3 bg-muted/50 rounded-lg text-center">
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">Post Date</p>
+                                  <p className="text-sm font-semibold">
+                                    {analysis.postedAt
+                                      ? new Date(analysis.postedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                      : "Unknown"}
+                                  </p>
+                                </div>
+                              </div>
+                              {analysis.transcriptPreview && (
+                                <div className="p-3 bg-muted/50 rounded-lg">
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">Transcript Preview</p>
+                                  <p className="text-sm text-muted-foreground">{analysis.transcriptPreview}</p>
+                                </div>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

@@ -42,6 +42,7 @@ import CiCompetitors from "@/pages/ci-competitors";
 import CiAnalyses from "@/pages/ci-analyses";
 import CiBriefs from "@/pages/ci-briefs";
 import CiSettingsPage from "@/pages/ci-settings";
+import CiPerformance from "@/pages/ci-performance";
 
 interface AuthInfo {
   uid: string;
@@ -81,6 +82,7 @@ function AdminRouter() {
       <Route path="/ci/competitors" component={CiCompetitors} />
       <Route path="/ci/analyses" component={CiAnalyses} />
       <Route path="/ci/briefs" component={CiBriefs} />
+      <Route path="/ci/performance" component={CiPerformance} />
       <Route path="/ci/settings" component={CiSettingsPage} />
       <Route component={NotFound} />
     </Switch>
