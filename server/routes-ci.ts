@@ -925,6 +925,61 @@ export function registerCiRoutes(app: Express) {
     }
   });
 
+  router.post("/briefs/:id/convert", async (req, res) => {
+    try {
+      const brief = await storage.getCiContentBrief(req.params.id);
+      if (!brief) return res.status(404).json({ error: "Brief not found" });
+
+      const { itemIndex } = req.body;
+      const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+      const item = items[itemIndex];
+      if (!item) return res.status(400).json({ error: "Brief item not found at index " + itemIndex });
+
+      // Find any existing script for this brief item
+      const scripts = await storage.getCiBriefScripts(brief.id);
+      const script = scripts.find(s => s.briefItemIndex === itemIndex);
+
+      // Build description from brief details
+      const parts: string[] = [];
+      if (item.topic_description) parts.push(`Topic: ${item.topic_description}`);
+      if (item.hook_options?.length) parts.push(`\nHook Options:\n${item.hook_options.map((h: string, i: number) => `${i + 1}) ${h}`).join("\n")}`);
+      if (item.talking_points?.length) parts.push(`\nTalking Points:\n${item.talking_points.map((p: string) => `• ${p}`).join("\n")}`);
+      if (item.emotional_journey) parts.push(`\nEmotional Journey: ${item.emotional_journey}`);
+      if (item.suggested_cta) parts.push(`\nSuggested CTA: ${item.suggested_cta}`);
+      if (item.format_suggestion) parts.push(`\nFormat: ${item.format_suggestion}`);
+      if (item.estimated_length) parts.push(`Estimated Length: ${item.estimated_length}`);
+      if (item.difficulty) parts.push(`Difficulty: ${item.difficulty}`);
+      if (item.notes_for_creator) parts.push(`\nNotes: ${item.notes_for_creator}`);
+
+      // Append full script if available
+      if (script) {
+        const scriptParts: string[] = [];
+        if (script.hook) scriptParts.push(`HOOK:\n${script.hook}`);
+        if (script.body) scriptParts.push(`BODY:\n${script.body}`);
+        if (script.closeCta) scriptParts.push(`CLOSE + CTA:\n${script.closeCta}`);
+        if (scriptParts.length > 0) {
+          parts.push(`\n--- FULL SCRIPT (optional) ---\n${scriptParts.join("\n\n")}`);
+        } else if (script.rawScript?.full) {
+          parts.push(`\n--- FULL SCRIPT (optional) ---\n${script.rawScript.full}`);
+        }
+      }
+
+      const videoRequest = await storage.createVideoRequest({
+        title: item.title || `Brief ${brief.weekLabel} Item ${itemIndex + 1}`,
+        topic: item.topic_category || item.title,
+        hook: item.hook_options?.[0] || undefined,
+        videoDuration: item.estimated_length || "60s",
+        description: parts.join("\n"),
+        status: "available",
+      });
+
+      res.json({ success: true, videoRequestId: videoRequest.id });
+    } catch (error: any) {
+      console.error("[CI] Error converting brief to video request:", error);
+      res.status(500).json({ error: "Failed to convert brief to video request" });
+    }
+  });
+
   router.delete("/briefs/:id", async (req, res) => {
     try {
       await storage.deleteCiContentBrief(req.params.id);

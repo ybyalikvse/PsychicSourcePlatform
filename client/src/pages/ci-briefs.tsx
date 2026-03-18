@@ -98,10 +98,9 @@ export default function CiBriefs() {
   });
 
   const { data: scripts = [], isLoading: scriptsLoading } = useQuery<Script[]>({
-    queryKey: ["/api/ci/scripts", selectedBriefId],
+    queryKey: ["/api/ci/scripts"],
     queryFn: async () => {
-      if (!selectedBriefId) return [];
-      const res = await fetch(`/api/ci/scripts?briefId=${selectedBriefId}`, { credentials: "include" });
+      const res = await fetch("/api/ci/scripts", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch scripts");
       return res.json();
     },
@@ -166,6 +165,20 @@ export default function CiBriefs() {
     },
   });
 
+  const convertBriefToVideoRequestMutation = useMutation({
+    mutationFn: async ({ briefId, itemIndex }: { briefId: string; itemIndex: number }) => {
+      const res = await apiRequest("POST", `/api/ci/briefs/${briefId}/convert`, { itemIndex });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      toast({ title: "Video request created", description: "A new video request has been created from this brief." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create video request", description: err.message, variant: "destructive" });
+    },
+  });
+
   function toggleBrief(id: number) {
     setExpandedBriefs((prev) => {
       const next = new Set(prev);
@@ -198,8 +211,7 @@ export default function CiBriefs() {
   }
 
   function getScriptForItem(briefId: number, itemIndex: number): Script | undefined {
-    if (selectedBriefId !== briefId) return undefined;
-    return scripts.find((s) => s.briefId === briefId && s.itemIndex === itemIndex);
+    return scripts.find((s) => String(s.briefId) === String(briefId) && s.briefItemIndex === itemIndex);
   }
 
   // Sort briefs newest first
@@ -359,25 +371,45 @@ export default function CiBriefs() {
                                       {item.topic_description}
                                     </p>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    variant={existingScript ? "outline" : "default"}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      generateScriptMutation.mutate({
-                                        briefId: brief.id,
-                                        itemIndex: index,
-                                      });
-                                    }}
-                                    disabled={generateScriptMutation.isPending}
-                                  >
-                                    {generateScriptMutation.isPending ? (
-                                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                                    ) : (
-                                      <Sparkles className="h-4 w-4 mr-1" />
-                                    )}
-                                    {existingScript ? "Regenerate" : "Generate Script"}
-                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        convertBriefToVideoRequestMutation.mutate({
+                                          briefId: String(brief.id),
+                                          itemIndex: index,
+                                        });
+                                      }}
+                                      disabled={convertBriefToVideoRequestMutation.isPending}
+                                    >
+                                      {convertBriefToVideoRequestMutation.isPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                      ) : (
+                                        <Video className="h-4 w-4 mr-1" />
+                                      )}
+                                      Convert to Video Request
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        generateScriptMutation.mutate({
+                                          briefId: brief.id,
+                                          itemIndex: index,
+                                        });
+                                      }}
+                                      disabled={generateScriptMutation.isPending}
+                                    >
+                                      {generateScriptMutation.isPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                      ) : (
+                                        <Sparkles className="h-4 w-4 mr-1" />
+                                      )}
+                                      {existingScript ? "Regenerate Script" : "Generate Script"}
+                                    </Button>
+                                  </div>
                                 </div>
 
                                 {item.hook_options && item.hook_options.length > 0 && (
@@ -461,13 +493,41 @@ export default function CiBriefs() {
                                         <ScrollText className="h-3 w-3" />
                                         Generated Script
                                       </p>
-                                      <Badge variant="outline" className="text-xs">
-                                        {existingScript.status}
-                                      </Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (confirm("Delete this script?")) deleteScriptMutation.mutate(String(existingScript.id));
+                                        }}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
                                     </div>
-                                    <p className="text-sm whitespace-pre-wrap line-clamp-6">
-                                      {existingScript.script}
-                                    </p>
+                                    <div className="text-sm whitespace-pre-wrap space-y-2">
+                                      {existingScript.hook && (
+                                        <div>
+                                          <p className="text-xs font-semibold text-primary mb-1">HOOK</p>
+                                          <p>{existingScript.hook}</p>
+                                        </div>
+                                      )}
+                                      {existingScript.body && (
+                                        <div>
+                                          <p className="text-xs font-semibold text-primary mb-1">BODY</p>
+                                          <p>{existingScript.body}</p>
+                                        </div>
+                                      )}
+                                      {existingScript.closeCta && (
+                                        <div>
+                                          <p className="text-xs font-semibold text-primary mb-1">CLOSE + CTA</p>
+                                          <p>{existingScript.closeCta}</p>
+                                        </div>
+                                      )}
+                                      {!existingScript.hook && !existingScript.body && !existingScript.closeCta && existingScript.rawScript?.full && (
+                                        <p>{existingScript.rawScript.full}</p>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                               </CardContent>
@@ -481,89 +541,6 @@ export default function CiBriefs() {
                       </p>
                     )}
 
-                    {/* Scripts Section */}
-                    {selectedBriefId === brief.id && scripts.length > 0 && (
-                      <>
-                        <Separator />
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                            Generated Scripts ({scripts.length})
-                          </h3>
-                          {scriptsLoading ? (
-                            <div className="space-y-3">
-                              {[1, 2].map((i) => (
-                                <Skeleton key={i} className="h-24 w-full" />
-                              ))}
-                            </div>
-                          ) : (
-                            scripts.map((script) => (
-                              <Card key={script.id}>
-                                <CardContent className="pt-4 space-y-3">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1">
-                                      <h4 className="font-semibold">{script.title}</h4>
-                                      <p className="text-xs text-muted-foreground">
-                                        Item #{(script.briefItemIndex ?? 0) + 1} -- {formatDate(script.createdAt)}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Button
-                                        size="sm"
-                                        onClick={() => convertToVideoRequestMutation.mutate(script.id)}
-                                        disabled={convertToVideoRequestMutation.isPending}
-                                      >
-                                        {convertToVideoRequestMutation.isPending ? (
-                                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                                        ) : (
-                                          <Video className="h-4 w-4 mr-1" />
-                                        )}
-                                        Convert to Video Request
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (confirm("Are you sure?")) deleteScriptMutation.mutate(String(script.id));
-                                        }}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div className="p-3 bg-muted/50 rounded-lg">
-                                    <div className="text-sm whitespace-pre-wrap space-y-3">
-                                      {script.hook && (
-                                        <div>
-                                          <p className="text-xs font-semibold text-primary mb-1">HOOK</p>
-                                          <p>{script.hook}</p>
-                                        </div>
-                                      )}
-                                      {script.body && (
-                                        <div>
-                                          <p className="text-xs font-semibold text-primary mb-1">BODY</p>
-                                          <p>{script.body}</p>
-                                        </div>
-                                      )}
-                                      {script.closeCta && (
-                                        <div>
-                                          <p className="text-xs font-semibold text-primary mb-1">CLOSE + CTA</p>
-                                          <p>{script.closeCta}</p>
-                                        </div>
-                                      )}
-                                      {!script.hook && !script.body && !script.closeCta && script.rawScript?.full && (
-                                        <p>{script.rawScript.full}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))
-                          )}
-                        </div>
-                      </>
-                    )}
                   </CardContent>
                 </CollapsibleContent>
               </Card>
