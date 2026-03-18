@@ -43,9 +43,8 @@ jobs:
 
   # Step 1: Scrape each active competitor
   setup-scrape:
-    if: ${{ github.event.inputs.step == 'full' || github.event.inputs.step == 'scrape' || github.event_name == 'schedule' }}
     needs: [performance]
-    if: always()
+    if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'scrape' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     outputs:
       competitors: ${{ steps.fetch.outputs.competitors }}
