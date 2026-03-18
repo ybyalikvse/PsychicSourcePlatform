@@ -21,6 +21,7 @@ async function buildApi() {
       external: [
         "sharp",
         "pg-native",
+        "@opentelemetry/*",
       ],
       logLevel: "info",
       banner: {
