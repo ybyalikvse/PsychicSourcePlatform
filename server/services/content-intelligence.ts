@@ -1,5 +1,15 @@
 import OpenAI from "openai";
 
+/** Strip markdown code fences from AI response before JSON.parse */
+function cleanJsonResponse(text: string): string {
+  let cleaned = text.trim();
+  // Remove ```json ... ``` or ``` ... ```
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+  }
+  return cleaned.trim();
+}
+
 /**
  * Scrape competitor videos from ScrapeCreators API.
  */
@@ -104,7 +114,7 @@ export async function analyzeVideo(params: {
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  return JSON.parse(content);
+  return JSON.parse(cleanJsonResponse(content));
 }
 
 /**
@@ -162,7 +172,7 @@ export async function generateWeeklyBrief(params: {
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  return JSON.parse(content);
+  return JSON.parse(cleanJsonResponse(content));
 }
 
 /**
@@ -231,7 +241,7 @@ export async function generatePerformanceReport(params: {
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  return JSON.parse(content);
+  return JSON.parse(cleanJsonResponse(content));
 }
 
 /**
