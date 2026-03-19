@@ -479,6 +479,7 @@ export default function CiAnalyses() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-8"></TableHead>
+                      <TableHead className="w-8"></TableHead>
                       <TableHead>Post Date</TableHead>
                       <TableHead>Creator</TableHead>
                       <TableHead>Platform</TableHead>
@@ -505,6 +506,13 @@ export default function CiAnalyses() {
                                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                 ) : (
                                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {analysis.blocked ? (
+                                  <Badge className="bg-red-100 text-red-800 hover:bg-red-100 text-[10px] px-1.5">Blocked</Badge>
+                                ) : (
+                                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-[10px] px-1.5">✓</Badge>
                                 )}
                               </TableCell>
                               <TableCell className={`text-sm ${analysis.blocked ? "text-muted-foreground" : ""}`}>
@@ -585,7 +593,7 @@ export default function CiAnalyses() {
                           </CollapsibleTrigger>
                           <CollapsibleContent asChild>
                             <TableRow className="bg-muted/30">
-                              <TableCell colSpan={11}>
+                              <TableCell colSpan={12}>
                                 <div className="py-4 px-2 space-y-4">
                                   {analysis.blocked ? (
                                     <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900">
