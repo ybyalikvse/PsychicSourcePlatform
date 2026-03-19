@@ -530,7 +530,7 @@ export function registerCiRoutes(app: Express) {
 
         let totalSaved = 0;
         for (const competitor of competitors) {
-          const videos = await scrapeCompetitorVideos(competitor.handle, apiKey, 30);
+          const videos = await scrapeCompetitorVideos(competitor.handle, apiKey, 50);
           for (const video of videos) {
             const externalId = video.aweme_id || video.id;
             if (!externalId) continue;

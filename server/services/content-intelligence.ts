@@ -11,29 +11,46 @@ function cleanJsonResponse(text: string): string {
 }
 
 /**
- * Scrape competitor videos from ScrapeCreators API.
+ * Scrape competitor videos from ScrapeCreators API with pagination.
  */
 export async function scrapeCompetitorVideos(
   handle: string,
   apiKey: string,
   limit: number
 ): Promise<any[]> {
-  try {
-    const url = `https://api.scrapecreators.com/v3/tiktok/profile/videos?handle=${handle}&limit=${limit}`;
-    const response = await fetch(url, {
-      headers: { "x-api-key": apiKey },
-    });
+  const allVideos: any[] = [];
+  let cursor: string | undefined;
+  const maxPages = Math.ceil(limit / 10); // API returns ~10 per page
 
-    if (!response.ok) {
-      console.error(`[CI] ScrapeCreators error ${response.status}: ${response.statusText}`);
-      return [];
+  try {
+    for (let page = 0; page < maxPages; page++) {
+      let url = `https://api.scrapecreators.com/v3/tiktok/profile/videos?handle=${handle}&limit=${Math.min(limit, 30)}`;
+      if (cursor) url += `&cursor=${cursor}`;
+
+      const response = await fetch(url, {
+        headers: { "x-api-key": apiKey },
+      });
+
+      if (!response.ok) {
+        console.error(`[CI] ScrapeCreators error ${response.status}: ${response.statusText}`);
+        break;
+      }
+
+      const data = await response.json();
+      const videos = data?.aweme_list || data?.items || data?.videos || [];
+      allVideos.push(...videos);
+
+      console.log(`[CI] Scraped page ${page + 1} for @${handle}: ${videos.length} videos (total: ${allVideos.length})`);
+
+      // Stop if no more pages or we have enough
+      if (!data?.has_more || !data?.max_cursor || allVideos.length >= limit) break;
+      cursor = String(data.max_cursor);
     }
 
-    const data = await response.json();
-    return data?.aweme_list || data?.items || data?.videos || [];
+    return allVideos.slice(0, limit);
   } catch (error) {
     console.error(`[CI] Failed to scrape videos for @${handle}:`, error);
-    return [];
+    return allVideos; // Return what we got so far
   }
 }
 
