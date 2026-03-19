@@ -129,8 +129,7 @@ export default function CiDashboard() {
   }
 
   const pipelineSteps = [
-    { key: "scrape", label: "Scrape", description: "Pull competitor videos" },
-    { key: "transcripts", label: "Transcripts", description: "Get video transcripts" },
+    { key: "scrape", label: "Scrape + Transcripts", description: "Pull videos and transcripts" },
     { key: "analyze", label: "Analyze", description: "AI analyze each video" },
     { key: "brief", label: "Brief", description: "Generate content brief" },
     { key: "scripts", label: "Scripts", description: "Write full scripts" },

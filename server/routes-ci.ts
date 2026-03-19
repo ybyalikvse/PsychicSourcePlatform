@@ -560,6 +560,20 @@ export function registerCiRoutes(app: Express) {
               metadata: video,
             });
             totalSaved++;
+
+            // Immediately fetch transcript for the new video
+            try {
+              const videoUrl = (video.share_url || `https://www.tiktok.com/@${competitor.handle}/video/${externalId}`).split("?")[0];
+              const transcript = await fetchVideoTranscript(videoUrl, apiKey);
+              if (transcript) {
+                await storage.updateCiScrapedVideo(
+                  (await storage.getCiScrapedVideoByExternalId(String(externalId)))!.id,
+                  { transcript, transcriptStatus: "completed" } as any
+                );
+              }
+            } catch (err) {
+              console.error(`[CI] Transcript fetch failed for ${externalId}:`, err);
+            }
           }
           await storage.updateCiCompetitor(competitor.id, { lastScrapedAt: new Date().toISOString() });
         }
