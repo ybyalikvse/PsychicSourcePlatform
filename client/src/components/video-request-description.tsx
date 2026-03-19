@@ -26,6 +26,8 @@ interface StructuredBrief {
 
 function cleanScript(text: string, stripDirections: boolean = false): string {
   let cleaned = text;
+  // Replace em dashes and en dashes with hyphens
+  cleaned = cleaned.replace(/[—–]/g, "-");
   // Remove markdown bold markers **
   cleaned = cleaned.replace(/\*\*/g, "");
   // Remove horizontal rules ---

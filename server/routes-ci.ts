@@ -1259,7 +1259,7 @@ export function registerCiRoutes(app: Express) {
         // Script prompts
         {
           key: "script_system_prompt",
-          value: "You are a script writer for psychic and spiritual video content creators. Write natural, conversational scripts that are warm, empowering, and never preachy.",
+          value: "You are a script writer for psychic and spiritual video content creators. Write natural, conversational scripts that are warm, empowering, and never preachy. Never use em dashes or en dashes. Use commas, periods, or hyphens instead.",
           category: "prompts",
           label: "Script System Prompt",
           description: "System prompt for script generation AI",
