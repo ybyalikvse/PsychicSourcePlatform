@@ -25,7 +25,7 @@ export async function scrapeCompetitorVideos(
   try {
     for (let page = 0; page < maxPages; page++) {
       let url = `https://api.scrapecreators.com/v3/tiktok/profile/videos?handle=${handle}&limit=${Math.min(limit, 30)}`;
-      if (cursor) url += `&cursor=${cursor}`;
+      if (cursor) url += `&max_cursor=${cursor}`;
 
       const response = await fetch(url, {
         headers: { "x-api-key": apiKey },
