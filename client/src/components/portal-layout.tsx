@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Video, ListChecks, LogOut } from "lucide-react";
+import { Video, ListChecks, LogOut, ExternalLink } from "lucide-react";
 import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -90,7 +90,27 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="p-4">
+          <SidebarFooter className="p-4 space-y-2">
+            <div className="flex flex-col gap-1">
+              <a
+                href="https://www.psychicsource.com/code-of-ethics"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Code of Ethics
+              </a>
+              <a
+                href="https://www.psychicsource.com/customer-care/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Terms
+              </a>
+            </div>
             <Button
               variant="ghost"
               className="w-full justify-start gap-2"
