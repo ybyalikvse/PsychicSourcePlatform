@@ -177,29 +177,14 @@ export function VideoRequestDescription({ description }: { description: string }
                   </TabsContent>
 
                   <TabsContent value="clean">
-                    <div className="space-y-4">
-                      {structured.script!.hook && (
-                        <div>
-                          <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Hook</h4>
-                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.hook, true)}</p>
-                        </div>
-                      )}
-                      {structured.script!.body && (
-                        <div>
-                          <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Body</h4>
-                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.body, true)}</p>
-                        </div>
-                      )}
-                      {structured.script!.closeCta && (
-                        <div>
-                          <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Close + CTA</h4>
-                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.closeCta, true)}</p>
-                        </div>
-                      )}
-                      {!structured.script!.hook && !structured.script!.body && !structured.script!.closeCta && structured.script!.full && (
-                        <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.full, true)}</p>
-                      )}
-                    </div>
+                    <p className="text-sm whitespace-pre-wrap">{
+                      [
+                        structured.script!.hook ? cleanScript(structured.script!.hook, true) : "",
+                        structured.script!.body ? cleanScript(structured.script!.body, true) : "",
+                        structured.script!.closeCta ? cleanScript(structured.script!.closeCta, true) : "",
+                      ].filter(Boolean).join("\n\n")
+                      || (structured.script!.full ? cleanScript(structured.script!.full, true) : "")
+                    }</p>
                   </TabsContent>
                 </Tabs>
               </div>
