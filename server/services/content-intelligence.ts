@@ -159,25 +159,23 @@ export async function generateWeeklyBrief(params: {
     if (a.emotionalAngle) emotionCounts[a.emotionalAngle] = (emotionCounts[a.emotionalAngle] || 0) + 1;
   }
 
-  const topTopics = Object.entries(topicCounts)
+  const allTopics = Object.entries(topicCounts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
     .map(([topic, count]) => `${topic} (${count} videos)`);
 
-  const topHooks = Object.entries(hookCounts)
+  const allHooks = Object.entries(hookCounts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
     .map(([hook, count]) => `${hook} (${count} videos)`);
 
-  const topEmotions = Object.entries(emotionCounts)
+  const allEmotions = Object.entries(emotionCounts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
     .map(([emotion, count]) => `${emotion} (${count} videos)`);
 
   const userPrompt = params.userPromptTemplate
-    .replace(/{INSERT_TOP_5_TOPICS_FROM_AIRTABLE}|{INSERT_TOP_5_TOPICS}/g, topTopics.join("\n"))
-    .replace(/{INSERT_TOP_HOOK_TYPES}/g, topHooks.join("\n"))
-    .replace(/{INSERT_TOP_EMOTIONAL_ANGLES}/g, topEmotions.join("\n"));
+    .replace(/{INSERT_TOP_5_TOPICS_FROM_AIRTABLE}|{INSERT_TOP_5_TOPICS}|{INSERT_TOPICS}/g, allTopics.join("\n"))
+    .replace(/{INSERT_TOP_HOOK_TYPES}|{INSERT_HOOK_TYPES}/g, allHooks.join("\n"))
+    .replace(/{INSERT_TOP_EMOTIONAL_ANGLES}|{INSERT_EMOTIONAL_ANGLES}/g, allEmotions.join("\n"))
+    .replace(/{TOTAL_VIDEOS_ANALYZED}/g, String(params.analyses.length));
 
   const response = await openai.chat.completions.create({
     model: params.model,

@@ -47,6 +47,7 @@ const TOPIC_LIST_KEYS = [
 const GENERAL_KEYS = [
   { key: "ai_model", label: "AI Model", description: "The AI model to use for analysis and generation (e.g., anthropic/claude-sonnet-4-5)" },
   { key: "own_tiktok_handles", label: "Own TikTok Handles", description: "Comma-separated list of your own TikTok handles (used for performance tracking)" },
+  { key: "brief_count", label: "Briefs Per Run", description: "Number of content briefs to generate per pipeline run (e.g. 5, 10)" },
   { key: "show_pay_amount", label: "Show Pay Amount", description: "Show or hide the pay amount field on video requests. Set to 'true' to show, 'false' to hide." },
   { key: "claim_deadline_days", label: "Claim Deadline (Days)", description: "Auto-set the required date to this many days after a psychic claims a request." },
 ];

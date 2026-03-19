@@ -692,6 +692,7 @@ export function registerCiRoutes(app: Express) {
         const briefUserPrompt = await storage.getCiSetting("brief_user_prompt");
         const modelSetting = await storage.getCiSetting("ai_model");
         const blockedTopicsSetting = await storage.getCiSetting("blocked_topics");
+        const briefCountSetting = await storage.getCiSetting("brief_count");
 
         // Replace placeholders in system prompt
         let systemPrompt = briefSystemPrompt?.value || "";
@@ -702,6 +703,10 @@ export function registerCiRoutes(app: Express) {
           } catch {}
         }
 
+        const briefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 5;
+        let userPromptTemplate = (briefUserPrompt?.value || "")
+          .replace(/{BRIEF_COUNT}/g, String(briefCount));
+
         const briefResult = await generateWeeklyBrief({
           analyses: analyses.map(a => ({
             topicCategory: a.topicCategory,
@@ -711,7 +716,7 @@ export function registerCiRoutes(app: Express) {
             topicSummary: a.topicSummary,
           })),
           systemPrompt,
-          userPromptTemplate: briefUserPrompt?.value || "",
+          userPromptTemplate,
           model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
         });
         const briefData = Array.isArray(briefResult) ? briefResult : briefResult?.briefs || briefResult?.items || [briefResult];
@@ -1176,7 +1181,7 @@ export function registerCiRoutes(app: Express) {
         },
         {
           key: "brief_user_prompt",
-          value: "Based on the following top-performing competitor intelligence from this week, generate 5 video content briefs for our psychic creators.\n\nTOP PERFORMING TOPICS THIS WEEK:\n{INSERT_TOP_5_TOPICS}\n\nTOP PERFORMING HOOK TYPES THIS WEEK:\n{INSERT_TOP_HOOK_TYPES}\n\nTOP EMOTIONAL ANGLES:\n{INSERT_TOP_EMOTIONAL_ANGLES}\n\nFor each brief, return a JSON array of objects with:\n- brief_id (string): sequential ID e.g. \"W23-01\"\n- topic_category (string)\n- title (string): the working title for this video \u2014 punchy, 8 words max\n- topic_description (string): 2-3 sentences explaining what the video should cover\n- hook_options (array of 3 strings): three different hooks the creator can choose from, each under 15 words, different styles\n- talking_points (array of 4-6 strings): the key points to hit in the video body\n- emotional_journey (string): describe the arc \u2014 where the viewer starts emotionally and where they should end\n- suggested_cta (string): what to ask viewers to do at the end\n- format_suggestion (string): recommended format for this topic\n- estimated_length (string): e.g. \"60-90 seconds\"\n- difficulty (string): easy | medium | advanced\n- notes_for_creator (string): any special tips, tone guidance, or things to avoid",
+          value: "Based on the following competitor intelligence from {TOTAL_VIDEOS_ANALYZED} analyzed videos this week, generate {BRIEF_COUNT} video content briefs for our psychic creators.\n\nALL TOPICS FOUND (ranked by frequency):\n{INSERT_TOPICS}\n\nALL HOOK TYPES FOUND (ranked by frequency):\n{INSERT_HOOK_TYPES}\n\nALL EMOTIONAL ANGLES FOUND (ranked by frequency):\n{INSERT_EMOTIONAL_ANGLES}\n\nFor each brief, return a JSON array of objects with:\n- brief_id (string): sequential ID e.g. \"W23-01\"\n- topic_category (string)\n- title (string): the working title for this video - punchy, 8 words max\n- topic_description (string): 2-3 sentences explaining what the video should cover\n- hook_options (array of 3 strings): three different hooks the creator can choose from, each under 15 words, different styles\n- talking_points (array of 4-6 strings): the key points to hit in the video body\n- emotional_journey (string): describe the arc - where the viewer starts emotionally and where they should end\n- suggested_cta (string): what to ask viewers to do at the end\n- format_suggestion (string): recommended format for this topic\n- estimated_length (string): e.g. \"60-90 seconds\"\n- difficulty (string): easy | medium | advanced\n- notes_for_creator (string): any special tips, tone guidance, or things to avoid",
           category: "prompts",
           label: "Brief User Prompt",
           description: "User prompt template for weekly brief generation AI (supports placeholders)",
@@ -1299,6 +1304,14 @@ export function registerCiRoutes(app: Express) {
           label: "Show Pay Amount",
           description: "Show or hide the pay amount field on video requests (for admin and psychic views)",
           valueType: "text",
+        },
+        {
+          key: "brief_count",
+          value: "5",
+          category: "general",
+          label: "Briefs Per Run",
+          description: "Number of content briefs to generate per pipeline run",
+          valueType: "number",
         },
         {
           key: "claim_deadline_days",
