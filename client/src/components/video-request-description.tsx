@@ -24,8 +24,27 @@ interface StructuredBrief {
   } | null;
 }
 
-function stripBrackets(text: string): string {
-  return text.replace(/\[.*?\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+function cleanScript(text: string, stripDirections: boolean = false): string {
+  let cleaned = text;
+  // Remove markdown bold markers **
+  cleaned = cleaned.replace(/\*\*/g, "");
+  // Remove horizontal rules ---
+  cleaned = cleaned.replace(/^-{3,}\s*$/gm, "");
+  // Remove section headers that duplicate our own labels (HOOK:, BODY:, CLOSE + CTA:, etc.)
+  cleaned = cleaned.replace(/^(?:HOOK|BODY|CLOSE\s*\+?\s*CTA)[:\s]*(?:\(.*?\))?\s*$/gim, "");
+  // Remove timing labels like (0-3 seconds), (final 10 seconds)
+  cleaned = cleaned.replace(/\(\d+-?\d*\s*seconds?\)/gi, "");
+  // Remove OPTIONAL OVERLAY TEXT sections entirely
+  cleaned = cleaned.replace(/\*?OPTIONAL OVERLAY.*?(?=\n\n|\n[A-Z]|$)/gis, "");
+  // Remove VISUAL NOTES sections
+  cleaned = cleaned.replace(/\*?\[?VISUAL NOTES\]?.*?(?=\n\n|\n[A-Z]|$)/gis, "");
+  // Strip stage directions [in brackets] if clean mode
+  if (stripDirections) {
+    cleaned = cleaned.replace(/\[.*?\]/g, "");
+  }
+  // Collapse multiple blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+  return cleaned.trim();
 }
 
 export function VideoRequestDescription({ description }: { description: string }) {
@@ -134,23 +153,23 @@ export function VideoRequestDescription({ description }: { description: string }
                       {structured.script!.hook && (
                         <div>
                           <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Hook</h4>
-                          <p className="text-sm whitespace-pre-wrap">{structured.script!.hook}</p>
+                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.hook)}</p>
                         </div>
                       )}
                       {structured.script!.body && (
                         <div>
                           <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Body</h4>
-                          <p className="text-sm whitespace-pre-wrap">{structured.script!.body}</p>
+                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.body)}</p>
                         </div>
                       )}
                       {structured.script!.closeCta && (
                         <div>
                           <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Close + CTA</h4>
-                          <p className="text-sm whitespace-pre-wrap">{structured.script!.closeCta}</p>
+                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.closeCta)}</p>
                         </div>
                       )}
                       {!structured.script!.hook && !structured.script!.body && !structured.script!.closeCta && structured.script!.full && (
-                        <p className="text-sm whitespace-pre-wrap">{structured.script!.full}</p>
+                        <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.full)}</p>
                       )}
                     </div>
                   </TabsContent>
@@ -160,23 +179,23 @@ export function VideoRequestDescription({ description }: { description: string }
                       {structured.script!.hook && (
                         <div>
                           <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Hook</h4>
-                          <p className="text-sm whitespace-pre-wrap">{stripBrackets(structured.script!.hook)}</p>
+                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.hook, true)}</p>
                         </div>
                       )}
                       {structured.script!.body && (
                         <div>
                           <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Body</h4>
-                          <p className="text-sm whitespace-pre-wrap">{stripBrackets(structured.script!.body)}</p>
+                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.body, true)}</p>
                         </div>
                       )}
                       {structured.script!.closeCta && (
                         <div>
                           <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Close + CTA</h4>
-                          <p className="text-sm whitespace-pre-wrap">{stripBrackets(structured.script!.closeCta)}</p>
+                          <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.closeCta, true)}</p>
                         </div>
                       )}
                       {!structured.script!.hook && !structured.script!.body && !structured.script!.closeCta && structured.script!.full && (
-                        <p className="text-sm whitespace-pre-wrap">{stripBrackets(structured.script!.full)}</p>
+                        <p className="text-sm whitespace-pre-wrap">{cleanScript(structured.script!.full, true)}</p>
                       )}
                     </div>
                   </TabsContent>

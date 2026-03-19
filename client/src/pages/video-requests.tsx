@@ -324,29 +324,29 @@ export default function VideoRequests() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Hook</p>
+                    <p className="text-sm font-semibold">Hook</p>
                     <p className="text-sm" data-testid="text-hook">{selectedRequest.hook || "—"}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Duration</p>
+                    <p className="text-sm font-semibold">Duration</p>
                     <p className="text-sm" data-testid="text-duration">{selectedRequest.videoDuration || "—"}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Required Date</p>
+                    <p className="text-sm font-semibold">Required Date</p>
                     <p className="text-sm" data-testid="text-required-date">{selectedRequest.requiredDate || "—"}</p>
                   </div>
+                  {showPayAmount && (
                   <div>
-                    {showPayAmount && <>
-                    <p className="text-sm text-muted-foreground">Pay Amount</p>
+                    <p className="text-sm font-semibold">Pay Amount</p>
                     <p className="text-sm" data-testid="text-pay-amount">{selectedRequest.payAmount ? `$${selectedRequest.payAmount}` : "—"}</p>
-                    </>}
                   </div>
+                  )}
                   <div>
-                    <p className="text-sm text-muted-foreground">Claimed By</p>
+                    <p className="text-sm font-semibold">Claimed By</p>
                     <p className="text-sm" data-testid="text-claimed-by">{getPsychicName(selectedRequest.claimedBy)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Created</p>
+                    <p className="text-sm font-semibold">Created</p>
                     <p className="text-sm" data-testid="text-created">{new Date(selectedRequest.createdAt).toLocaleDateString()}</p>
                   </div>
                 </div>
@@ -354,7 +354,7 @@ export default function VideoRequests() {
                   <>
                     <Separator />
                     <div>
-                      <p className="text-sm text-muted-foreground mb-1">Description</p>
+                      <h3 className="text-lg font-semibold mb-2">Description</h3>
                       <VideoRequestDescription description={selectedRequest.description} />
                     </div>
                   </>
