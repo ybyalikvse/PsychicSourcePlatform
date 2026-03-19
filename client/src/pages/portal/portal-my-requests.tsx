@@ -104,12 +104,6 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
                         {req.videoDuration}
                       </Badge>
                     )}
-                    {req.payAmount && (
-                      <Badge variant="outline" className="no-default-active-elevate">
-                        <DollarSign className="h-3 w-3 mr-1" />
-                        ${req.payAmount}
-                      </Badge>
-                    )}
                     {req.requiredDate && (() => {
                       const deadline = getDeadlineInfo(req.requiredDate);
                       return (

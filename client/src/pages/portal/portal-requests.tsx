@@ -89,22 +89,11 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
                     {req.hook}
                   </p>
                 )}
-                {req.description && (
-                  <p className="text-sm" data-testid={`text-request-description-${req.id}`}>
-                    {req.description}
-                  </p>
-                )}
                 <div className="flex flex-wrap gap-2">
                   {req.videoDuration && (
                     <Badge variant="outline" className="no-default-active-elevate">
                       <Clock className="h-3 w-3 mr-1" />
                       {req.videoDuration}
-                    </Badge>
-                  )}
-                  {req.payAmount && (
-                    <Badge variant="outline" className="no-default-active-elevate">
-                      <DollarSign className="h-3 w-3 mr-1" />
-                      ${req.payAmount}
                     </Badge>
                   )}
                   {req.requiredDate && (() => {

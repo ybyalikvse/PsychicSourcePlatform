@@ -68,15 +68,6 @@ export default function PortalDashboard({ psychic }: PortalDashboardProps) {
       bgColor: "bg-green-50 dark:bg-green-950",
       action: () => setLocation("/portal/my-requests"),
     },
-    {
-      title: "Paid",
-      value: paidCount,
-      description: "Completed & paid",
-      icon: Banknote,
-      color: "text-emerald-600 dark:text-emerald-400",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950",
-      action: () => setLocation("/portal/my-requests"),
-    },
   ];
 
   return (
@@ -88,7 +79,7 @@ export default function PortalDashboard({ psychic }: PortalDashboardProps) {
         <p className="text-muted-foreground mt-1">Here is an overview of your video requests.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         {stats.map((stat) => (
           <Card
             key={stat.title}
