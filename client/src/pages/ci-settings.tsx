@@ -168,11 +168,18 @@ export default function CiSettings() {
     return JSON.stringify(lines);
   }
 
+  // Track raw display text for topic lists so Enter key works
+  const [topicListText, setTopicListText] = useState<Record<string, string>>({});
+
   function getTopicListDisplay(key: string): string {
+    if (topicListText[key] !== undefined) return topicListText[key];
     return jsonArrayToLines(getLocalValue(key));
   }
 
   function setTopicListDisplay(key: string, displayValue: string) {
+    // Store raw text — don't convert to JSON until save
+    setTopicListText(prev => ({ ...prev, [key]: displayValue }));
+    // Still update local values for change detection
     setLocalValue(key, linesToJsonArray(displayValue));
   }
 
