@@ -36,11 +36,25 @@ export async function scrapeCompetitorVideos(
         break;
       }
 
-      const data = await response.json();
+      // Parse response, handling potential control characters in JSON
+      let data: any;
+      try {
+        const rawText = await response.text();
+        // Strip control characters that break JSON parsing
+        const cleanedText = rawText.replace(/[\x00-\x1F\x7F]/g, (ch) => {
+          if (ch === '\n' || ch === '\r' || ch === '\t') return ch;
+          return '';
+        });
+        data = JSON.parse(cleanedText);
+      } catch (parseErr) {
+        console.error(`[CI] Failed to parse ScrapeCreators response for @${handle} page ${page + 1}:`, parseErr);
+        break;
+      }
+
       const videos = data?.aweme_list || data?.items || data?.videos || [];
       allVideos.push(...videos);
 
-      console.log(`[CI] Scraped page ${page + 1} for @${handle}: ${videos.length} videos (total: ${allVideos.length})`);
+      console.log(`[CI] Scraped page ${page + 1} for @${handle}: ${videos.length} videos (total: ${allVideos.length}, cursor: ${cursor || 'none'}, has_more: ${data?.has_more})`);
 
       // Stop if no more pages or we have enough
       if (!data?.has_more || !data?.max_cursor || allVideos.length >= limit) break;

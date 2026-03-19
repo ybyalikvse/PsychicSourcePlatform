@@ -541,20 +541,23 @@ export function registerCiRoutes(app: Express) {
         cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
         let totalSaved = 0;
+        let totalSkipped = { duplicate: 0, lowViews: 0, tooOld: 0, noId: 0 };
+        console.log(`[CI] Scrape settings: minViews=${minViews}, maxAgeDays=${maxAgeDays}, cutoff=${cutoffDate.toISOString()}`);
         for (const competitor of competitors) {
           const videos = await scrapeCompetitorVideos(competitor.handle, apiKey, 50);
+          console.log(`[CI] @${competitor.handle}: API returned ${videos.length} videos`);
           for (const video of videos) {
             const externalId = video.aweme_id || video.id;
-            if (!externalId) continue;
+            if (!externalId) { totalSkipped.noId++; continue; }
             const existing = await storage.getCiScrapedVideoByExternalId(String(externalId));
-            if (existing) continue;
+            if (existing) { totalSkipped.duplicate++; continue; }
             const stats = video.statistics || video.stats || {};
             const views = stats.play_count ?? stats.playCount ?? 0;
-            if (views < minViews) continue;
+            if (views < minViews) { totalSkipped.lowViews++; continue; }
             const postedAt = video.create_time || video.createTime;
             if (postedAt) {
               const postedDate = new Date(typeof postedAt === "number" ? postedAt * 1000 : postedAt);
-              if (postedDate < cutoffDate) continue;
+              if (postedDate < cutoffDate) { totalSkipped.tooOld++; continue; }
             }
             await storage.createCiScrapedVideo({
               competitorId: competitor.id,
@@ -589,8 +592,9 @@ export function registerCiRoutes(app: Express) {
           }
           await storage.updateCiCompetitor(competitor.id, { lastScrapedAt: new Date().toISOString() });
         }
+        console.log(`[CI] Scrape complete: saved=${totalSaved}, skipped=${JSON.stringify(totalSkipped)}`);
         await storage.upsertCiSetting(`pipeline_last_run_scrape`, new Date().toISOString());
-        return res.json({ success: true, step, saved: totalSaved, competitors: competitors.length });
+        return res.json({ success: true, step, saved: totalSaved, skipped: totalSkipped, competitors: competitors.length });
       }
 
       // For transcripts: process all pending
