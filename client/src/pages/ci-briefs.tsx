@@ -431,7 +431,7 @@ export default function CiBriefs() {
 
                                 {item.hook_options && item.hook_options.length > 0 && (
                                   <div>
-                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    <p className="text-sm font-bold mb-1">
                                       Hook Options
                                     </p>
                                     <ul className="list-disc list-inside space-y-1">
@@ -446,7 +446,7 @@ export default function CiBriefs() {
 
                                 {item.talking_points && item.talking_points.length > 0 && (
                                   <div>
-                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    <p className="text-sm font-bold mb-1">
                                       Talking Points
                                     </p>
                                     <ul className="list-disc list-inside space-y-1">
@@ -478,7 +478,7 @@ export default function CiBriefs() {
 
                                 {item.emotional_journey && (
                                   <div>
-                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    <p className="text-sm font-bold mb-1">
                                       Emotional Journey
                                     </p>
                                     <p className="text-sm">{item.emotional_journey}</p>
@@ -487,7 +487,7 @@ export default function CiBriefs() {
 
                                 {item.suggested_cta && (
                                   <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    <p className="text-sm font-bold mb-1">
                                       Suggested CTA
                                     </p>
                                     <p className="text-sm font-medium">{item.suggested_cta}</p>
@@ -496,7 +496,7 @@ export default function CiBriefs() {
 
                                 {item.notes_for_creator && (
                                   <div>
-                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    <p className="text-sm font-bold mb-1">
                                       Notes for Creator
                                     </p>
                                     <p className="text-sm italic text-muted-foreground">{item.notes_for_creator}</p>
@@ -506,7 +506,7 @@ export default function CiBriefs() {
                                 {existingScript && (
                                   <div className="mt-3 p-3 bg-muted/50 rounded-lg">
                                     <div className="flex items-center justify-between mb-2">
-                                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                      <p className="text-sm font-bold flex items-center gap-1">
                                         <ScrollText className="h-3 w-3" />
                                         Generated Script
                                       </p>
