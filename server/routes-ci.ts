@@ -672,6 +672,17 @@ export function registerCiRoutes(app: Express) {
         const briefSystemPrompt = await storage.getCiSetting("brief_system_prompt");
         const briefUserPrompt = await storage.getCiSetting("brief_user_prompt");
         const modelSetting = await storage.getCiSetting("ai_model");
+        const blockedTopicsSetting = await storage.getCiSetting("blocked_topics");
+
+        // Replace placeholders in system prompt
+        let systemPrompt = briefSystemPrompt?.value || "";
+        if (blockedTopicsSetting?.value) {
+          try {
+            const blocked = JSON.parse(blockedTopicsSetting.value);
+            systemPrompt = systemPrompt.replace(/{BLOCKED_TOPICS}/g, blocked.join("\n"));
+          } catch {}
+        }
+
         const briefResult = await generateWeeklyBrief({
           analyses: analyses.map(a => ({
             topicCategory: a.topicCategory,
@@ -680,7 +691,7 @@ export function registerCiRoutes(app: Express) {
             replicationScore: a.replicationScore,
             topicSummary: a.topicSummary,
           })),
-          systemPrompt: briefSystemPrompt?.value || "",
+          systemPrompt,
           userPromptTemplate: briefUserPrompt?.value || "",
           model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
         });
@@ -1138,7 +1149,7 @@ export function registerCiRoutes(app: Express) {
         // Brief prompts
         {
           key: "brief_system_prompt",
-          value: "You are a content strategist for a psychic and spiritual content brand. Your job is to create weekly video content briefs for our team of psychic creators.\n\nOur brand values:\n- Empowering, uplifting, and hopeful \u2014 never fearful or manipulative\n- Grounded spiritual guidance, not sensationalism\n- We speak to people who are genuinely seeking answers about love, life path, and spirituality\n\nNEVER include content related to: black magic, hexes, curses, demonic entities, death predictions, or harmful intent toward others.\n\nEach brief should feel like a gift to the creator \u2014 clear enough that they can record immediately without needing to think too hard.\n\nAlways output valid JSON only. No preamble, no markdown fences.",
+          value: "You are a content strategist for a psychic and spiritual content brand. Your job is to create weekly video content briefs for our team of psychic creators.\n\nOur brand values:\n- Empowering, uplifting, and hopeful — never fearful or manipulative\n- Grounded spiritual guidance, not sensationalism\n- We speak to people who are genuinely seeking answers about love, life path, and spirituality\n\nNEVER include content related to any of the following restricted topics:\n{BLOCKED_TOPICS}\n\nEach brief should feel like a gift to the creator — clear enough that they can record immediately without needing to think too hard.\n\nAlways output valid JSON only. No preamble, no markdown fences.",
           category: "prompts",
           label: "Brief System Prompt",
           description: "System prompt for weekly brief generation AI",
