@@ -581,9 +581,9 @@ export function registerCiRoutes(app: Express) {
         console.log(`[CI] Scrape complete: saved=${totalSaved}, skipped=${JSON.stringify(totalSkipped)}`);
         await storage.upsertCiSetting(`pipeline_last_run_scrape`, new Date().toISOString());
 
-        // Fetch transcripts for pending videos (time-limited to avoid timeout)
+        // Fetch transcripts for pending videos — use remaining time (leave 30s buffer)
         const startTime = Date.now();
-        const maxTranscriptTime = 120000; // 2 minutes max for transcripts
+        const maxTranscriptTime = 250000; // ~4 min — Vercel has 300s max, leave buffer
         const pendingVideos = await storage.getCiScrapedVideos({ transcriptStatus: "pending" });
         let transcriptsFetched = 0;
         for (const video of pendingVideos) {
