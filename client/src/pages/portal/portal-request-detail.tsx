@@ -265,13 +265,31 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
                     </div>
                   ) : null;
                 })()}
-                <div className="rounded-md border bg-muted/50 p-3 space-y-1">
-                  <p className="text-sm font-medium">Upload Guidelines</p>
-                  <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
-                    <li>Accepted formats: MP4, MOV, WebM</li>
-                    <li>Maximum file size: 500MB</li>
-                    <li>Recommended: vertical (9:16) video</li>
-                  </ul>
+                <div className="rounded-md border bg-muted/50 p-4 space-y-3">
+                  <p className="text-sm font-semibold">How to record and upload your video</p>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">On your phone</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Open your camera app and record your video</li>
+                      <li>When done, come back to this page</li>
+                      <li>Tap the "Upload Video" button below</li>
+                      <li>Select your video from your camera roll</li>
+                      <li>Wait for the upload to complete, then tap "Submit for Review"</li>
+                    </ol>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">On your computer</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Record your video using your webcam or any recording app</li>
+                      <li>Save the file to your desktop or downloads folder</li>
+                      <li>Click the "Upload Video" button below</li>
+                      <li>Find and select your video file</li>
+                      <li>Wait for the upload to complete, then click "Submit for Review"</li>
+                    </ol>
+                  </div>
+                  <div className="border-t pt-2">
+                    <p className="text-xs text-muted-foreground">Accepted formats: MP4, MOV, WebM - Max size: 500MB - Recommended: vertical (9:16)</p>
+                  </div>
                 </div>
                 <PortalUpload
                   requestId={request.id}
