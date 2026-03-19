@@ -575,26 +575,36 @@ export function registerCiRoutes(app: Express) {
               metadata: video,
             });
             totalSaved++;
-
-            // Immediately fetch transcript for the new video
-            try {
-              const videoUrl = (video.share_url || `https://www.tiktok.com/@${competitor.handle}/video/${externalId}`).split("?")[0];
-              const transcript = await fetchVideoTranscript(videoUrl, apiKey);
-              if (transcript) {
-                await storage.updateCiScrapedVideo(
-                  (await storage.getCiScrapedVideoByExternalId(String(externalId)))!.id,
-                  { transcript, transcriptStatus: "completed" } as any
-                );
-              }
-            } catch (err) {
-              console.error(`[CI] Transcript fetch failed for ${externalId}:`, err);
-            }
           }
           await storage.updateCiCompetitor(competitor.id, { lastScrapedAt: new Date().toISOString() });
         }
         console.log(`[CI] Scrape complete: saved=${totalSaved}, skipped=${JSON.stringify(totalSkipped)}`);
         await storage.upsertCiSetting(`pipeline_last_run_scrape`, new Date().toISOString());
-        return res.json({ success: true, step, saved: totalSaved, skipped: totalSkipped, competitors: competitors.length });
+
+        // Fetch transcripts for pending videos (time-limited to avoid timeout)
+        const startTime = Date.now();
+        const maxTranscriptTime = 120000; // 2 minutes max for transcripts
+        const pendingVideos = await storage.getCiScrapedVideos({ transcriptStatus: "pending" });
+        let transcriptsFetched = 0;
+        for (const video of pendingVideos) {
+          if (Date.now() - startTime > maxTranscriptTime) {
+            console.log(`[CI] Transcript time limit reached, ${pendingVideos.length - transcriptsFetched} remaining`);
+            break;
+          }
+          try {
+            const transcript = await fetchVideoTranscript(video.url, apiKey);
+            await storage.updateCiScrapedVideo(video.id, {
+              transcript: transcript || undefined,
+              transcriptStatus: transcript ? "completed" : "failed",
+            } as any);
+            if (transcript) transcriptsFetched++;
+          } catch (err) {
+            console.error(`[CI] Transcript failed for ${video.id}:`, err);
+          }
+        }
+        await storage.upsertCiSetting(`pipeline_last_run_transcripts`, new Date().toISOString());
+
+        return res.json({ success: true, step, saved: totalSaved, transcriptsFetched, skipped: totalSkipped, competitors: competitors.length });
       }
 
       // For transcripts: process all pending
