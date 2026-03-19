@@ -94,9 +94,16 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
                       <span className="text-sm font-medium text-green-700 dark:text-green-400">Paid</span>
                     </div>
                   )}
-                  {req.description && (
-                    <p className="text-sm text-muted-foreground">{req.description}</p>
-                  )}
+                  {req.description && (() => {
+                    let topicDesc: string | null = null;
+                    try {
+                      const parsed = JSON.parse(req.description);
+                      if (parsed._type === "ci_brief" && parsed.topic_description) topicDesc = parsed.topic_description;
+                    } catch {}
+                    if (topicDesc) return <p className="text-sm">{topicDesc}</p>;
+                    if (!req.description.startsWith("{")) return <p className="text-sm text-muted-foreground">{req.description.length > 150 ? req.description.substring(0, 150) + "..." : req.description}</p>;
+                    return null;
+                  })()}
                   <div className="flex flex-wrap gap-2">
                     {req.videoDuration && (
                       <Badge variant="outline" className="no-default-active-elevate">

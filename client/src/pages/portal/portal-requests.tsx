@@ -77,18 +77,33 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {requests.map((req) => (
+          {requests.map((req) => {
+            // Extract topic_description from structured JSON description
+            let topicDescription: string | null = null;
+            if (req.description) {
+              try {
+                const parsed = JSON.parse(req.description);
+                if (parsed._type === "ci_brief" && parsed.topic_description) {
+                  topicDescription = parsed.topic_description;
+                }
+              } catch {}
+            }
+            return (
             <Card key={req.id} data-testid={`card-request-${req.id}`}>
               <CardHeader>
                 <CardTitle className="text-base" data-testid={`text-request-title-${req.id}`}>{req.title}</CardTitle>
                 <CardDescription data-testid={`text-request-topic-${req.id}`}>{req.topic}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {req.hook && (
-                  <p className="text-sm text-muted-foreground" data-testid={`text-request-hook-${req.id}`}>
-                    {req.hook}
+                {topicDescription ? (
+                  <p className="text-sm" data-testid={`text-request-desc-${req.id}`}>
+                    {topicDescription}
                   </p>
-                )}
+                ) : req.description && !req.description.startsWith("{") ? (
+                  <p className="text-sm" data-testid={`text-request-desc-${req.id}`}>
+                    {req.description.length > 150 ? req.description.substring(0, 150) + "..." : req.description}
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   {req.videoDuration && (
                     <Badge variant="outline" className="no-default-active-elevate">
@@ -132,7 +147,8 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
                 </Button>
               </CardFooter>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
