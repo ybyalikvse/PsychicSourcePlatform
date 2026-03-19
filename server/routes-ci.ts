@@ -277,10 +277,22 @@ export function registerCiRoutes(app: Express) {
 
       const weekLabel = getWeekLabel();
 
+      // If blocked, delete the video and don't store the analysis
+      if (analysis.blocked) {
+        console.log(`[CI] Video ${video.id} blocked: ${analysis.block_reason}`);
+        await storage.deleteCiScrapedVideo(video.id);
+        return res.json({
+          success: true,
+          blocked: true,
+          blockReason: analysis.block_reason,
+          message: `Video blocked and removed: ${analysis.block_reason}`,
+        });
+      }
+
       await storage.createCiVideoAnalysis({
         scrapedVideoId: video.id,
-        blocked: analysis.blocked || false,
-        blockReason: analysis.block_reason || null,
+        blocked: false,
+        blockReason: null,
         topicCategory: analysis.topic_category || null,
         topicSummary: analysis.topic_summary || null,
         hookText: analysis.hook_text || null,
@@ -619,6 +631,7 @@ export function registerCiRoutes(app: Express) {
         if (hookTypesSetting?.value) userPromptTemplate = userPromptTemplate.replace(/{HOOK_TYPES}/g, JSON.parse(hookTypesSetting.value).join("\n"));
 
         let analyzed = 0;
+        let blocked = 0;
         for (const video of videos) {
           try {
             const competitor = await storage.getCiCompetitor(video.competitorId);
@@ -635,10 +648,16 @@ export function registerCiRoutes(app: Express) {
               userPromptTemplate,
               model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
             });
+            if (analysis.blocked) {
+              console.log(`[CI] Video ${video.id} blocked: ${analysis.block_reason}`);
+              await storage.deleteCiScrapedVideo(video.id);
+              blocked++;
+              continue;
+            }
             await storage.createCiVideoAnalysis({
               scrapedVideoId: video.id,
-              blocked: analysis.blocked || false,
-              blockReason: analysis.block_reason || null,
+              blocked: false,
+              blockReason: null,
               topicCategory: analysis.topic_category || null,
               topicSummary: analysis.topic_summary || null,
               hookText: analysis.hook_text || null,
@@ -660,7 +679,7 @@ export function registerCiRoutes(app: Express) {
           }
         }
         await storage.upsertCiSetting(`pipeline_last_run_analyze`, new Date().toISOString());
-        return res.json({ success: true, step, analyzed, total: videos.length });
+        return res.json({ success: true, step, analyzed, blocked, total: videos.length });
       }
 
       // For brief: generate weekly brief directly

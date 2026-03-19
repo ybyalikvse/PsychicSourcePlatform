@@ -70,8 +70,14 @@ export default function CiDashboard() {
       const res = await apiRequest("POST", "/api/ci/pipeline/run-step", { step });
       return res.json();
     },
-    onSuccess: (data, step) => {
-      toast({ title: `${step} completed`, description: JSON.stringify(data).slice(0, 100) });
+    onSuccess: (data: any, step) => {
+      let desc = "";
+      if (data.analyzed !== undefined) desc += `${data.analyzed} analyzed`;
+      if (data.blocked) desc += `${desc ? ", " : ""}${data.blocked} blocked`;
+      if (data.saved !== undefined) desc += `${data.saved} saved`;
+      if (data.message) desc = data.message;
+      if (!desc) desc = "Done";
+      toast({ title: `${step} completed`, description: desc });
       queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
       setRunningStep(null);
     },
