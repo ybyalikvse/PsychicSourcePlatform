@@ -436,9 +436,9 @@ export function registerCiRoutes(app: Express) {
       let closeCta = "";
 
       if (typeof scriptContent === "string") {
-        const hookMatch = scriptContent.match(/HOOK[:\s]*\n?([\s\S]*?)(?=\nBODY|$)/i);
-        const bodyMatch = scriptContent.match(/BODY[:\s]*\n?([\s\S]*?)(?=\nCLOSE|$)/i);
-        const ctaMatch = scriptContent.match(/CLOSE[^:]*:[:\s]*\n?([\s\S]*?)$/i);
+        const hookMatch = scriptContent.match(/HOOK[:\s]*\n?([\s\S]*?)(?=\nBODY[:\s]|$)/i);
+        const bodyMatch = scriptContent.match(/BODY[:\s]*\n?([\s\S]*?)(?=\nCLOSE[:\s\+]|$)/i);
+        const ctaMatch = scriptContent.match(/CLOSE\s*\+?\s*CTA[:\s]*\n?([\s\S]*?)$/i);
         hook = hookMatch?.[1]?.trim() || "";
         body = bodyMatch?.[1]?.trim() || "";
         closeCta = ctaMatch?.[1]?.trim() || "";
@@ -830,9 +830,9 @@ export function registerCiRoutes(app: Express) {
               model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
             });
             const scriptText = typeof script === "string" ? script : JSON.stringify(script);
-            const hookMatch = scriptText.match(/HOOK[:\s]*\n?([\s\S]*?)(?=BODY|$)/i);
-            const bodyMatch = scriptText.match(/BODY[:\s]*\n?([\s\S]*?)(?=CLOSE|CTA|$)/i);
-            const ctaMatch = scriptText.match(/(?:CLOSE|CTA)[:\s]*\n?([\s\S]*?)$/i);
+            const hookMatch = scriptText.match(/HOOK[:\s]*\n?([\s\S]*?)(?=\nBODY[:\s]|$)/i);
+            const bodyMatch = scriptText.match(/BODY[:\s]*\n?([\s\S]*?)(?=\nCLOSE[:\s\+]|$)/i);
+            const ctaMatch = scriptText.match(/CLOSE\s*\+?\s*CTA[:\s]*\n?([\s\S]*?)$/i);
             await storage.createCiBriefScript({
               briefId: brief.id,
               briefItemIndex: i,

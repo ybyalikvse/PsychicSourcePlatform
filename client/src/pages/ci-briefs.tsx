@@ -112,7 +112,7 @@ export default function CiBriefs() {
       return res.json();
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/ci/scripts", variables.briefId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ci/scripts"] });
       toast({ title: "Script generated", description: "The script has been generated successfully." });
     },
     onError: (err: Error) => {
@@ -519,7 +519,7 @@ export default function CiBriefs() {
                                       {existingScript.closeCta && (
                                         <div>
                                           <p className="text-xs font-semibold text-primary mb-1">CLOSE + CTA</p>
-                                          <p>{existingScript.closeCta}</p>
+                                          <p>{existingScript.closeCta?.replace(/^\+?\s*CTA[:\s]*/i, "").trim()}</p>
                                         </div>
                                       )}
                                       {!existingScript.hook && !existingScript.body && !existingScript.closeCta && existingScript.rawScript?.full && (

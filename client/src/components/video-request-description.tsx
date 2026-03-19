@@ -32,6 +32,8 @@ function cleanScript(text: string, stripDirections: boolean = false): string {
   cleaned = cleaned.replace(/^-{3,}\s*$/gm, "");
   // Remove section headers that duplicate our own labels (HOOK:, BODY:, CLOSE + CTA:, etc.)
   cleaned = cleaned.replace(/^(?:HOOK|BODY|CLOSE\s*\+?\s*CTA)[:\s]*(?:\(.*?\))?\s*$/gim, "");
+  // Remove leftover "+ CTA:" from bad parsing
+  cleaned = cleaned.replace(/^\+?\s*CTA[:\s]*$/gim, "");
   // Remove timing labels like (0-3 seconds), (final 10 seconds)
   cleaned = cleaned.replace(/\(\d+-?\d*\s*seconds?\)/gi, "");
   // Remove OPTIONAL OVERLAY TEXT sections entirely
