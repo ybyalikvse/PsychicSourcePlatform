@@ -8,7 +8,8 @@ import { DataState } from "@/components/data-state";
 import { portalApiRequest, portalFetch } from "@/lib/portal-api";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Clock, DollarSign, Video, Eye } from "lucide-react";
+import { Calendar, Clock, DollarSign, Video, Eye, AlertTriangle } from "lucide-react";
+import { getDeadlineInfo } from "@/lib/format-utils";
 import type { VideoRequest, Psychic } from "@shared/schema";
 
 interface PortalRequestsProps {
@@ -106,12 +107,19 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
                       ${req.payAmount}
                     </Badge>
                   )}
-                  {req.requiredDate && (
-                    <Badge variant="outline" className="no-default-active-elevate">
-                      <Calendar className="h-3 w-3 mr-1" />
-                      {new Date(req.requiredDate).toLocaleDateString()}
-                    </Badge>
-                  )}
+                  {req.requiredDate && (() => {
+                    const deadline = getDeadlineInfo(req.requiredDate);
+                    return (
+                      <Badge variant="outline" className={`no-default-active-elevate ${deadline.color}`}>
+                        {deadline.urgent ? (
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                        ) : (
+                          <Calendar className="h-3 w-3 mr-1" />
+                        )}
+                        {deadline.text}
+                      </Badge>
+                    );
+                  })()}
                 </div>
               </CardContent>
               <CardFooter className="flex gap-2">

@@ -15,6 +15,7 @@ import {
   ArrowRightCircle, ScrollText, Video, Play, CheckCircle, Clock, Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
+import { formatDate, formatRelativeTime, getStatusBadgeVariant } from "@/lib/format-utils";
 
 interface BriefItem {
   brief_id?: string;
@@ -84,14 +85,7 @@ export default function CiBriefs() {
   });
 
   function formatTimestamp(ts: string | null | undefined): string {
-    if (!ts) return "Never";
-    const d = new Date(ts);
-    const diffMs = Date.now() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-    return `${Math.floor(diffMins / 1440)}d ago`;
+    return formatRelativeTime(ts);
   }
 
   const { data: briefs = [], isLoading } = useQuery<Brief[]>({
@@ -194,21 +188,8 @@ export default function CiBriefs() {
     });
   }
 
-  function formatDate(date: string): string {
-    return new Date(date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-
-  function getStatusColor(status: string): "default" | "secondary" | "destructive" | "outline" {
-    switch (status) {
-      case "complete": return "default";
-      case "generating": return "secondary";
-      case "error": return "destructive";
-      default: return "outline";
-    }
+  function formatDateLocal(date: string): string {
+    return formatDate(date);
   }
 
   function getScriptForItem(briefId: number, itemIndex: number): Script | undefined {
@@ -316,7 +297,7 @@ export default function CiBriefs() {
                         <div>
                           <CardTitle className="text-lg">{brief.weekLabel}</CardTitle>
                           <CardDescription>
-                            {brief.videoCount} videos analyzed -- {formatDate(brief.createdAt)}
+                            {brief.videoCount} videos analyzed -- {formatDateLocal(brief.createdAt)}
                           </CardDescription>
                         </div>
                       </div>

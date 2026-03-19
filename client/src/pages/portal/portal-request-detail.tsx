@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { portalApiRequest, portalFetch } from "@/lib/portal-api";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { getDeadlineInfo, getStatusBadgeVariant, getStatusLabel } from "@/lib/format-utils";
 import {
   Calendar,
   Clock,
@@ -21,6 +22,8 @@ import {
   CheckCircle,
   ArrowLeft,
   Video,
+  AlertTriangle,
+  Upload,
 } from "lucide-react";
 import PortalUpload from "./portal-upload";
 import type { VideoRequest, VideoMessage, Psychic } from "@shared/schema";
@@ -30,14 +33,7 @@ interface PortalRequestDetailProps {
   psychic: Psychic;
 }
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  available: { label: "Available", variant: "outline" },
-  claimed: { label: "Claimed", variant: "secondary" },
-  submitted: { label: "Submitted", variant: "default" },
-  revision_requested: { label: "Revision Needed", variant: "destructive" },
-  approved: { label: "Approved", variant: "outline" },
-  paid: { label: "Paid", variant: "outline" },
-};
+// Status display now uses shared format-utils
 
 export default function PortalRequestDetail({ requestId, psychic }: PortalRequestDetailProps) {
   const { toast } = useToast();
@@ -153,7 +149,6 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
     );
   }
 
-  const statusInfo = statusConfig[request.status] || { label: request.status, variant: "secondary" as const };
   const isMine = request.claimedBy === psychic.id;
   const canClaim = request.status === "available";
   const canUpload = isMine && (request.status === "claimed" || request.status === "revision_requested");
@@ -180,8 +175,8 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
           <h1 className="text-2xl font-semibold" data-testid="text-request-title">{request.title}</h1>
           <p className="text-muted-foreground mt-1" data-testid="text-request-topic">{request.topic}</p>
         </div>
-        <Badge variant={statusInfo.variant} className="text-sm" data-testid="badge-request-status">
-          {statusInfo.label}
+        <Badge variant={getStatusBadgeVariant(request.status)} className="text-sm" data-testid="badge-request-status">
+          {getStatusLabel(request.status)}
         </Badge>
       </div>
 
@@ -219,12 +214,19 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
                     <span data-testid="text-request-pay">${request.payAmount}</span>
                   </div>
                 )}
-                {request.requiredDate && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span data-testid="text-request-date">Due {new Date(request.requiredDate).toLocaleDateString()}</span>
-                  </div>
-                )}
+                {request.requiredDate && (() => {
+                  const deadline = getDeadlineInfo(request.requiredDate);
+                  return (
+                    <div className="flex items-center gap-2 text-sm">
+                      {deadline.urgent ? (
+                        <AlertTriangle className="h-4 w-4 text-current" />
+                      ) : (
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className={deadline.color} data-testid="text-request-date">{deadline.text}</span>
+                    </div>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -245,9 +247,32 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
           {canUpload && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Upload Video</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  Upload Video
+                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {request.status === "revision_requested" && messages && messages.length > 0 && (() => {
+                  const revisionMsg = [...messages].reverse().find(m => m.senderType === "admin" && m.message.includes("Revision Requested"));
+                  return revisionMsg ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 p-3">
+                      <div className="flex items-center gap-2 text-red-700 dark:text-red-400 mb-1">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span className="font-medium text-sm">Revision Notes</span>
+                      </div>
+                      <p className="text-sm text-red-700 dark:text-red-300">{revisionMsg.message.replace(/^.*Revision Requested:\s*/, "")}</p>
+                    </div>
+                  ) : null;
+                })()}
+                <div className="rounded-md border bg-muted/50 p-3 space-y-1">
+                  <p className="text-sm font-medium">Upload Guidelines</p>
+                  <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+                    <li>Accepted formats: MP4, MOV, WebM</li>
+                    <li>Maximum file size: 500MB</li>
+                    <li>Recommended: vertical (9:16) video</li>
+                  </ul>
+                </div>
                 <PortalUpload
                   requestId={request.id}
                   existingUrl={request.videoUrl}

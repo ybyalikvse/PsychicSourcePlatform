@@ -30,9 +30,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VideoRequestDescription } from "@/components/video-request-description";
 import {
   Plus, Video, Send, Loader2, Trash2, Eye, CheckCircle, RotateCw,
-  DollarSign, Clock, Copy, Sparkles, ArrowLeft, MessageSquare,
+  DollarSign, Clock, Copy, Sparkles, ArrowLeft, MessageSquare, AlertTriangle, Mail,
 } from "lucide-react";
 import { DataState } from "@/components/data-state";
+import { getDeadlineInfo, getStatusBadgeVariant, getStatusLabel } from "@/lib/format-utils";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
@@ -50,22 +51,6 @@ const PLATFORM_OPTIONS = [
   { value: "youtube", label: "YouTube" },
   { value: "facebook", label: "Facebook" },
 ];
-
-function getStatusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "available": return "outline";
-    case "claimed": return "secondary";
-    case "submitted": return "default";
-    case "revision_requested": return "destructive";
-    case "approved": return "default";
-    case "paid": return "secondary";
-    default: return "outline";
-  }
-}
-
-function getStatusLabel(status: string): string {
-  return status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
 
 const createVideoRequestSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -333,7 +318,17 @@ export default function VideoRequests() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold">Required Date</p>
-                    <p className="text-sm" data-testid="text-required-date">{selectedRequest.requiredDate || "—"}</p>
+                    {selectedRequest.requiredDate ? (() => {
+                      const deadline = getDeadlineInfo(selectedRequest.requiredDate);
+                      return (
+                        <p className="text-sm flex items-center gap-1" data-testid="text-required-date">
+                          {deadline.urgent && <AlertTriangle className="h-3 w-3" />}
+                          <span className={deadline.color}>{deadline.text}</span>
+                        </p>
+                      );
+                    })() : (
+                      <p className="text-sm" data-testid="text-required-date">—</p>
+                    )}
                   </div>
                   {showPayAmount && (
                   <div>
@@ -343,7 +338,28 @@ export default function VideoRequests() {
                   )}
                   <div>
                     <p className="text-sm font-semibold">Claimed By</p>
-                    <p className="text-sm" data-testid="text-claimed-by">{getPsychicName(selectedRequest.claimedBy)}</p>
+                    {selectedRequest.claimedBy ? (() => {
+                      const claimedPsychic = psychics.find(p => p.id === selectedRequest.claimedBy);
+                      return claimedPsychic ? (
+                        <div className="text-sm" data-testid="text-claimed-by">
+                          <span>{claimedPsychic.name}</span>
+                          {claimedPsychic.email && (
+                            <a
+                              href={`mailto:${claimedPsychic.email}`}
+                              className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                              data-testid="link-psychic-email"
+                            >
+                              <Mail className="h-3 w-3" />
+                              {claimedPsychic.email}
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm" data-testid="text-claimed-by">{selectedRequest.claimedBy}</p>
+                      );
+                    })() : (
+                      <p className="text-sm" data-testid="text-claimed-by">—</p>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm font-semibold">Created</p>
@@ -702,7 +718,17 @@ export default function VideoRequests() {
                   <TableCell data-testid={`text-topic-${req.id}`}>{req.topic}</TableCell>
                   <TableCell data-testid={`text-duration-${req.id}`}>{req.videoDuration || "—"}</TableCell>
                   {showPayAmount && <TableCell data-testid={`text-pay-${req.id}`}>{req.payAmount ? `$${req.payAmount}` : "—"}</TableCell>}
-                  <TableCell data-testid={`text-date-${req.id}`}>{req.requiredDate || "—"}</TableCell>
+                  <TableCell data-testid={`text-date-${req.id}`}>
+                    {req.requiredDate ? (() => {
+                      const dl = getDeadlineInfo(req.requiredDate);
+                      return (
+                        <span className={`flex items-center gap-1 ${dl.color}`}>
+                          {dl.urgent && <AlertTriangle className="h-3 w-3" />}
+                          {dl.text}
+                        </span>
+                      );
+                    })() : "—"}
+                  </TableCell>
                   <TableCell data-testid={`text-psychic-${req.id}`}>{getPsychicName(req.claimedBy)}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(req.status)} data-testid={`badge-status-${req.id}`}>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -53,7 +53,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Plus, Pencil, Trash2, Video, ArrowLeft, Loader2, Eye } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Video, ArrowLeft, Loader2, Eye, Search } from "lucide-react";
 
 const psychicFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -72,6 +72,7 @@ export default function Psychics() {
   const [editingPsychic, setEditingPsychic] = useState<Psychic | null>(null);
   const [deletingPsychic, setDeletingPsychic] = useState<Psychic | null>(null);
   const [viewingPsychic, setViewingPsychic] = useState<Psychic | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: psychics = [], isLoading } = useQuery<Psychic[]>({
     queryKey: ["/api/psychics"],
@@ -85,6 +86,14 @@ export default function Psychics() {
     queryKey: ["/api/psychics", viewingPsychic?.id, "videos"],
     enabled: !!viewingPsychic,
   });
+
+  const filteredPsychics = useMemo(() => {
+    if (!searchQuery.trim()) return psychics;
+    const q = searchQuery.toLowerCase();
+    return psychics.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)
+    );
+  }, [psychics, searchQuery]);
 
   useEffect(() => {
     if (match && params?.id && psychics.length > 0) {
@@ -294,10 +303,22 @@ export default function Psychics() {
           <h1 className="text-3xl font-bold tracking-tight" data-testid="text-psychics-title">Psychics</h1>
           <p className="text-muted-foreground">Manage psychics for the video portal</p>
         </div>
-        <Button onClick={() => { addForm.reset(); setAddDialogOpen(true); }} data-testid="button-add-psychic">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Psychic
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-[260px]"
+              data-testid="input-search-psychics"
+            />
+          </div>
+          <Button onClick={() => { addForm.reset(); setAddDialogOpen(true); }} data-testid="button-add-psychic">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Psychic
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -314,9 +335,9 @@ export default function Psychics() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : psychics.length === 0 ? (
+          ) : filteredPsychics.length === 0 ? (
             <p className="text-muted-foreground text-sm py-8 text-center" data-testid="text-no-psychics">
-              No psychics added yet. Click "Add Psychic" to get started.
+              {searchQuery ? "No psychics match your search." : 'No psychics added yet. Click "Add Psychic" to get started.'}
             </p>
           ) : (
             <Table data-testid="table-psychics">
@@ -331,7 +352,7 @@ export default function Psychics() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {psychics.map((psychic) => (
+                {filteredPsychics.map((psychic) => (
                   <TableRow
                     key={psychic.id}
                     className="cursor-pointer"

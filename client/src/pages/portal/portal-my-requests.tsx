@@ -6,20 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataState } from "@/components/data-state";
 import { portalFetch } from "@/lib/portal-api";
-import { Calendar, Clock, DollarSign, Eye } from "lucide-react";
+import { Calendar, Clock, DollarSign, Eye, AlertTriangle, CheckCircle, RotateCw, Banknote } from "lucide-react";
 import type { VideoRequest, Psychic } from "@shared/schema";
+import { getDeadlineInfo, getStatusBadgeVariant, getStatusLabel } from "@/lib/format-utils";
 
 interface PortalMyRequestsProps {
   psychic: Psychic;
 }
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  claimed: { label: "Claimed", variant: "secondary" },
-  submitted: { label: "Submitted", variant: "default" },
-  revision_requested: { label: "Revision Needed", variant: "destructive" },
-  approved: { label: "Approved", variant: "outline" },
-  paid: { label: "Paid", variant: "outline" },
-};
+// Status display now uses shared format-utils
 
 export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
   const [, setLocation] = useLocation();
@@ -67,7 +62,6 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {requests.map((req) => {
-            const statusInfo = statusConfig[req.status] || { label: req.status, variant: "secondary" as const };
             return (
               <Card key={req.id} data-testid={`card-my-request-${req.id}`}>
                 <CardHeader>
@@ -75,13 +69,31 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
                     <CardTitle className="text-base" data-testid={`text-my-request-title-${req.id}`}>
                       {req.title}
                     </CardTitle>
-                    <Badge variant={statusInfo.variant} data-testid={`badge-status-${req.id}`}>
-                      {statusInfo.label}
+                    <Badge variant={getStatusBadgeVariant(req.status)} data-testid={`badge-status-${req.id}`}>
+                      {getStatusLabel(req.status)}
                     </Badge>
                   </div>
                   <CardDescription>{req.topic}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {req.status === "revision_requested" && (
+                    <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 p-2 flex items-center gap-2">
+                      <RotateCw className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                      <span className="text-sm font-medium text-red-700 dark:text-red-400">Revision Requested — please re-upload your video</span>
+                    </div>
+                  )}
+                  {req.status === "approved" && (
+                    <div className="rounded-md border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950 p-2 flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                      <span className="text-sm font-medium text-green-700 dark:text-green-400">Approved!</span>
+                    </div>
+                  )}
+                  {req.status === "paid" && (
+                    <div className="rounded-md border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950 p-2 flex items-center gap-2">
+                      <Banknote className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                      <span className="text-sm font-medium text-green-700 dark:text-green-400">Paid</span>
+                    </div>
+                  )}
                   {req.description && (
                     <p className="text-sm text-muted-foreground">{req.description}</p>
                   )}
@@ -98,12 +110,19 @@ export default function PortalMyRequests({ psychic }: PortalMyRequestsProps) {
                         ${req.payAmount}
                       </Badge>
                     )}
-                    {req.requiredDate && (
-                      <Badge variant="outline" className="no-default-active-elevate">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        {new Date(req.requiredDate).toLocaleDateString()}
-                      </Badge>
-                    )}
+                    {req.requiredDate && (() => {
+                      const deadline = getDeadlineInfo(req.requiredDate);
+                      return (
+                        <Badge variant="outline" className={`no-default-active-elevate ${deadline.color}`}>
+                          {deadline.urgent ? (
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                          ) : (
+                            <Calendar className="h-3 w-3 mr-1" />
+                          )}
+                          {deadline.text}
+                        </Badge>
+                      );
+                    })()}
                   </div>
                 </CardContent>
                 <CardFooter>

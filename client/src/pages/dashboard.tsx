@@ -132,16 +132,16 @@ export default function Dashboard() {
                 Create New Article
               </Button>
             </Link>
-            <Link href="/keywords">
-              <Button className="w-full justify-start" variant="outline" data-testid="button-keyword-research">
-                <Search className="mr-2 h-4 w-4" />
-                Keyword Research
+            <Link href="/content">
+              <Button className="w-full justify-start" variant="outline" data-testid="button-manage-content">
+                <FileText className="mr-2 h-4 w-4" />
+                Manage Content
               </Button>
             </Link>
-            <Link href="/updates">
-              <Button className="w-full justify-start" variant="outline" data-testid="button-content-audit">
-                <Clock className="mr-2 h-4 w-4" />
-                Content Audit
+            <Link href="/performance">
+              <Button className="w-full justify-start" variant="outline" data-testid="button-view-performance">
+                <TrendingUp className="mr-2 h-4 w-4" />
+                View Performance
               </Button>
             </Link>
             <Link href="/integrations">

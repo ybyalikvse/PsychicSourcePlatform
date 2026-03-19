@@ -1,8 +1,11 @@
 import { Link, useLocation } from "wouter";
-import { Video, ListChecks, LogOut, ExternalLink } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Video, ListChecks, LogOut, ExternalLink, LayoutDashboard } from "lucide-react";
 import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { portalFetch } from "@/lib/portal-api";
+import type { VideoRequest } from "@shared/schema";
 import {
   Sidebar,
   SidebarContent,
@@ -24,21 +27,20 @@ interface PortalLayoutProps {
   onLogout?: () => void;
 }
 
-const portalNavItems = [
-  {
-    title: "Available Requests",
-    url: "/portal/requests",
-    icon: Video,
-  },
-  {
-    title: "My Requests",
-    url: "/portal/my-requests",
-    icon: ListChecks,
-  },
-];
-
 export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutProps) {
   const [location] = useLocation();
+
+  const { data: myRequests } = useQuery<VideoRequest[]>({
+    queryKey: ["/api/portal/my-requests"],
+    queryFn: async () => {
+      const res = await portalFetch("/api/portal/my-requests");
+      return res.json();
+    },
+    refetchInterval: 30000,
+    enabled: !!psychicName,
+  });
+
+  const revisionCount = myRequests?.filter(r => r.status === "revision_requested").length ?? 0;
 
   if (!psychicName) {
     return (
@@ -54,6 +56,27 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "4rem",
   };
+
+  const portalNavItems = [
+    {
+      title: "Dashboard",
+      url: "/portal",
+      icon: LayoutDashboard,
+      badge: 0,
+    },
+    {
+      title: "Available Requests",
+      url: "/portal/requests",
+      icon: Video,
+      badge: 0,
+    },
+    {
+      title: "My Requests",
+      url: "/portal/my-requests",
+      icon: ListChecks,
+      badge: revisionCount,
+    },
+  ];
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
@@ -75,12 +98,21 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
                         asChild
-                        isActive={location === item.url || (item.url === "/portal/requests" && location === "/portal") || (item.url === "/portal/my-requests" && location.startsWith("/portal/request/"))}
+                        isActive={
+                          location === item.url ||
+                          (item.url === "/portal" && location === "/portal") ||
+                          (item.url === "/portal/my-requests" && location.startsWith("/portal/request/"))
+                        }
                         data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                       >
                         <Link href={item.url}>
                           <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
+                          <span className="flex-1">{item.title}</span>
+                          {item.badge > 0 && (
+                            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-medium text-white" data-testid={`badge-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                              {item.badge}
+                            </span>
+                          )}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

@@ -17975,6 +17975,14 @@ var DatabaseStorage = class {
     const [result] = await db.insert(ciVideoAnalyses).values(data).returning();
     return result;
   }
+  async deleteCiVideoAnalysis(id) {
+    await db.delete(ciVideoAnalyses).where(eq(ciVideoAnalyses.id, id));
+    return true;
+  }
+  async deleteCiScrapedVideo(id) {
+    await db.delete(ciScrapedVideos).where(eq(ciScrapedVideos.id, id));
+    return true;
+  }
   // ===== CI Content Briefs =====
   async getCiContentBriefs(status) {
     const all = await db.select().from(ciContentBriefs).orderBy(desc(ciContentBriefs.createdAt));
@@ -17992,6 +18000,10 @@ var DatabaseStorage = class {
   async updateCiContentBrief(id, data) {
     const [result] = await db.update(ciContentBriefs).set(data).where(eq(ciContentBriefs.id, id)).returning();
     return result;
+  }
+  async deleteCiContentBrief(id) {
+    await db.delete(ciContentBriefs).where(eq(ciContentBriefs.id, id));
+    return true;
   }
   // ===== CI Brief Scripts =====
   async getCiBriefScripts(briefId) {
@@ -18011,6 +18023,10 @@ var DatabaseStorage = class {
   async updateCiBriefScript(id, data) {
     const [result] = await db.update(ciBriefScripts).set(data).where(eq(ciBriefScripts.id, id)).returning();
     return result;
+  }
+  async deleteCiBriefScript(id) {
+    await db.delete(ciBriefScripts).where(eq(ciBriefScripts.id, id));
+    return true;
   }
   // ===== CI Performance Reports =====
   async getCiPerformanceReports() {

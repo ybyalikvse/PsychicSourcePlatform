@@ -85,7 +85,7 @@ const videoNavItems = [
     icon: Video,
   },
   {
-    title: "CI Dashboard",
+    title: "Intelligence Dashboard",
     url: "/ci",
     icon: Brain,
   },
@@ -110,7 +110,7 @@ const videoNavItems = [
     icon: TrendingUp,
   },
   {
-    title: "CI Settings",
+    title: "Intelligence Settings",
     url: "/ci/settings",
     icon: Settings,
   },
@@ -198,7 +198,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Video Portal</SidebarGroupLabel>
+          <SidebarGroupLabel>Psychic Video Portal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {videoNavItems.map((item) => (
