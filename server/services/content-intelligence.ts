@@ -36,18 +36,25 @@ export async function scrapeCompetitorVideos(
         break;
       }
 
-      // Parse response, handling potential control characters in JSON
       let data: any;
       try {
         const rawText = await response.text();
-        // Strip control characters that break JSON parsing
-        const cleanedText = rawText.replace(/[\x00-\x1F\x7F]/g, (ch) => {
-          if (ch === '\n' || ch === '\r' || ch === '\t') return ch;
-          return '';
-        });
-        data = JSON.parse(cleanedText);
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          // Clean control characters and retry
+          const cleanedText = rawText.replace(/[\x00-\x1F\x7F]/g, (ch: string) =>
+            ch === '\n' || ch === '\r' || ch === '\t' ? ch : ''
+          );
+          data = JSON.parse(cleanedText);
+        }
       } catch (parseErr) {
-        console.error(`[CI] Failed to parse ScrapeCreators response for @${handle} page ${page + 1}:`, parseErr);
+        console.error(`[CI] Failed to parse response for @${handle} page ${page + 1}:`, parseErr);
+        break;
+      }
+
+      if (data?.success === false) {
+        console.error(`[CI] API error for @${handle}: ${data?.message || 'unknown'}`);
         break;
       }
 
