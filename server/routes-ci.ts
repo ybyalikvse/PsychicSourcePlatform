@@ -569,6 +569,9 @@ export function registerCiRoutes(app: Express) {
           for (const video of videos) {
             const externalId = video.aweme_id || video.id;
             if (!externalId) { totalSkipped.noId++; continue; }
+            // Skip photo posts (no audio/transcript available)
+            const shareUrl = video.share_url || "";
+            if (shareUrl.includes("/photo/")) { totalSkipped.noId++; continue; }
             const existing = await storage.getCiScrapedVideoByExternalId(String(externalId));
             if (existing) { totalSkipped.duplicate++; continue; }
             const stats = video.statistics || video.stats || {};

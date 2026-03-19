@@ -233,7 +233,7 @@ export default function CiAnalyses() {
   // Compute stats
   const totalVideos = allVideos.length;
   const analyzedCount = allVideos.filter(v => v.analysisStatus === "completed").length;
-  const pendingCount = allVideos.filter(v => v.analysisStatus === "pending").length;
+  const pendingCount = allVideos.filter(v => v.analysisStatus === "pending" && v.transcriptStatus !== "failed").length;
   const blockedCount = allVideos.filter(v => v.analysisStatus === "blocked").length;
   const failedTranscriptCount = allVideos.filter(v => v.transcriptStatus === "failed").length;
 
@@ -267,14 +267,20 @@ export default function CiAnalyses() {
     setScoreFilter("0");
   }
 
-  function getTranscriptBadge(status: string) {
+  function getTranscriptBadge(status: string, url?: string) {
+    const isPhoto = url?.includes("/photo/");
     switch (status) {
       case "completed":
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
       case "pending":
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
       case "failed":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Failed</Badge>;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Failed</Badge>
+            <span className="text-[10px] text-muted-foreground">{isPhoto ? "Photo post — no audio" : "No transcript available"}</span>
+          </div>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -283,7 +289,7 @@ export default function CiAnalyses() {
   function getAnalysisBadge(status: string) {
     switch (status) {
       case "completed":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">✓ Analyzed</Badge>;
       case "pending":
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
       case "blocked":
@@ -764,7 +770,7 @@ export default function CiAnalyses() {
                             {video.viewCount ? formatViews(video.viewCount) : "\u2014"}
                           </TableCell>
                           <TableCell>
-                            {getTranscriptBadge(video.transcriptStatus)}
+                            {getTranscriptBadge(video.transcriptStatus, video.url)}
                           </TableCell>
                           <TableCell>
                             {getAnalysisBadge(video.analysisStatus)}
