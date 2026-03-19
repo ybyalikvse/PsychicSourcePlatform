@@ -277,15 +277,35 @@ export function registerCiRoutes(app: Express) {
 
       const weekLabel = getWeekLabel();
 
-      // If blocked, delete the video and don't store the analysis
+      // If blocked, keep the video but mark it as blocked
       if (analysis.blocked) {
         console.log(`[CI] Video ${video.id} blocked: ${analysis.block_reason}`);
-        await storage.deleteCiScrapedVideo(video.id);
+        await storage.createCiVideoAnalysis({
+          scrapedVideoId: video.id,
+          blocked: true,
+          blockReason: analysis.block_reason || null,
+          topicCategory: analysis.topic_category || null,
+          topicSummary: analysis.topic_summary || null,
+          hookText: analysis.hook_text || null,
+          hookType: analysis.hook_type || null,
+          hookSummary: analysis.hook_summary || null,
+          emotionalAngle: analysis.emotional_angle || null,
+          targetAudience: analysis.target_audience || null,
+          format: analysis.format || null,
+          ctaType: analysis.cta_type || null,
+          replicationScore: analysis.replication_score || null,
+          notes: analysis.notes || null,
+          rawAnalysis: analysis,
+          weekAdded: weekLabel,
+        });
+        await storage.updateCiScrapedVideo(video.id, {
+          analysisStatus: "blocked",
+        } as any);
         return res.json({
           success: true,
           blocked: true,
           blockReason: analysis.block_reason,
-          message: `Video blocked and removed: ${analysis.block_reason}`,
+          message: `Video blocked: ${analysis.block_reason}`,
         });
       }
 
@@ -664,7 +684,25 @@ export function registerCiRoutes(app: Express) {
             });
             if (analysis.blocked) {
               console.log(`[CI] Video ${video.id} blocked: ${analysis.block_reason}`);
-              await storage.deleteCiScrapedVideo(video.id);
+              await storage.createCiVideoAnalysis({
+                scrapedVideoId: video.id,
+                blocked: true,
+                blockReason: analysis.block_reason || null,
+                topicCategory: analysis.topic_category || null,
+                topicSummary: analysis.topic_summary || null,
+                hookText: null,
+                hookType: null,
+                hookSummary: null,
+                emotionalAngle: null,
+                targetAudience: null,
+                format: null,
+                ctaType: null,
+                replicationScore: null,
+                notes: null,
+                rawAnalysis: analysis,
+                weekAdded: getWeekLabel(),
+              });
+              await storage.updateCiScrapedVideo(video.id, { analysisStatus: "blocked" } as any);
               blocked++;
               continue;
             }
@@ -876,6 +914,20 @@ export function registerCiRoutes(app: Express) {
     } catch (error) {
       console.error("[CI] Error fetching video:", error);
       res.status(500).json({ error: "Failed to fetch video" });
+    }
+  });
+
+  router.post("/videos/:id/retry-transcript", async (req, res) => {
+    try {
+      const video = await storage.getCiScrapedVideo(req.params.id);
+      if (!video) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+      await storage.updateCiScrapedVideo(req.params.id, { transcriptStatus: "pending" } as any);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[CI] Error retrying transcript:", error);
+      res.status(500).json({ error: "Failed to retry transcript" });
     }
   });
 
