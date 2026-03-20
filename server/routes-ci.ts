@@ -343,13 +343,7 @@ export function registerCiRoutes(app: Express) {
     try {
       const weekLabel = getWeekLabel();
 
-      // Get all analyses from current week
-      const analyses = await storage.getCiVideoAnalyses({ weekAdded: weekLabel });
-      if (analyses.length === 0) {
-        return res.status(400).json({ error: "No analyses found for current week" });
-      }
-
-      // Get brief prompts and settings
+      // Load settings
       const systemPromptSetting = await storage.getCiSetting("brief_system_prompt");
       const userPromptSetting = await storage.getCiSetting("brief_user_prompt");
       const modelSetting = await storage.getCiSetting("ai_model");
@@ -369,40 +363,79 @@ export function registerCiRoutes(app: Express) {
         } catch {}
       }
 
-      // Replace brief count placeholder in user prompt
-      const briefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 10;
+      const briefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 5;
       const userPromptTemplate = userPromptSetting.value.replace(/{BRIEF_COUNT}/g, String(briefCount));
+      const model = modelSetting?.value || "anthropic/claude-sonnet-4-5";
 
-      const briefResult = await generateWeeklyBrief({
-        analyses,
-        systemPrompt,
-        userPromptTemplate,
-        model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
-      });
-
-      // Aggregate top data for storage
-      const topicCounts: Record<string, number> = {};
-      const hookCounts: Record<string, number> = {};
-      const emotionCounts: Record<string, number> = {};
-
-      for (const a of analyses) {
-        if (a.topicCategory) topicCounts[a.topicCategory] = (topicCounts[a.topicCategory] || 0) + 1;
-        if (a.hookType) hookCounts[a.hookType] = (hookCounts[a.hookType] || 0) + 1;
-        if (a.emotionalAngle) emotionCounts[a.emotionalAngle] = (emotionCounts[a.emotionalAngle] || 0) + 1;
+      // Get all unbriefed analyses (pending brief_status, not blocked, has topic)
+      const analyses = await storage.getCiAnalysesPendingBrief();
+      if (analyses.length === 0) {
+        return res.json({ success: true, message: "No new analyses to brief", briefs: [] });
       }
 
-      const briefData = Array.isArray(briefResult) ? briefResult : briefResult?.briefs || briefResult?.items || [briefResult];
-      const brief = await storage.createCiContentBrief({
-        weekLabel,
-        briefData,
-        topTopics: Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
-        topHookTypes: Object.entries(hookCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
-        topEmotionalAngles: Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
-        videoCount: analyses.length,
-        status: "draft",
-      });
+      // Group analyses by topicCategory
+      const topicGroups: Record<string, typeof analyses> = {};
+      for (const a of analyses) {
+        const topic = a.topicCategory || "Uncategorized";
+        if (!topicGroups[topic]) topicGroups[topic] = [];
+        topicGroups[topic].push(a);
+      }
 
-      res.json({ success: true, brief });
+      const createdBriefs: any[] = [];
+      let totalVideosProcessed = 0;
+
+      for (const [topicCategory, topicAnalyses] of Object.entries(topicGroups)) {
+        try {
+          const briefResult = await generateWeeklyBrief({
+            analyses: topicAnalyses.map(a => ({
+              topicCategory: a.topicCategory,
+              hookType: a.hookType,
+              emotionalAngle: a.emotionalAngle,
+              replicationScore: a.replicationScore,
+              topicSummary: a.topicSummary,
+            })),
+            systemPrompt,
+            userPromptTemplate,
+            model,
+          });
+
+          const topicCounts: Record<string, number> = {};
+          const hookCounts: Record<string, number> = {};
+          const emotionCounts: Record<string, number> = {};
+          for (const a of topicAnalyses) {
+            if (a.topicCategory) topicCounts[a.topicCategory] = (topicCounts[a.topicCategory] || 0) + 1;
+            if (a.hookType) hookCounts[a.hookType] = (hookCounts[a.hookType] || 0) + 1;
+            if (a.emotionalAngle) emotionCounts[a.emotionalAngle] = (emotionCounts[a.emotionalAngle] || 0) + 1;
+          }
+
+          const briefData = Array.isArray(briefResult) ? briefResult : briefResult?.briefs || briefResult?.items || [briefResult];
+          const brief = await storage.createCiContentBrief({
+            weekLabel,
+            briefData,
+            topTopics: Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
+            topHookTypes: Object.entries(hookCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
+            topEmotionalAngles: Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
+            videoCount: topicAnalyses.length,
+            status: "draft",
+          });
+          createdBriefs.push(brief);
+
+          // Mark all videos in this topic group as briefed
+          for (const a of topicAnalyses) {
+            await storage.markVideoAsBriefed(a.scrapedVideoId);
+          }
+          totalVideosProcessed += topicAnalyses.length;
+        } catch (topicError) {
+          console.error(`[CI] Brief generation failed for topic "${topicCategory}":`, topicError);
+        }
+      }
+
+      res.json({
+        success: true,
+        briefs: createdBriefs,
+        topicsProcessed: createdBriefs.length,
+        videosProcessed: totalVideosProcessed,
+      });
     } catch (error) {
       console.error("[CI] Pipeline generate-brief error:", error);
       res.status(500).json({ error: "Brief generation failed" });
@@ -753,12 +786,8 @@ export function registerCiRoutes(app: Express) {
         return res.json({ success: true, step, analyzed, blocked, total: videos.length });
       }
 
-      // For brief: generate weekly brief directly
+      // For brief: generate per-topic briefs from unbriefed analyses
       if (step === "brief") {
-        const analyses = await storage.getCiVideoAnalyses({ weekAdded: getWeekLabel() });
-        if (analyses.length === 0) {
-          return res.status(400).json({ error: "No analyses found for this week" });
-        }
         const briefSystemPrompt = await storage.getCiSetting("brief_system_prompt");
         const briefUserPrompt = await storage.getCiSetting("brief_user_prompt");
         const modelSetting = await storage.getCiSetting("ai_model");
@@ -775,41 +804,82 @@ export function registerCiRoutes(app: Express) {
         }
 
         const briefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 5;
-        let userPromptTemplate = (briefUserPrompt?.value || "")
+        const userPromptTemplate = (briefUserPrompt?.value || "")
           .replace(/{BRIEF_COUNT}/g, String(briefCount));
+        const model = modelSetting?.value || "anthropic/claude-sonnet-4-5";
 
-        const briefResult = await generateWeeklyBrief({
-          analyses: analyses.map(a => ({
-            topicCategory: a.topicCategory,
-            hookType: a.hookType,
-            emotionalAngle: a.emotionalAngle,
-            replicationScore: a.replicationScore,
-            topicSummary: a.topicSummary,
-          })),
-          systemPrompt,
-          userPromptTemplate,
-          model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
-        });
-        const briefData = Array.isArray(briefResult) ? briefResult : briefResult?.briefs || briefResult?.items || [briefResult];
-        const topicCounts: Record<string, number> = {};
-        const hookCounts: Record<string, number> = {};
-        const emotionCounts: Record<string, number> = {};
-        for (const a of analyses) {
-          if (a.topicCategory) topicCounts[a.topicCategory] = (topicCounts[a.topicCategory] || 0) + 1;
-          if (a.hookType) hookCounts[a.hookType] = (hookCounts[a.hookType] || 0) + 1;
-          if (a.emotionalAngle) emotionCounts[a.emotionalAngle] = (emotionCounts[a.emotionalAngle] || 0) + 1;
+        // Get all unbriefed analyses (pending brief_status, not blocked, has topic)
+        const analyses = await storage.getCiAnalysesPendingBrief();
+        if (analyses.length === 0) {
+          await storage.upsertCiSetting("pipeline_last_run_brief", new Date().toISOString());
+          return res.json({ success: true, step, message: "No new analyses to brief", briefs: [] });
         }
-        const saved = await storage.createCiContentBrief({
-          weekLabel: getWeekLabel(),
-          briefData: briefData,
-          topTopics: Object.entries(topicCounts).sort((a, b) => b[1] - a[1]),
-          topHookTypes: Object.entries(hookCounts).sort((a, b) => b[1] - a[1]),
-          topEmotionalAngles: Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]),
-          videoCount: analyses.length,
-          status: "draft",
-        });
+
+        // Group analyses by topicCategory
+        const topicGroups: Record<string, typeof analyses> = {};
+        for (const a of analyses) {
+          const topic = a.topicCategory || "Uncategorized";
+          if (!topicGroups[topic]) topicGroups[topic] = [];
+          topicGroups[topic].push(a);
+        }
+
+        const createdBriefs: any[] = [];
+        let totalVideosProcessed = 0;
+
+        for (const [topicCategory, topicAnalyses] of Object.entries(topicGroups)) {
+          try {
+            const briefResult = await generateWeeklyBrief({
+              analyses: topicAnalyses.map(a => ({
+                topicCategory: a.topicCategory,
+                hookType: a.hookType,
+                emotionalAngle: a.emotionalAngle,
+                replicationScore: a.replicationScore,
+                topicSummary: a.topicSummary,
+              })),
+              systemPrompt,
+              userPromptTemplate,
+              model,
+            });
+
+            const topicCounts: Record<string, number> = {};
+            const hookCounts: Record<string, number> = {};
+            const emotionCounts: Record<string, number> = {};
+            for (const a of topicAnalyses) {
+              if (a.topicCategory) topicCounts[a.topicCategory] = (topicCounts[a.topicCategory] || 0) + 1;
+              if (a.hookType) hookCounts[a.hookType] = (hookCounts[a.hookType] || 0) + 1;
+              if (a.emotionalAngle) emotionCounts[a.emotionalAngle] = (emotionCounts[a.emotionalAngle] || 0) + 1;
+            }
+
+            const briefData = Array.isArray(briefResult) ? briefResult : briefResult?.briefs || briefResult?.items || [briefResult];
+            const saved = await storage.createCiContentBrief({
+              weekLabel: getWeekLabel(),
+              briefData,
+              topTopics: Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
+              topHookTypes: Object.entries(hookCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
+              topEmotionalAngles: Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
+              videoCount: topicAnalyses.length,
+              status: "draft",
+            });
+            createdBriefs.push(saved);
+
+            // Mark all videos in this topic group as briefed
+            for (const a of topicAnalyses) {
+              await storage.markVideoAsBriefed(a.scrapedVideoId);
+            }
+            totalVideosProcessed += topicAnalyses.length;
+          } catch (topicError) {
+            console.error(`[CI] Brief generation failed for topic "${topicCategory}":`, topicError);
+          }
+        }
+
         await storage.upsertCiSetting("pipeline_last_run_brief", new Date().toISOString());
-        return res.json({ success: true, step, brief: saved });
+        return res.json({
+          success: true,
+          step,
+          briefs: createdBriefs,
+          topicsProcessed: createdBriefs.length,
+          videosProcessed: totalVideosProcessed,
+        });
       }
 
       // For scripts: generate from latest brief

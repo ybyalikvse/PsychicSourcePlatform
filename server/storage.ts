@@ -48,7 +48,7 @@ import {
 } from "../shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, asc, gte, lte, and } from "drizzle-orm";
+import { eq, desc, asc, gte, lte, and, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -268,12 +268,14 @@ export interface IStorage {
   updateCiScrapedVideo(id: string, data: Partial<CiScrapedVideo>): Promise<CiScrapedVideo | undefined>;
 
   // CI Video Analyses
-  getCiVideoAnalyses(filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string }): Promise<CiVideoAnalysis[]>;
+  getCiVideoAnalyses(filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string, briefStatus?: string }): Promise<CiVideoAnalysis[]>;
   getCiVideoAnalysis(id: string): Promise<CiVideoAnalysis | undefined>;
   getCiVideoAnalysisByVideoId(scrapedVideoId: string): Promise<CiVideoAnalysis | undefined>;
   createCiVideoAnalysis(data: InsertCiVideoAnalysis): Promise<CiVideoAnalysis>;
   deleteCiVideoAnalysis(id: string): Promise<boolean>;
   deleteCiScrapedVideo(id: string): Promise<boolean>;
+  getCiAnalysesPendingBrief(): Promise<(CiVideoAnalysis & { videoBriefStatus: string })[]>;
+  markVideoAsBriefed(videoId: string): Promise<void>;
 
   // CI Content Briefs
   getCiContentBriefs(status?: string): Promise<CiContentBrief[]>;
@@ -640,12 +642,14 @@ export class MemStorage implements IStorage {
   async updateCiScrapedVideo(_id: string, _data: Partial<CiScrapedVideo>): Promise<CiScrapedVideo | undefined> { return undefined; }
 
   // CI Video Analyses stubs
-  async getCiVideoAnalyses(_filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string }): Promise<CiVideoAnalysis[]> { return []; }
+  async getCiVideoAnalyses(_filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string, briefStatus?: string }): Promise<CiVideoAnalysis[]> { return []; }
   async getCiVideoAnalysis(_id: string): Promise<CiVideoAnalysis | undefined> { return undefined; }
   async getCiVideoAnalysisByVideoId(_scrapedVideoId: string): Promise<CiVideoAnalysis | undefined> { return undefined; }
   async createCiVideoAnalysis(_data: InsertCiVideoAnalysis): Promise<CiVideoAnalysis> { throw new Error("Not implemented"); }
   async deleteCiVideoAnalysis(_id: string): Promise<boolean> { return false; }
   async deleteCiScrapedVideo(_id: string): Promise<boolean> { return false; }
+  async getCiAnalysesPendingBrief(): Promise<(CiVideoAnalysis & { videoBriefStatus: string })[]> { return []; }
+  async markVideoAsBriefed(_videoId: string): Promise<void> { }
 
   // CI Content Briefs stubs
   async getCiContentBriefs(_status?: string): Promise<CiContentBrief[]> { return []; }
@@ -1828,7 +1832,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ===== CI Video Analyses =====
-  async getCiVideoAnalyses(filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string }): Promise<CiVideoAnalysis[]> {
+  async getCiVideoAnalyses(filters?: { hookType?: string, topicCategory?: string, minReplicationScore?: number, weekAdded?: string, briefStatus?: string }): Promise<CiVideoAnalysis[]> {
     const all = await db.select().from(ciVideoAnalyses).orderBy(desc(ciVideoAnalyses.createdAt));
     if (!filters) return all;
     return all.filter(a => {
@@ -1863,6 +1867,49 @@ export class DatabaseStorage implements IStorage {
   async deleteCiScrapedVideo(id: string): Promise<boolean> {
     await db.delete(ciScrapedVideos).where(eq(ciScrapedVideos.id, id));
     return true;
+  }
+
+  async getCiAnalysesPendingBrief(): Promise<(CiVideoAnalysis & { videoBriefStatus: string })[]> {
+    const rows = await db
+      .select({
+        id: ciVideoAnalyses.id,
+        scrapedVideoId: ciVideoAnalyses.scrapedVideoId,
+        blocked: ciVideoAnalyses.blocked,
+        blockReason: ciVideoAnalyses.blockReason,
+        topicCategory: ciVideoAnalyses.topicCategory,
+        topicSummary: ciVideoAnalyses.topicSummary,
+        hookText: ciVideoAnalyses.hookText,
+        hookType: ciVideoAnalyses.hookType,
+        hookSummary: ciVideoAnalyses.hookSummary,
+        emotionalAngle: ciVideoAnalyses.emotionalAngle,
+        targetAudience: ciVideoAnalyses.targetAudience,
+        format: ciVideoAnalyses.format,
+        ctaType: ciVideoAnalyses.ctaType,
+        replicationScore: ciVideoAnalyses.replicationScore,
+        notes: ciVideoAnalyses.notes,
+        rawAnalysis: ciVideoAnalyses.rawAnalysis,
+        weekAdded: ciVideoAnalyses.weekAdded,
+        createdAt: ciVideoAnalyses.createdAt,
+        videoBriefStatus: ciScrapedVideos.briefStatus,
+      })
+      .from(ciVideoAnalyses)
+      .leftJoin(ciScrapedVideos, eq(ciVideoAnalyses.scrapedVideoId, ciScrapedVideos.id))
+      .where(
+        and(
+          eq(ciVideoAnalyses.blocked, false),
+          sql`${ciVideoAnalyses.topicCategory} IS NOT NULL`,
+          eq(ciScrapedVideos.briefStatus, "pending")
+        )
+      )
+      .orderBy(desc(ciVideoAnalyses.createdAt));
+    return rows.map(r => ({ ...r, videoBriefStatus: r.videoBriefStatus ?? "pending" }));
+  }
+
+  async markVideoAsBriefed(videoId: string): Promise<void> {
+    await db
+      .update(ciScrapedVideos)
+      .set({ briefStatus: "briefed" })
+      .where(eq(ciScrapedVideos.id, videoId));
   }
 
   // ===== CI Content Briefs =====

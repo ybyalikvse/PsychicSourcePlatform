@@ -815,6 +815,7 @@ export const ciScrapedVideos = pgTable("ci_scraped_videos", {
   transcript: text("transcript"),
   transcriptStatus: text("transcript_status").notNull().default("pending"),
   analysisStatus: text("analysis_status").notNull().default("pending"),
+  briefStatus: text("brief_status").notNull().default("pending"),
   metadata: jsonb("metadata"),
   scrapedAt: text("scraped_at").notNull().default(sql`now()`),
   createdAt: text("created_at").notNull().default(sql`now()`),
