@@ -349,19 +349,34 @@ export function registerCiRoutes(app: Express) {
         return res.status(400).json({ error: "No analyses found for current week" });
       }
 
-      // Get brief prompts from settings
+      // Get brief prompts and settings
       const systemPromptSetting = await storage.getCiSetting("brief_system_prompt");
       const userPromptSetting = await storage.getCiSetting("brief_user_prompt");
       const modelSetting = await storage.getCiSetting("ai_model");
+      const blockedTopicsSetting = await storage.getCiSetting("blocked_topics");
+      const briefCountSetting = await storage.getCiSetting("brief_count");
 
       if (!systemPromptSetting?.value || !userPromptSetting?.value) {
         return res.status(400).json({ error: "Brief prompts not configured. Run POST /api/ci/settings/seed first." });
       }
 
+      // Replace blocked topics placeholder in system prompt
+      let systemPrompt = systemPromptSetting.value;
+      if (blockedTopicsSetting?.value) {
+        try {
+          const blocked = JSON.parse(blockedTopicsSetting.value);
+          systemPrompt = systemPrompt.replace(/{BLOCKED_TOPICS}/g, blocked.join("\n"));
+        } catch {}
+      }
+
+      // Replace brief count placeholder in user prompt
+      const briefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 10;
+      const userPromptTemplate = userPromptSetting.value.replace(/{BRIEF_COUNT}/g, String(briefCount));
+
       const briefResult = await generateWeeklyBrief({
         analyses,
-        systemPrompt: systemPromptSetting.value,
-        userPromptTemplate: userPromptSetting.value,
+        systemPrompt,
+        userPromptTemplate,
         model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
       });
 
@@ -376,9 +391,10 @@ export function registerCiRoutes(app: Express) {
         if (a.emotionalAngle) emotionCounts[a.emotionalAngle] = (emotionCounts[a.emotionalAngle] || 0) + 1;
       }
 
+      const briefData = Array.isArray(briefResult) ? briefResult : briefResult?.briefs || briefResult?.items || [briefResult];
       const brief = await storage.createCiContentBrief({
         weekLabel,
-        briefData: briefResult,
+        briefData,
         topTopics: Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
         topHookTypes: Object.entries(hookCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
         topEmotionalAngles: Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]).slice(0, 5),
