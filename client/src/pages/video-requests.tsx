@@ -278,27 +278,27 @@ export default function VideoRequests() {
       description: req.description || "",
       status: req.status,
     });
-    // If this is a CI brief, populate editable brief fields
+    // Populate editable brief fields — from CI brief JSON if available, otherwise empty
+    let briefFields = { ...emptyBriefFields };
     if (req.description) {
       try {
         const parsed = JSON.parse(req.description);
         if (parsed._type === "ci_brief") {
-          setEditBriefFields({
+          briefFields = {
             topic_description: parsed.topic_description || "",
-            hook_options: parsed.hook_options || ["", "", ""],
-            talking_points: parsed.talking_points || [""],
+            hook_options: parsed.hook_options?.length ? parsed.hook_options : ["", "", ""],
+            talking_points: parsed.talking_points?.length ? parsed.talking_points : [""],
             suggested_cta: parsed.suggested_cta || "",
             notes_for_creator: parsed.notes_for_creator || "",
             format_suggestion: parsed.format_suggestion || "",
             estimated_length: parsed.estimated_length || "",
             difficulty: parsed.difficulty || "",
             emotional_journey: parsed.emotional_journey || "",
-          });
-          return;
+          };
         }
       } catch {}
     }
-    setEditBriefFields(null);
+    setEditBriefFields(briefFields);
   }
 
   function getPsychicName(psychicId: string | null): string {
@@ -1073,12 +1073,16 @@ export default function VideoRequests() {
               className="flex flex-col flex-1 min-h-0"
               onSubmit={editForm.handleSubmit(data => {
                 if (!editingRequest) return;
-                // If ci_brief, merge edited brief fields back into description JSON
+                // Merge brief fields into description JSON
                 if (editBriefFields) {
-                  try {
-                    const existing = JSON.parse(editingRequest.description || "{}");
+                  const hasAnyBriefContent = editBriefFields.topic_description ||
+                    editBriefFields.hook_options.some(h => h) ||
+                    editBriefFields.talking_points.some(p => p);
+                  if (hasAnyBriefContent) {
+                    let existing: Record<string, unknown> = { _type: "ci_brief" };
+                    try { existing = JSON.parse(editingRequest.description || "{}"); } catch {}
                     data.description = JSON.stringify({ ...existing, ...editBriefFields });
-                  } catch {}
+                  }
                 }
                 updateMutation.mutate({ id: editingRequest.id, data });
               })}
@@ -1086,7 +1090,7 @@ export default function VideoRequests() {
               <Tabs defaultValue="request" className="flex flex-col flex-1 min-h-0">
                 <TabsList className="shrink-0 w-full">
                   <TabsTrigger value="request" className="flex-1">Request Settings</TabsTrigger>
-                  {editBriefFields && <TabsTrigger value="brief" className="flex-1">Brief Content</TabsTrigger>}
+                  <TabsTrigger value="brief" className="flex-1">Brief Content</TabsTrigger>
                 </TabsList>
 
                 {/* ── Request Settings tab ── */}
@@ -1146,7 +1150,7 @@ export default function VideoRequests() {
                   )}
                 </TabsContent>
 
-                {/* ── Brief Content tab (CI briefs only) ── */}
+                {/* ── Brief Content tab ── */}
                 {editBriefFields && (
                   <TabsContent value="brief" className="flex-1 overflow-y-auto mt-0 pt-4 space-y-4 pr-1">
                     <div className="space-y-1">
