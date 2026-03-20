@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { formatDate, formatRelativeTime, getStatusBadgeVariant } from "@/lib/format-utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface BriefItem {
   brief_id?: string;
@@ -446,13 +447,35 @@ export default function CiBriefs() {
                                       <Badge variant="outline">{item.topic_category}</Badge>
                                     )}
                                     {item.format_suggestion && (
-                                      <Badge variant="secondary">{item.format_suggestion}</Badge>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Badge variant="secondary" className="cursor-help">
+                                              <span className="text-muted-foreground mr-1">Format:</span>{item.format_suggestion}
+                                            </Badge>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="max-w-xs">
+                                            Suggested shooting style and energy for this video, based on what performed well in competitor content for this topic.
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     )}
                                     {item.estimated_length && (
                                       <Badge variant="secondary">{item.estimated_length}</Badge>
                                     )}
                                     {item.difficulty && (
-                                      <Badge variant="secondary">Difficulty: {item.difficulty}</Badge>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Badge variant="secondary" className="cursor-help">
+                                              <span className="text-muted-foreground mr-1">Difficulty:</span>{item.difficulty}
+                                            </Badge>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="max-w-xs">
+                                            How complex this topic is to deliver well on camera. Easy = conversational, anyone can do it. Medium = requires some explanation or nuance. Advanced = requires deep expertise.
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     )}
                                   </div>
                                 )}
