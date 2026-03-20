@@ -235,6 +235,14 @@ export default function VideoRequests() {
       queryClient.invalidateQueries({ queryKey: ["/api/video-requests"] });
       setSelectedRequest(updatedRequest);
       toast({ title: `Status changed to ${getStatusLabel(updatedRequest.status)}` });
+      // Auto-generate captions when approved — fire sequentially in background
+      if (updatedRequest.status === "approved") {
+        const gen = (platform: string) =>
+          apiRequest("POST", `/api/video-requests/${updatedRequest.id}/generate-captions`, { platform }).catch(() => {});
+        gen("tiktok").then(() => gen("instagram")).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/video-requests", updatedRequest.id, "captions"] });
+        });
+      }
     },
     onError: (err: Error) => {
       toast({ title: "Failed to change status", description: err.message, variant: "destructive" });

@@ -4653,33 +4653,6 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const request = await storage.updateVideoRequest(req.params.id, updates);
       if (!request) return res.status(404).json({ error: "Video request not found" });
 
-      // Auto-generate captions for TikTok + Instagram when approved
-      if (status === "approved" && process.env.OPENROUTER_API_KEY) {
-        const generateForPlatform = async (platform: string) => {
-          try {
-            const promptConfig = await storage.getVideoCaptionPromptByPlatform(platform);
-            const captionPrompt = promptConfig?.captionPrompt || "Write a compelling social media caption for this video. Keep it engaging and include a call to action.";
-            const hashtagPrompt = promptConfig?.hashtagPrompt || "Generate 10-15 relevant hashtags for this video.";
-            const openai = new OpenAI({ apiKey: process.env.OPENROUTER_API_KEY, baseURL: "https://openrouter.ai/api/v1" });
-            const response = await openai.chat.completions.create({
-              model: "gpt-4o",
-              messages: [
-                { role: "system", content: "You are a social media expert. Generate captions and hashtags for videos. Respond in JSON format with 'caption' and 'hashtags' fields." },
-                { role: "user", content: `Video Topic: ${request.topic}\nTitle: ${request.title}\nHook: ${request.hook || "N/A"}\nDescription: ${request.description || "N/A"}\nPlatform: ${platform}\n\nCaption Instructions: ${captionPrompt}\nHashtag Instructions: ${hashtagPrompt}\n\nReturn JSON: { "caption": "...", "hashtags": "..." }` },
-              ],
-              response_format: { type: "json_object" },
-              max_completion_tokens: 1024,
-            });
-            const result = JSON.parse(response.choices[0]?.message?.content || '{"caption":"","hashtags":""}');
-            await storage.createVideoCaption({ videoRequestId: request.id, caption: result.caption || "", hashtags: result.hashtags || "", platform });
-          } catch (e) {
-            console.error(`[Auto-Caption] Failed for ${platform}:`, e);
-          }
-        };
-        // Fire and forget — don't block the approve response
-        Promise.all([generateForPlatform("tiktok"), generateForPlatform("instagram")]).catch(() => {});
-      }
-
       res.json(request);
     } catch (error) {
       res.status(500).json({ error: "Failed to update video request status" });
