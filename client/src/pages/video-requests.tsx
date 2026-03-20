@@ -80,17 +80,19 @@ export default function VideoRequests() {
   const [showRevisionDialog, setShowRevisionDialog] = useState(false);
   const [revisionNotes, setRevisionNotes] = useState("");
   // Editable CI brief fields (used when editingRequest has a ci_brief description)
-  const [editBriefFields, setEditBriefFields] = useState<{
-    topic_description: string;
-    hook_options: string[];
-    talking_points: string[];
-    suggested_cta: string;
-    notes_for_creator: string;
-    format_suggestion: string;
-    estimated_length: string;
-    difficulty: string;
-    emotional_journey: string;
-  } | null>(null);
+  const emptyBriefFields = {
+    topic_description: "",
+    hook_options: ["", "", ""],
+    talking_points: ["", "", ""],
+    suggested_cta: "",
+    notes_for_creator: "",
+    format_suggestion: "",
+    estimated_length: "",
+    difficulty: "",
+    emotional_journey: "",
+  };
+  const [createBriefFields, setCreateBriefFields] = useState({ ...emptyBriefFields });
+  const [editBriefFields, setEditBriefFields] = useState<typeof emptyBriefFields | null>(null);
 
   const { data: requests = [], isLoading } = useQuery<VideoRequest[]>({
     queryKey: ["/api/video-requests"],
@@ -166,6 +168,7 @@ export default function VideoRequests() {
       queryClient.invalidateQueries({ queryKey: ["/api/video-requests"] });
       setShowCreateDialog(false);
       form.reset();
+      setCreateBriefFields({ ...emptyBriefFields });
       toast({ title: "Video request created" });
     },
     onError: (err: Error) => {
@@ -798,72 +801,195 @@ export default function VideoRequests() {
       )}
 
       {/* Create Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+      <Dialog open={showCreateDialog} onOpenChange={open => { if (!open) { setShowCreateDialog(false); setCreateBriefFields({ ...emptyBriefFields }); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Create Video Request</DialogTitle>
             <DialogDescription>Create a new video request for psychics to fulfill.</DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(data => createMutation.mutate(data))} className="space-y-4">
-              <FormField control={form.control} name="title" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl><Input {...field} placeholder="e.g. Signs From Your Loved Ones" data-testid="input-title" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="topic" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Topic</FormLabel>
-                  <FormControl><Input {...field} placeholder="e.g. Spirit Messages & Mediumship" data-testid="input-topic" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="hook" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Hook <span className="text-muted-foreground font-normal">(opening line)</span></FormLabel>
-                  <FormControl><Input {...field} placeholder="e.g. Your loved one has a message for you right now..." data-testid="input-hook" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="videoDuration" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Duration</FormLabel>
-                    <FormControl><Input {...field} placeholder="e.g. 60-90 seconds" data-testid="input-duration" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                {showPayAmount && <FormField control={form.control} name="payAmount" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Pay Amount ($)</FormLabel>
-                    <FormControl><Input {...field} placeholder="50" type="text" data-testid="input-pay" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />}
-              </div>
-              <FormField control={form.control} name="requiredDate" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Required Date</FormLabel>
-                  <FormControl><Input {...field} type="date" data-testid="input-required-date" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="description" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                  <FormControl><Textarea {...field} placeholder="Talking points, tone guidance, or any special instructions..." rows={4} data-testid="input-description" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)} data-testid="button-cancel-create">Cancel</Button>
+            <form
+              className="flex flex-col flex-1 min-h-0"
+              onSubmit={form.handleSubmit(data => {
+                // Serialize brief fields into description JSON
+                const hasAnyBriefContent = createBriefFields.topic_description ||
+                  createBriefFields.hook_options.some(h => h) ||
+                  createBriefFields.talking_points.some(p => p);
+                if (hasAnyBriefContent) {
+                  data.description = JSON.stringify({ _type: "ci_brief", ...createBriefFields });
+                }
+                createMutation.mutate(data);
+              })}
+            >
+              <Tabs defaultValue="request" className="flex flex-col flex-1 min-h-0">
+                <TabsList className="shrink-0 w-full">
+                  <TabsTrigger value="request" className="flex-1">Request Settings</TabsTrigger>
+                  <TabsTrigger value="brief" className="flex-1">Brief Content</TabsTrigger>
+                </TabsList>
+
+                {/* ── Request Settings tab ── */}
+                <TabsContent value="request" className="flex-1 overflow-y-auto mt-0 pt-4 space-y-4 pr-1">
+                  <FormField control={form.control} name="title" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Title</FormLabel>
+                      <FormControl><Input {...field} placeholder="e.g. Signs From Your Loved Ones" data-testid="input-title" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="topic" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Topic</FormLabel>
+                      <FormControl><Input {...field} placeholder="e.g. Spirit Messages & Mediumship" data-testid="input-topic" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="hook" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Hook <span className="text-muted-foreground font-normal text-xs">(opening line shown to psychics)</span></FormLabel>
+                      <FormControl><Input {...field} placeholder="e.g. Your loved one has a message for you right now..." data-testid="input-hook" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="videoDuration" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Duration</FormLabel>
+                        <FormControl><Input {...field} placeholder="e.g. 60-90 seconds" data-testid="input-duration" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    {showPayAmount && <FormField control={form.control} name="payAmount" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Pay Amount ($)</FormLabel>
+                        <FormControl><Input {...field} placeholder="50" type="text" data-testid="input-pay" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />}
+                  </div>
+                  <FormField control={form.control} name="requiredDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Required Date</FormLabel>
+                      <FormControl><Input {...field} type="date" data-testid="input-required-date" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </TabsContent>
+
+                {/* ── Brief Content tab ── */}
+                <TabsContent value="brief" className="flex-1 overflow-y-auto mt-0 pt-4 space-y-4 pr-1">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Topic Description</label>
+                    <Textarea
+                      value={createBriefFields.topic_description}
+                      onChange={e => setCreateBriefFields(f => ({ ...f, topic_description: e.target.value }))}
+                      rows={3}
+                      placeholder="What this video should cover..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Hook Options</label>
+                    {createBriefFields.hook_options.map((h, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}.</span>
+                        <Input
+                          value={h}
+                          onChange={e => setCreateBriefFields(f => {
+                            const opts = [...f.hook_options];
+                            opts[i] = e.target.value;
+                            return { ...f, hook_options: opts };
+                          })}
+                          placeholder={`Hook option ${i + 1}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Talking Points</label>
+                    {createBriefFields.talking_points.map((p, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-4 shrink-0">•</span>
+                        <Input
+                          value={p}
+                          onChange={e => setCreateBriefFields(f => {
+                            const pts = [...f.talking_points];
+                            pts[i] = e.target.value;
+                            return { ...f, talking_points: pts };
+                          })}
+                          placeholder={`Talking point ${i + 1}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 h-8 w-8 text-muted-foreground"
+                          onClick={() => setCreateBriefFields(f => ({ ...f, talking_points: f.talking_points.filter((_, j) => j !== i) }))}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCreateBriefFields(f => ({ ...f, talking_points: [...f.talking_points, ""] }))}
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Add Point
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Suggested CTA</label>
+                    <Input
+                      value={createBriefFields.suggested_cta}
+                      onChange={e => setCreateBriefFields(f => ({ ...f, suggested_cta: e.target.value }))}
+                      placeholder="What to ask viewers to do at the end"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Notes for Creator</label>
+                    <Textarea
+                      value={createBriefFields.notes_for_creator}
+                      onChange={e => setCreateBriefFields(f => ({ ...f, notes_for_creator: e.target.value }))}
+                      rows={2}
+                      placeholder="Tone guidance, things to avoid..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Format Suggestion</label>
+                      <Input
+                        value={createBriefFields.format_suggestion}
+                        onChange={e => setCreateBriefFields(f => ({ ...f, format_suggestion: e.target.value }))}
+                        placeholder="e.g. Direct-to-camera"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Est. Length</label>
+                      <Input
+                        value={createBriefFields.estimated_length}
+                        onChange={e => setCreateBriefFields(f => ({ ...f, estimated_length: e.target.value }))}
+                        placeholder="e.g. 60-90 seconds"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Difficulty</label>
+                      <Input
+                        value={createBriefFields.difficulty}
+                        onChange={e => setCreateBriefFields(f => ({ ...f, difficulty: e.target.value }))}
+                        placeholder="easy / medium / advanced"
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <div className="shrink-0 flex justify-end gap-2 pt-4 border-t mt-2">
+                <Button type="button" variant="outline" onClick={() => { setShowCreateDialog(false); setCreateBriefFields({ ...emptyBriefFields }); }} data-testid="button-cancel-create">Cancel</Button>
                 <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-create">
                   {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Create Request
                 </Button>
-              </DialogFooter>
+              </div>
             </form>
           </Form>
         </DialogContent>
