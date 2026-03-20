@@ -171,24 +171,46 @@ jobs:
             sleep 3
           done
 
-  # Step 5: Generate weekly brief
-  brief:
+  # Step 5a: Fetch distinct pending topics to fan out per-topic brief generation
+  setup-brief:
     needs: analyze
     if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'brief' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
+    outputs:
+      topics: ${{ steps.fetch.outputs.topics }}
     steps:
-      - name: Generate weekly brief
+      - name: Fetch pending brief topics
+        id: fetch
         run: |
-          echo "Generating weekly content brief..."
+          RESPONSE=$(curl -s -L -H "${AUTH}" "${APP_URL}/api/ci/pipeline/brief-topics")
+          TOPICS=$(echo "$RESPONSE" | jq -c '.' 2>/dev/null || echo '[]')
+          echo "topics=$TOPICS" >> $GITHUB_OUTPUT
+          echo "Found topics: $TOPICS"
+
+  # Step 5b: Generate brief for each topic in parallel
+  brief:
+    needs: setup-brief
+    if: always() && needs.setup-brief.result == 'success' && needs.setup-brief.outputs.topics != '[]' && needs.setup-brief.outputs.topics != ''
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        topic: ${{ fromJson(needs.setup-brief.outputs.topics) }}
+    steps:
+      - name: Generate brief for topic "${{ matrix.topic }}"
+        run: |
+          echo "Generating brief for topic: ${{ matrix.topic }}"
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
             -X POST "${APP_URL}/api/ci/pipeline/generate-brief" \
             -H "Content-Type: application/json" \
-            -H "${AUTH}")
+            -H "${AUTH}" \
+            -d "{\"topicCategory\": $(echo '${{ matrix.topic }}' | jq -Rs .)}")
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "  ✓ Brief generated"
-            cat /tmp/response.json | jq '.brief.weekLabel // "unknown"' 2>/dev/null
+            BRIEFS=$(cat /tmp/response.json | jq '.briefs | length' 2>/dev/null || echo 0)
+            VIDEOS=$(cat /tmp/response.json | jq '.videosProcessed' 2>/dev/null || echo 0)
+            echo "  ✓ $BRIEFS brief(s) generated from $VIDEOS videos"
           else
-            echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json)"
+            echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json | head -c 200)"
           fi
 
   # Step 6: Generate scripts from brief

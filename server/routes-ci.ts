@@ -368,17 +368,25 @@ export function registerCiRoutes(app: Express) {
       const model = modelSetting?.value || "anthropic/claude-sonnet-4-5";
 
       // Get all unbriefed analyses (pending brief_status, not blocked, has topic)
-      const analyses = await storage.getCiAnalysesPendingBrief();
-      if (analyses.length === 0) {
+      const allAnalyses = await storage.getCiAnalysesPendingBrief();
+      if (allAnalyses.length === 0) {
         return res.json({ success: true, message: "No new analyses to brief", briefs: [] });
       }
 
+      // If a specific topicCategory was passed, only process that one topic
+      const filterTopic = req.body.topicCategory as string | undefined;
+
       // Group analyses by topicCategory
-      const topicGroups: Record<string, typeof analyses> = {};
-      for (const a of analyses) {
+      const topicGroups: Record<string, typeof allAnalyses> = {};
+      for (const a of allAnalyses) {
         const topic = a.topicCategory || "Uncategorized";
+        if (filterTopic && topic !== filterTopic) continue;
         if (!topicGroups[topic]) topicGroups[topic] = [];
         topicGroups[topic].push(a);
+      }
+
+      if (Object.keys(topicGroups).length === 0) {
+        return res.json({ success: true, message: filterTopic ? `No pending analyses for topic: ${filterTopic}` : "No new analyses to brief", briefs: [] });
       }
 
       const createdBriefs: any[] = [];
@@ -439,6 +447,17 @@ export function registerCiRoutes(app: Express) {
     } catch (error) {
       console.error("[CI] Pipeline generate-brief error:", error);
       res.status(500).json({ error: "Brief generation failed" });
+    }
+  });
+
+  // Returns list of distinct topic categories that have unbriefed analyses — used by cron to fan out
+  router.get("/pipeline/brief-topics", requireCronSecret, async (req, res) => {
+    try {
+      const analyses = await storage.getCiAnalysesPendingBrief();
+      const topics = [...new Set(analyses.map(a => a.topicCategory).filter(Boolean))];
+      res.json(topics);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch brief topics" });
     }
   });
 
