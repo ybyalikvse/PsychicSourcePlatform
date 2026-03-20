@@ -5100,7 +5100,18 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       const contentType = req.body.contentType || "video/mp4";
       const s3Key = `video-submissions/${req.params.id}_${Date.now()}.${ext}`;
 
-      const s3Client = getS3Client();
+      const { S3Client: S3ClientClass } = await import("@aws-sdk/client-s3");
+      // Create a dedicated client with checksum disabled — newer SDK versions add CRC32
+      // checksums by default which break browser CORS preflight on presigned PUT URLs
+      const s3Client = new S3ClientClass({
+        region: process.env.AWS_REGION || "us-east-1",
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+        },
+        requestChecksumCalculation: "WHEN_REQUIRED",
+        responseChecksumValidation: "WHEN_REQUIRED",
+      });
       const command = new PutObjectCommand({
         Bucket: process.env.AWS_S3_BUCKET,
         Key: s3Key,
