@@ -20,6 +20,7 @@ import {
   Brain,
   Eye,
   Search,
+  MessageSquare,
 } from "lucide-react";
 import {
   Sidebar,
@@ -83,6 +84,11 @@ const videoNavItems = [
     title: "Video Requests",
     url: "/video-requests",
     icon: Video,
+  },
+  {
+    title: "Caption Prompts",
+    url: "/caption-prompts",
+    icon: MessageSquare,
   },
   {
     title: "Intelligence Dashboard",
