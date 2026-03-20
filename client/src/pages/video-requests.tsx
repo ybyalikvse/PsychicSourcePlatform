@@ -764,8 +764,9 @@ export default function VideoRequests() {
         </Card>
       )}
 
+      {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Video Request</DialogTitle>
             <DialogDescription>Create a new video request for psychics to fulfill.</DialogDescription>
@@ -775,21 +776,21 @@ export default function VideoRequests() {
               <FormField control={form.control} name="title" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
-                  <FormControl><Input {...field} placeholder="Video title" data-testid="input-title" /></FormControl>
+                  <FormControl><Input {...field} placeholder="e.g. Signs From Your Loved Ones" data-testid="input-title" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="topic" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Topic</FormLabel>
-                  <FormControl><Input {...field} placeholder="Video topic" data-testid="input-topic" /></FormControl>
+                  <FormControl><Input {...field} placeholder="e.g. Spirit Messages & Mediumship" data-testid="input-topic" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="hook" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Hook</FormLabel>
-                  <FormControl><Input {...field} placeholder="Video hook / opening line" data-testid="input-hook" /></FormControl>
+                  <FormLabel>Hook <span className="text-muted-foreground font-normal">(opening line)</span></FormLabel>
+                  <FormControl><Input {...field} placeholder="e.g. Your loved one has a message for you right now..." data-testid="input-hook" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -797,20 +798,7 @@ export default function VideoRequests() {
                 <FormField control={form.control} name="videoDuration" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Duration</FormLabel>
-                    <FormControl>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger data-testid="select-duration">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="30s">30 seconds</SelectItem>
-                          <SelectItem value="60s">60 seconds</SelectItem>
-                          <SelectItem value="90s">90 seconds</SelectItem>
-                          <SelectItem value="2min">2 minutes</SelectItem>
-                          <SelectItem value="3min">3 minutes</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
+                    <FormControl><Input {...field} placeholder="e.g. 60-90 seconds" data-testid="input-duration" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -831,8 +819,8 @@ export default function VideoRequests() {
               )} />
               <FormField control={form.control} name="description" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl><Textarea {...field} placeholder="Detailed instructions for the video..." rows={3} data-testid="input-description" /></FormControl>
+                  <FormLabel>Description <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormControl><Textarea {...field} placeholder="Talking points, tone guidance, or any special instructions..." rows={4} data-testid="input-description" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -840,7 +828,7 @@ export default function VideoRequests() {
                 <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)} data-testid="button-cancel-create">Cancel</Button>
                 <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-create">
                   {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Create
+                  Create Request
                 </Button>
               </DialogFooter>
             </form>
@@ -848,14 +836,75 @@ export default function VideoRequests() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Dialog */}
       <Dialog open={!!editingRequest} onOpenChange={open => { if (!open) setEditingRequest(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Video Request</DialogTitle>
-            <DialogDescription>Update the video request details.</DialogDescription>
+            <DialogDescription>Update the request details before publishing to psychics.</DialogDescription>
           </DialogHeader>
           <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(data => { if (editingRequest) updateMutation.mutate({ id: editingRequest.id, data }); })} className="space-y-4">
+            <form onSubmit={editForm.handleSubmit(data => { if (editingRequest) updateMutation.mutate({ id: editingRequest.id, data }); })} className="space-y-5">
+
+              {/* If this came from a CI brief, show the structured brief content read-only */}
+              {editingRequest?.description && (() => {
+                try {
+                  const parsed = JSON.parse(editingRequest.description);
+                  if (parsed._type !== "ci_brief") return null;
+                  return (
+                    <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Brief Content (read-only)</p>
+                      {parsed.topic_description && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Topic Description</p>
+                          <p className="text-sm">{parsed.topic_description}</p>
+                        </div>
+                      )}
+                      {parsed.hook_options?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Hook Options</p>
+                          <ol className="list-decimal list-inside space-y-0.5">
+                            {parsed.hook_options.map((h: string, i: number) => (
+                              <li key={i} className="text-sm">{h}</li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                      {parsed.talking_points?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Talking Points</p>
+                          <ul className="list-disc list-inside space-y-0.5">
+                            {parsed.talking_points.map((p: string, i: number) => (
+                              <li key={i} className="text-sm">{p}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {parsed.suggested_cta && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Suggested CTA</p>
+                          <p className="text-sm">{parsed.suggested_cta}</p>
+                        </div>
+                      )}
+                      {parsed.notes_for_creator && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Notes for Creator</p>
+                          <p className="text-sm italic">{parsed.notes_for_creator}</p>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {parsed.format_suggestion && <Badge variant="secondary"><span className="text-muted-foreground mr-1">Format:</span>{parsed.format_suggestion}</Badge>}
+                        {parsed.estimated_length && <Badge variant="secondary">{parsed.estimated_length}</Badge>}
+                        {parsed.difficulty && <Badge variant="secondary"><span className="text-muted-foreground mr-1">Difficulty:</span>{parsed.difficulty}</Badge>}
+                      </div>
+                    </div>
+                  );
+                } catch { return null; }
+              })()}
+
+              <Separator />
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Request Settings</p>
+
               <FormField control={editForm.control} name="title" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
@@ -872,7 +921,7 @@ export default function VideoRequests() {
               )} />
               <FormField control={editForm.control} name="hook" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Hook</FormLabel>
+                  <FormLabel>Hook <span className="text-muted-foreground font-normal">(opening line shown to psychics)</span></FormLabel>
                   <FormControl><Input {...field} data-testid="input-edit-hook" /></FormControl>
                   <FormMessage />
                 </FormItem>
@@ -881,20 +930,7 @@ export default function VideoRequests() {
                 <FormField control={editForm.control} name="videoDuration" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Duration</FormLabel>
-                    <FormControl>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger data-testid="select-edit-duration">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="30s">30 seconds</SelectItem>
-                          <SelectItem value="60s">60 seconds</SelectItem>
-                          <SelectItem value="90s">90 seconds</SelectItem>
-                          <SelectItem value="2min">2 minutes</SelectItem>
-                          <SelectItem value="3min">3 minutes</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
+                    <FormControl><Input {...field} placeholder="e.g. 60-90 seconds" data-testid="input-edit-duration" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -913,13 +949,16 @@ export default function VideoRequests() {
                   <FormMessage />
                 </FormItem>
               )} />
-              <FormField control={editForm.control} name="description" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl><Textarea {...field} rows={3} data-testid="input-edit-description" /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              {/* Only show plain description textarea if NOT a CI brief */}
+              {!editingRequest?.description?.startsWith('{"_type":"ci_brief"') && (
+                <FormField control={editForm.control} name="description" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl><Textarea {...field} rows={4} data-testid="input-edit-description" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditingRequest(null)} data-testid="button-cancel-edit">Cancel</Button>
                 <Button type="submit" disabled={updateMutation.isPending} data-testid="button-submit-edit">
