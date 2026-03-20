@@ -688,10 +688,10 @@ export default function VideoRequests() {
                   {captions.filter(c => c.platform === publishPlatform).length > 0 && (
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Caption (optional)</p>
-                      <Select value={publishCaptionId} onValueChange={setPublishCaptionId}>
+                      <Select value={publishCaptionId || "none"} onValueChange={v => setPublishCaptionId(v === "none" ? "" : v)}>
                         <SelectTrigger className="text-sm h-8"><SelectValue placeholder="No caption" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No caption</SelectItem>
+                          <SelectItem value="none">No caption</SelectItem>
                           {captions.filter(c => c.platform === publishPlatform).map(c => (
                             <SelectItem key={c.id} value={c.id}>{c.caption.slice(0, 60)}…</SelectItem>
                           ))}
