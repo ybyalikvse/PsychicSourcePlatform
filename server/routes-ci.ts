@@ -1188,7 +1188,7 @@ export function registerCiRoutes(app: Express) {
         hook: item.hook_options?.[0] || undefined,
         videoDuration: item.estimated_length || "60s",
         description: structuredDescription,
-        status: "available",
+        status: "draft",
       });
 
       // Mark the brief item as converted by updating briefData
@@ -1236,7 +1236,7 @@ export function registerCiRoutes(app: Express) {
         hook: script.hook || undefined,
         videoDuration: script.duration || "60s",
         description: fullScript,
-        status: "available",
+        status: "draft",
       });
 
       // Update script with the video request ID

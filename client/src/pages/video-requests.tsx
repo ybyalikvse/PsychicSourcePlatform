@@ -37,6 +37,7 @@ import { getDeadlineInfo, getStatusBadgeVariant, getStatusLabel } from "@/lib/fo
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
+  { value: "draft", label: "Draft" },
   { value: "available", label: "Available" },
   { value: "claimed", label: "Claimed" },
   { value: "submitted", label: "Submitted" },
@@ -60,7 +61,7 @@ const createVideoRequestSchema = z.object({
   requiredDate: z.string().optional().default(""),
   payAmount: z.string().optional().default(""),
   description: z.string().optional().default(""),
-  status: z.string().optional().default("available"),
+  status: z.string().optional().default("draft"),
 });
 
 type CreateVideoRequestForm = z.infer<typeof createVideoRequestSchema>;
@@ -557,6 +558,27 @@ export default function VideoRequests() {
                     data-testid="button-release"
                   >
                     Release to Available
+                  </Button>
+                )}
+                {selectedRequest.status === "draft" && (
+                  <Button
+                    className="w-full"
+                    onClick={() => statusMutation.mutate({ id: selectedRequest.id, status: "available" })}
+                    disabled={statusMutation.isPending}
+                    data-testid="button-publish"
+                  >
+                    <Eye className="h-4 w-4" /> Publish to Psychics
+                  </Button>
+                )}
+                {selectedRequest.status === "available" && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => statusMutation.mutate({ id: selectedRequest.id, status: "draft" })}
+                    disabled={statusMutation.isPending}
+                    data-testid="button-unpublish"
+                  >
+                    Move to Draft
                   </Button>
                 )}
                 <Separator />
