@@ -1139,6 +1139,28 @@ export default function VideoRequests() {
                       <FormMessage />
                     </FormItem>
                   )} />
+                  <FormField control={editForm.control} name="status" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft (hidden from psychics)</SelectItem>
+                          <SelectItem value="available">Available (visible to psychics)</SelectItem>
+                          <SelectItem value="claimed">Claimed</SelectItem>
+                          <SelectItem value="submitted">Submitted</SelectItem>
+                          <SelectItem value="revision_requested">Revision Requested</SelectItem>
+                          <SelectItem value="approved">Approved</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
                   {!editBriefFields && (
                     <FormField control={editForm.control} name="description" render={({ field }) => (
                       <FormItem>
