@@ -31,6 +31,7 @@ import { VideoRequestDescription } from "@/components/video-request-description"
 import {
   Plus, Video, Send, Loader2, Trash2, Eye, CheckCircle, RotateCw,
   DollarSign, Clock, Copy, Sparkles, ArrowLeft, MessageSquare, AlertTriangle, Mail,
+  Share2, Calendar,
 } from "lucide-react";
 import { DataState } from "@/components/data-state";
 import { getDeadlineInfo, getStatusBadgeVariant, getStatusLabel } from "@/lib/format-utils";
@@ -106,6 +107,22 @@ export default function VideoRequests() {
   const { data: ciSettings = [] } = useQuery<Array<{ key: string; value: string }>>({
     queryKey: ["/api/ci/settings"],
   });
+
+  const { data: pbAccounts = [] } = useQuery<any[]>({
+    queryKey: ["/api/postbridge/accounts"],
+    queryFn: async () => {
+      const res = await fetch("/api/postbridge/accounts");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data.data ?? []);
+    },
+    enabled: !!selectedRequest && selectedRequest.status === "approved",
+  });
+
+  const [publishPlatform, setPublishPlatform] = useState<"tiktok" | "instagram">("tiktok");
+  const [publishScheduledAt, setPublishScheduledAt] = useState("");
+  const [publishCaptionId, setPublishCaptionId] = useState("");
+  const [publishAccountId, setPublishAccountId] = useState("");
   const showPayAmount = ciSettings.find(s => s.key === "show_pay_amount")?.value === "true";
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<VideoMessage[]>({
@@ -253,6 +270,20 @@ export default function VideoRequests() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to generate caption", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async ({ id, platform, accountId, scheduledAt, captionId }: { id: string; platform: string; accountId: number; scheduledAt?: string; captionId?: string }) => {
+      const res = await apiRequest("POST", `/api/video-requests/${id}/publish`, { platform, accountId, scheduledAt: scheduledAt || undefined, captionId: captionId || undefined });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: data.scheduledAt ? "Video scheduled" : "Video sent to platform", description: data.scheduledAt ? `Scheduled for ${new Date(data.scheduledAt).toLocaleString()}` : "Sent as draft" });
+      setPublishScheduledAt("");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Publish failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -607,6 +638,94 @@ export default function VideoRequests() {
                 </Button>
               </CardContent>
             </Card>
+
+            {selectedRequest.status === "approved" && selectedRequest.videoUrl && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Share2 className="h-4 w-4" /> Publish
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Platform toggle */}
+                  <div className="flex rounded-md border overflow-hidden">
+                    {(["tiktok", "instagram"] as const).map(p => (
+                      <button
+                        key={p}
+                        className={`flex-1 py-1.5 text-sm font-medium transition-colors ${publishPlatform === p ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                        onClick={() => { setPublishPlatform(p); setPublishAccountId(""); setPublishCaptionId(""); }}
+                      >{p === "tiktok" ? "TikTok" : "Instagram"}</button>
+                    ))}
+                  </div>
+
+                  {/* Account selector */}
+                  {(() => {
+                    const accts = pbAccounts.filter((a: any) => a.platform?.toLowerCase() === publishPlatform);
+                    if (pbAccounts.length === 0) return <p className="text-xs text-muted-foreground">No PostBridge accounts connected. Add accounts at post-bridge.com.</p>;
+                    if (accts.length === 0) return <p className="text-xs text-muted-foreground">No {publishPlatform} account connected in PostBridge.</p>;
+                    if (accts.length === 1) return <p className="text-xs text-muted-foreground">Account: <span className="font-medium text-foreground">{accts[0].name || accts[0].username}</span></p>;
+                    return (
+                      <Select value={publishAccountId} onValueChange={setPublishAccountId}>
+                        <SelectTrigger className="text-sm h-8"><SelectValue placeholder="Select account" /></SelectTrigger>
+                        <SelectContent>
+                          {accts.map((a: any) => (
+                            <SelectItem key={a.id} value={String(a.id)}>{a.name || a.username || `Account ${a.id}`}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    );
+                  })()}
+
+                  {/* Caption selector */}
+                  {captions.filter(c => c.platform === publishPlatform).length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Caption (optional)</p>
+                      <Select value={publishCaptionId} onValueChange={setPublishCaptionId}>
+                        <SelectTrigger className="text-sm h-8"><SelectValue placeholder="No caption" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No caption</SelectItem>
+                          {captions.filter(c => c.platform === publishPlatform).map(c => (
+                            <SelectItem key={c.id} value={c.id}>{c.caption.slice(0, 60)}…</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Schedule date */}
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Schedule (leave blank to send now)</p>
+                    <Input type="datetime-local" value={publishScheduledAt} onChange={e => setPublishScheduledAt(e.target.value)} className="text-sm h-8" />
+                  </div>
+
+                  {publishPlatform === "tiktok" && (
+                    <p className="text-xs text-muted-foreground bg-muted rounded px-2 py-1">TikTok videos are always sent as a native draft — not published publicly.</p>
+                  )}
+
+                  <Button
+                    className="w-full"
+                    size="sm"
+                    onClick={() => {
+                      if (!selectedRequest) return;
+                      const accts = pbAccounts.filter((a: any) => a.platform?.toLowerCase() === publishPlatform);
+                      const acctId = accts.length === 1 ? accts[0].id : (publishAccountId ? Number(publishAccountId) : null);
+                      if (!acctId) { toast({ title: "Select an account first", variant: "destructive" }); return; }
+                      publishMutation.mutate({
+                        id: selectedRequest.id,
+                        platform: publishPlatform,
+                        accountId: acctId,
+                        scheduledAt: publishScheduledAt ? new Date(publishScheduledAt).toISOString() : undefined,
+                        captionId: publishCaptionId || undefined,
+                      });
+                    }}
+                    disabled={publishMutation.isPending || pbAccounts.filter((a: any) => a.platform?.toLowerCase() === publishPlatform).length === 0}
+                  >
+                    {publishMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                    {publishScheduledAt ? `Schedule to ${publishPlatform === "tiktok" ? "TikTok" : "Instagram"}` : `Send to ${publishPlatform === "tiktok" ? "TikTok" : "Instagram"}`}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
