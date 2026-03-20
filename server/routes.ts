@@ -4636,7 +4636,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   app.patch("/api/video-requests/:id/status", async (req, res) => {
     try {
       const { status } = req.body;
-      const validStatuses = ["available", "claimed", "submitted", "revision_requested", "approved", "paid"];
+      const validStatuses = ["draft", "available", "claimed", "submitted", "revision_requested", "approved", "paid"];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ error: "Invalid status" });
       }
