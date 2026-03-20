@@ -148,7 +148,7 @@ export default function VideoRequests() {
     resolver: zodResolver(createVideoRequestSchema),
     defaultValues: {
       title: "", topic: "", hook: "", videoDuration: "", requiredDate: "",
-      payAmount: "", description: "", status: "available",
+      payAmount: "", description: "", status: "draft",
     },
   });
 
@@ -795,12 +795,38 @@ export default function VideoRequests() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => navigate(`/video-requests/${req.id}`)} data-testid={`button-view-${req.id}`}>
+                      <Button variant="ghost" size="icon" onClick={() => navigate(`/video-requests/${req.id}`)} data-testid={`button-view-${req.id}`} title="View">
                         <Eye className="h-4 w-4" />
                       </Button>
                       {!SUBMITTED_OR_BEYOND.includes(req.status) && (
-                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(req)} data-testid={`button-edit-${req.id}`}>
+                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(req)} data-testid={`button-edit-${req.id}`} title="Edit">
                           <Video className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {req.status === "draft" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-green-600 hover:text-green-700 px-2"
+                          onClick={() => statusMutation.mutate({ id: req.id, status: "available" })}
+                          disabled={statusMutation.isPending}
+                          data-testid={`button-publish-${req.id}`}
+                          title="Publish to psychics"
+                        >
+                          Publish
+                        </Button>
+                      )}
+                      {req.status === "available" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-muted-foreground px-2"
+                          onClick={() => statusMutation.mutate({ id: req.id, status: "draft" })}
+                          disabled={statusMutation.isPending}
+                          data-testid={`button-draft-${req.id}`}
+                          title="Move to draft"
+                        >
+                          Draft
                         </Button>
                       )}
                       <Button
@@ -810,6 +836,7 @@ export default function VideoRequests() {
                           if (confirm("Delete this request?")) deleteMutation.mutate(req.id);
                         }}
                         data-testid={`button-delete-${req.id}`}
+                        title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -892,6 +919,23 @@ export default function VideoRequests() {
                     <FormItem>
                       <FormLabel>Required Date</FormLabel>
                       <FormControl><Input {...field} type="date" data-testid="input-required-date" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="status" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-create-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft (hidden from psychics)</SelectItem>
+                          <SelectItem value="available">Available (visible to psychics)</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )} />
