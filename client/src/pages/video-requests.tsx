@@ -123,6 +123,7 @@ export default function VideoRequests() {
   const [publishScheduledAt, setPublishScheduledAt] = useState("");
   const [publishCaptionId, setPublishCaptionId] = useState("");
   const [publishAccountId, setPublishAccountId] = useState("");
+  const [showWatermarked, setShowWatermarked] = useState(false);
   const showPayAmount = ciSettings.find(s => s.key === "show_pay_amount")?.value === "true";
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<VideoMessage[]>({
@@ -471,17 +472,35 @@ export default function VideoRequests() {
             {selectedRequest.videoUrl && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Submitted Video</CardTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-lg">Submitted Video</CardTitle>
+                    {selectedRequest.watermarkedVideoUrl && (
+                      <div className="flex rounded-md border overflow-hidden text-xs">
+                        <button
+                          className={`px-2.5 py-1 font-medium transition-colors ${!showWatermarked ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setShowWatermarked(false)}
+                        >Original</button>
+                        <button
+                          className={`px-2.5 py-1 font-medium transition-colors ${showWatermarked ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setShowWatermarked(true)}
+                        >Watermarked</button>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <video
+                    key={showWatermarked && selectedRequest.watermarkedVideoUrl ? "watermarked" : "original"}
                     controls
                     playsInline
                     preload="metadata"
                     className="max-w-full max-h-[500px] rounded-md mx-auto"
                     data-testid="video-preview"
                   >
-                    <source src={selectedRequest.videoUrl} type="video/mp4" />
+                    <source
+                      src={showWatermarked && selectedRequest.watermarkedVideoUrl ? selectedRequest.watermarkedVideoUrl : selectedRequest.videoUrl}
+                      type="video/mp4"
+                    />
                   </video>
                 </CardContent>
               </Card>
