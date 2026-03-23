@@ -59,6 +59,12 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
 
   const portalNavItems = [
     {
+      title: "Video Program",
+      url: "/portal",
+      icon: Sparkles,
+      badge: 0,
+    },
+    {
       title: "Status",
       url: "/portal/status",
       icon: BarChart3,
@@ -75,15 +81,6 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
       url: "/portal/my-requests",
       icon: ListChecks,
       badge: revisionCount,
-    },
-  ];
-
-  const portalInfoItems = [
-    {
-      title: "Video Program",
-      url: "/portal",
-      icon: Sparkles,
-      badge: 0,
     },
     {
       title: "How It Works",
@@ -106,7 +103,6 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
 
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel>Video Requests</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {portalNavItems.map((item) => (
@@ -128,27 +124,6 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
                               {item.badge}
                             </span>
                           )}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            <SidebarGroup>
-              <SidebarGroupLabel>Resources</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {portalInfoItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={location === item.url}
-                        data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
-                      >
-                        <Link href={item.url}>
-                          <item.icon className="h-4 w-4" />
-                          <span className="flex-1">{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
