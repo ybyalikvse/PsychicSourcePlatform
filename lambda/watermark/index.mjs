@@ -21,7 +21,7 @@ const s3 = new S3Client({});
 const FFMPEG_PATH = "/opt/bin/ffmpeg";
 
 // Watermark settings
-const WATERMARK_WIDTH_PERCENT = 12;
+const WATERMARK_WIDTH_PERCENT = 25;
 const WATERMARK_OPACITY = 0.7;
 const WATERMARK_PADDING = 20;
 
@@ -71,7 +71,7 @@ export async function handler(event) {
   const filterComplex = [
     `[1:v]scale=iw*${WATERMARK_WIDTH_PERCENT}/100:-1,format=rgba,`,
     `colorchannelmixer=aa=${WATERMARK_OPACITY}[wm];`,
-    `[0:v][wm]overlay=W-w-${WATERMARK_PADDING}:H-h-${WATERMARK_PADDING}`,
+    `[0:v][wm]overlay=W-w-${WATERMARK_PADDING}:${WATERMARK_PADDING}`,
   ].join("");
 
   // Run FFmpeg
