@@ -65,6 +65,12 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
       badge: 0,
     },
     {
+      title: "How It Works",
+      url: "/portal/how-it-works",
+      icon: HelpCircle,
+      badge: 0,
+    },
+    {
       title: "Status",
       url: "/portal/status",
       icon: BarChart3,
@@ -81,12 +87,6 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
       url: "/portal/my-requests",
       icon: ListChecks,
       badge: revisionCount,
-    },
-    {
-      title: "How It Works",
-      url: "/portal/how-it-works",
-      icon: HelpCircle,
-      badge: 0,
     },
   ];
 
