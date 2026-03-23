@@ -108,11 +108,11 @@ function PortalView({ psychic, onLogout }: { psychic: Psychic; onLogout: () => v
         <Route path="/portal/how-it-works">
           <PortalHowItWorksPage />
         </Route>
-        <Route path="/portal/program">
-          <PortalProgramInfoPage />
+        <Route path="/portal/status">
+          <PortalDashboardPage psychic={psychic} />
         </Route>
         <Route path="/portal">
-          <PortalDashboardPage psychic={psychic} />
+          <PortalProgramInfoPage psychic={psychic} />
         </Route>
       </Switch>
     </PortalLayout>

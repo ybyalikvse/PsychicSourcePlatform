@@ -74,9 +74,9 @@ export default function PortalDashboard({ psychic }: PortalDashboardProps) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold" data-testid="text-page-title">
-          Welcome back, {psychic.name}
+          Status
         </h1>
-        <p className="text-muted-foreground mt-1">Here is an overview of your video requests.</p>
+        <p className="text-muted-foreground mt-1">An overview of your video requests.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Video, ListChecks, LogOut, ExternalLink, LayoutDashboard, HelpCircle, Sparkles } from "lucide-react";
+import { Video, ListChecks, LogOut, ExternalLink, BarChart3, HelpCircle, Sparkles } from "lucide-react";
 import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -59,9 +59,9 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
 
   const portalNavItems = [
     {
-      title: "Dashboard",
-      url: "/portal",
-      icon: LayoutDashboard,
+      title: "Status",
+      url: "/portal/status",
+      icon: BarChart3,
       badge: 0,
     },
     {
@@ -81,7 +81,7 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
   const portalInfoItems = [
     {
       title: "Video Program",
-      url: "/portal/program",
+      url: "/portal",
       icon: Sparkles,
       badge: 0,
     },
