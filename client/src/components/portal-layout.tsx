@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Video, ListChecks, LogOut, ExternalLink, LayoutDashboard } from "lucide-react";
+import { Video, ListChecks, LogOut, ExternalLink, LayoutDashboard, HelpCircle } from "lucide-react";
 import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -75,6 +75,12 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
       url: "/portal/my-requests",
       icon: ListChecks,
       badge: revisionCount,
+    },
+    {
+      title: "How It Works",
+      url: "/portal/how-it-works",
+      icon: HelpCircle,
+      badge: 0,
     },
   ];
 
