@@ -918,7 +918,9 @@ export function registerCiRoutes(app: Express) {
         if (!brief) return res.status(400).json({ error: "No brief found" });
         const scriptSystemPrompt = await storage.getCiSetting("script_system_prompt");
         const scriptUserPrompt = await storage.getCiSetting("script_user_prompt");
+        const scriptModelSetting = await storage.getCiSetting("script_ai_model");
         const modelSetting = await storage.getCiSetting("ai_model");
+        const scriptModel = scriptModelSetting?.value || modelSetting?.value || "anthropic/claude-sonnet-4-5";
         const allItems = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
         const items = targetItemIndex !== undefined ? [{ item: allItems[targetItemIndex], index: targetItemIndex }] : allItems.map((item, index) => ({ item, index }));
         let generated = 0;
@@ -933,7 +935,7 @@ export function registerCiRoutes(app: Express) {
               creatorStyle: "warm and nurturing",
               platform: "TikTok",
               duration: item?.estimated_length || "60-90 seconds",
-              model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
+              model: scriptModel,
             });
             const scriptText = typeof script === "string" ? script : JSON.stringify(script);
             const hookMatch = scriptText.match(/HOOK[:\s]*\n?([\s\S]*?)(?=\nBODY[:\s]|$)/i);
