@@ -420,6 +420,7 @@ export const videoRequests = pgTable("video_requests", {
   submittedAt: text("submitted_at"),
   approvedAt: text("approved_at"),
   videoUrl: text("video_url"), // S3 URL
+  watermarkedVideoUrl: text("watermarked_video_url"), // S3 key for watermarked version
   createdAt: text("created_at").notNull().default(sql`now()`),
   updatedAt: text("updated_at").notNull().default(sql`now()`),
 });

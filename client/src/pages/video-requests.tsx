@@ -31,7 +31,7 @@ import { VideoRequestDescription } from "@/components/video-request-description"
 import {
   Plus, Video, Send, Loader2, Trash2, Eye, CheckCircle, RotateCw,
   DollarSign, Clock, Copy, Sparkles, ArrowLeft, MessageSquare, AlertTriangle, Mail,
-  Share2, Calendar,
+  Share2, Calendar, Stamp,
 } from "lucide-react";
 import { DataState } from "@/components/data-state";
 import { getDeadlineInfo, getStatusBadgeVariant, getStatusLabel } from "@/lib/format-utils";
@@ -292,6 +292,20 @@ export default function VideoRequests() {
     },
     onError: (err: Error) => {
       toast({ title: "Publish failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const watermarkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/video-requests/${id}/watermark`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/video-requests"] });
+      toast({ title: "Watermark applied", description: "The watermarked version will be used when publishing." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Watermark failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -646,6 +660,30 @@ export default function VideoRequests() {
                 </Button>
               </CardContent>
             </Card>
+
+            {selectedRequest.status === "approved" && selectedRequest.videoUrl && (
+              <Card className={selectedRequest.watermarkedVideoUrl ? "border-green-200 dark:border-green-900" : "border-orange-200 dark:border-orange-900"}>
+                <CardContent className="pt-4 pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Stamp className={`h-4 w-4 ${selectedRequest.watermarkedVideoUrl ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400"}`} />
+                      <span className="font-medium">
+                        {selectedRequest.watermarkedVideoUrl ? "Watermark applied" : "No watermark"}
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => watermarkMutation.mutate(selectedRequest.id)}
+                      disabled={watermarkMutation.isPending}
+                    >
+                      {watermarkMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RotateCw className="h-3 w-3 mr-1" />}
+                      {selectedRequest.watermarkedVideoUrl ? "Re-apply" : "Apply Watermark"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {selectedRequest.status === "approved" && selectedRequest.videoUrl && (
               <Card>
