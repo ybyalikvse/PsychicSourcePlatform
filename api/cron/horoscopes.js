@@ -16352,6 +16352,8 @@ var videoRequests = pgTable("video_requests", {
   approvedAt: text("approved_at"),
   videoUrl: text("video_url"),
   // S3 URL
+  watermarkedVideoUrl: text("watermarked_video_url"),
+  // S3 key for watermarked version
   createdAt: text("created_at").notNull().default(sql`now()`),
   updatedAt: text("updated_at").notNull().default(sql`now()`)
 });
@@ -16698,6 +16700,7 @@ var ciScrapedVideos = pgTable("ci_scraped_videos", {
   transcript: text("transcript"),
   transcriptStatus: text("transcript_status").notNull().default("pending"),
   analysisStatus: text("analysis_status").notNull().default("pending"),
+  briefStatus: text("brief_status").notNull().default("pending"),
   metadata: jsonb("metadata"),
   scrapedAt: text("scraped_at").notNull().default(sql`now()`),
   createdAt: text("created_at").notNull().default(sql`now()`)
@@ -17982,6 +17985,39 @@ var DatabaseStorage = class {
   async deleteCiScrapedVideo(id) {
     await db.delete(ciScrapedVideos).where(eq(ciScrapedVideos.id, id));
     return true;
+  }
+  async getCiAnalysesPendingBrief() {
+    const rows = await db.select({
+      id: ciVideoAnalyses.id,
+      scrapedVideoId: ciVideoAnalyses.scrapedVideoId,
+      blocked: ciVideoAnalyses.blocked,
+      blockReason: ciVideoAnalyses.blockReason,
+      topicCategory: ciVideoAnalyses.topicCategory,
+      topicSummary: ciVideoAnalyses.topicSummary,
+      hookText: ciVideoAnalyses.hookText,
+      hookType: ciVideoAnalyses.hookType,
+      hookSummary: ciVideoAnalyses.hookSummary,
+      emotionalAngle: ciVideoAnalyses.emotionalAngle,
+      targetAudience: ciVideoAnalyses.targetAudience,
+      format: ciVideoAnalyses.format,
+      ctaType: ciVideoAnalyses.ctaType,
+      replicationScore: ciVideoAnalyses.replicationScore,
+      notes: ciVideoAnalyses.notes,
+      rawAnalysis: ciVideoAnalyses.rawAnalysis,
+      weekAdded: ciVideoAnalyses.weekAdded,
+      createdAt: ciVideoAnalyses.createdAt,
+      videoBriefStatus: ciScrapedVideos.briefStatus
+    }).from(ciVideoAnalyses).leftJoin(ciScrapedVideos, eq(ciVideoAnalyses.scrapedVideoId, ciScrapedVideos.id)).where(
+      and(
+        eq(ciVideoAnalyses.blocked, false),
+        sql`${ciVideoAnalyses.topicCategory} IS NOT NULL`,
+        eq(ciScrapedVideos.briefStatus, "pending")
+      )
+    ).orderBy(desc(ciVideoAnalyses.createdAt));
+    return rows.map((r) => ({ ...r, videoBriefStatus: r.videoBriefStatus ?? "pending" }));
+  }
+  async markVideoAsBriefed(videoId) {
+    await db.update(ciScrapedVideos).set({ briefStatus: "briefed" }).where(eq(ciScrapedVideos.id, videoId));
   }
   // ===== CI Content Briefs =====
   async getCiContentBriefs(status) {
