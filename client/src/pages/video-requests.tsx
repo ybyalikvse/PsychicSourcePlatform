@@ -613,12 +613,13 @@ export default function VideoRequests() {
                 )}
                 {selectedRequest.status === "approved" && (
                   <Button
+                    variant="outline"
                     className="w-full"
-                    onClick={() => statusMutation.mutate({ id: selectedRequest.id, status: "paid" })}
+                    onClick={() => statusMutation.mutate({ id: selectedRequest.id, status: "submitted" })}
                     disabled={statusMutation.isPending}
-                    data-testid="button-mark-paid"
+                    data-testid="button-revert-submitted"
                   >
-                    <DollarSign className="h-4 w-4" /> Mark as Paid
+                    <RotateCw className="h-4 w-4" /> Revert to Submitted
                   </Button>
                 )}
                 {selectedRequest.status === "claimed" && (

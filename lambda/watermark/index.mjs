@@ -21,7 +21,7 @@ const s3 = new S3Client({});
 const FFMPEG_PATH = "/opt/bin/ffmpeg";
 
 // Watermark settings
-const WATERMARK_WIDTH_PERCENT = 25;
+const WATERMARK_WIDTH_PERCENT = 50;
 const WATERMARK_OPACITY = 0.7;
 const WATERMARK_PADDING = 20;
 
