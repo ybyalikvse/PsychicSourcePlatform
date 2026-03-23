@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Video, ListChecks, LogOut, ExternalLink, LayoutDashboard, HelpCircle } from "lucide-react";
+import { Video, ListChecks, LogOut, ExternalLink, LayoutDashboard, HelpCircle, Sparkles } from "lucide-react";
 import logoPath from "@assets/psychicsource-logo_1773022542325.png";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -76,6 +76,15 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
       icon: ListChecks,
       badge: revisionCount,
     },
+  ];
+
+  const portalInfoItems = [
+    {
+      title: "Video Program",
+      url: "/portal/program",
+      icon: Sparkles,
+      badge: 0,
+    },
     {
       title: "How It Works",
       url: "/portal/how-it-works",
@@ -119,6 +128,27 @@ export function PortalLayout({ children, psychicName, onLogout }: PortalLayoutPr
                               {item.badge}
                             </span>
                           )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarGroup>
+              <SidebarGroupLabel>Resources</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {portalInfoItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location === item.url}
+                        data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        <Link href={item.url}>
+                          <item.icon className="h-4 w-4" />
+                          <span className="flex-1">{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

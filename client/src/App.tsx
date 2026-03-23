@@ -34,6 +34,7 @@ import PortalMyRequestsPage from "@/pages/portal/portal-my-requests";
 import PortalRequestDetailPage from "@/pages/portal/portal-request-detail";
 import PortalDashboardPage from "@/pages/portal/portal-dashboard";
 import PortalHowItWorksPage from "@/pages/portal/portal-how-it-works";
+import PortalProgramInfoPage from "@/pages/portal/portal-program-info";
 import NotFound from "@/pages/not-found";
 import VspContentCreator from "@/pages/vsp-content-creator";
 import VspHistory from "@/pages/vsp-history";
@@ -106,6 +107,9 @@ function PortalView({ psychic, onLogout }: { psychic: Psychic; onLogout: () => v
         </Route>
         <Route path="/portal/how-it-works">
           <PortalHowItWorksPage />
+        </Route>
+        <Route path="/portal/program">
+          <PortalProgramInfoPage />
         </Route>
         <Route path="/portal">
           <PortalDashboardPage psychic={psychic} />
