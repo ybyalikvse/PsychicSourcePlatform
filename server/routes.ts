@@ -4581,11 +4581,25 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   });
 
   // ============ VIDEO REQUESTS (Admin) ============
+
+  // Helper: resolve S3 keys to signed URLs for video fields
+  async function resolveVideoUrls<T extends { videoUrl?: string | null; watermarkedVideoUrl?: string | null }>(request: T): Promise<T> {
+    const { getSignedVideoUrl } = await import("./s3");
+    if (request.videoUrl && !request.videoUrl.startsWith("http")) {
+      request.videoUrl = await getSignedVideoUrl(request.videoUrl);
+    }
+    if (request.watermarkedVideoUrl && !request.watermarkedVideoUrl.startsWith("http")) {
+      request.watermarkedVideoUrl = await getSignedVideoUrl(request.watermarkedVideoUrl);
+    }
+    return request;
+  }
+
   app.get("/api/video-requests", async (req, res) => {
     try {
       const { status } = req.query;
       const requests = await storage.getVideoRequests(status as string | undefined);
-      res.json(requests);
+      const resolved = await Promise.all(requests.map(r => resolveVideoUrls(r)));
+      res.json(resolved);
     } catch (error) {
       console.error("[Video Requests] Error:", error);
       res.status(500).json({ error: "Failed to fetch video requests" });
@@ -4596,7 +4610,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     try {
       const request = await storage.getVideoRequest(req.params.id);
       if (!request) return res.status(404).json({ error: "Video request not found" });
-      res.json(request);
+      res.json(await resolveVideoUrls(request));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch video request" });
     }
@@ -5113,7 +5127,8 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     try {
       const { status } = req.query;
       const requests = await storage.getVideoRequests(status as string || "available");
-      res.json(requests);
+      const resolved = await Promise.all(requests.map(r => resolveVideoUrls(r)));
+      res.json(resolved);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch video requests" });
     }
@@ -5127,12 +5142,7 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       if (request.status !== "available" && request.claimedBy !== psychic.id) {
         return res.status(403).json({ error: "You do not have access to this request" });
       }
-      // Resolve S3 key to signed URL so the portal can preview the video
-      if (request.videoUrl && !request.videoUrl.startsWith("http")) {
-        const { getSignedVideoUrl } = await import("./s3");
-        request.videoUrl = await getSignedVideoUrl(request.videoUrl);
-      }
-      res.json(request);
+      res.json(await resolveVideoUrls(request));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch video request" });
     }
@@ -5142,7 +5152,8 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
     try {
       const psychic = req.portalPsychic;
       const requests = await storage.getVideoRequestsByPsychic(psychic.id);
-      res.json(requests);
+      const resolved = await Promise.all(requests.map(r => resolveVideoUrls(r)));
+      res.json(resolved);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch your requests" });
     }
