@@ -227,10 +227,24 @@ export async function generateScript(params: {
   const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
     apiKey: process.env.OPENROUTER_API_KEY,
+    timeout: 250_000, // 250s — leave buffer for Vercel's 300s limit
   });
 
+  // Only include essential fields to reduce prompt size and speed up LLM response
+  const essentialBrief = {
+    title: params.briefItem.title,
+    topic_description: params.briefItem.topic_description,
+    hook_options: params.briefItem.hook_options,
+    talking_points: params.briefItem.talking_points,
+    emotional_journey: params.briefItem.emotional_journey,
+    suggested_cta: params.briefItem.suggested_cta,
+    format_suggestion: params.briefItem.format_suggestion,
+    estimated_length: params.briefItem.estimated_length,
+    notes_for_creator: params.briefItem.notes_for_creator,
+  };
+
   const userPrompt = params.userPromptTemplate
-    .replace(/{INSERT_BRIEF_JSON}/g, JSON.stringify(params.briefItem, null, 2))
+    .replace(/{INSERT_BRIEF_JSON}/g, JSON.stringify(essentialBrief, null, 2))
     .replace(/{CREATOR_NAME}/g, params.creatorName)
     .replace(/{CREATOR_STYLE}/g, params.creatorStyle)
     .replace(/{PLATFORM}/g, params.platform)
