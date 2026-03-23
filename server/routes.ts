@@ -5127,6 +5127,11 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       if (request.status !== "available" && request.claimedBy !== psychic.id) {
         return res.status(403).json({ error: "You do not have access to this request" });
       }
+      // Resolve S3 key to signed URL so the portal can preview the video
+      if (request.videoUrl && !request.videoUrl.startsWith("http")) {
+        const { getSignedVideoUrl } = await import("./s3");
+        request.videoUrl = await getSignedVideoUrl(request.videoUrl);
+      }
       res.json(request);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch video request" });

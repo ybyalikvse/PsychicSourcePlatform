@@ -308,6 +308,29 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
             </Card>
           )}
 
+          {/* Read-only video preview for submitted/approved/paid */}
+          {isMine && !canUpload && request.videoUrl && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Video className="h-4 w-4" />
+                  Your Video
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <video
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="max-w-full max-h-[400px] rounded-md mx-auto"
+                  data-testid="video-preview"
+                >
+                  <source src={request.videoUrl} type="video/mp4" />
+                </video>
+              </CardContent>
+            </Card>
+          )}
+
           {canSubmit && (
             <Button
               className="w-full"
