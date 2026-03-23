@@ -4668,25 +4668,29 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         updates.watermarkedVideoUrl = null;
       }
 
-      const request = await storage.updateVideoRequest(req.params.id, updates);
+      let request = await storage.updateVideoRequest(req.params.id, updates);
       if (!request) return res.status(404).json({ error: "Video request not found" });
 
-      // Trigger watermarking in background when approved
+      // Auto-watermark when approved (awaited so it completes before Vercel kills the function)
       if (status === "approved" && request.videoUrl) {
-        (async () => {
-          try {
-            console.log(`[Watermark] Starting background watermark for request ${req.params.id}`);
-            const { watermarkVideo } = await import("./watermark");
-            const watermarkedKey = await watermarkVideo(request.videoUrl!, req.params.id);
-            await storage.updateVideoRequest(req.params.id, { watermarkedVideoUrl: watermarkedKey });
+        try {
+          console.log(`[Watermark] Starting watermark for request ${req.params.id}`);
+          const { watermarkVideo } = await import("./watermark");
+          // videoUrl may already be a signed URL from resolveVideoUrls, but we need the raw S3 key
+          // Re-fetch the raw request to get the original S3 key
+          const rawRequest = await storage.getVideoRequest(req.params.id);
+          if (rawRequest?.videoUrl) {
+            const watermarkedKey = await watermarkVideo(rawRequest.videoUrl, req.params.id);
+            request = (await storage.updateVideoRequest(req.params.id, { watermarkedVideoUrl: watermarkedKey }))!;
             console.log(`[Watermark] Completed for request ${req.params.id}: ${watermarkedKey}`);
-          } catch (error) {
-            console.error(`[Watermark] Failed for request ${req.params.id}:`, error);
           }
-        })();
+        } catch (error) {
+          console.error(`[Watermark] Failed for request ${req.params.id}:`, error);
+          // Don't fail the approval — watermark can be retried manually
+        }
       }
 
-      res.json(request);
+      res.json(await resolveVideoUrls(request));
     } catch (error) {
       res.status(500).json({ error: "Failed to update video request status" });
     }
@@ -4699,11 +4703,12 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       if (!request) return res.status(404).json({ error: "Video request not found" });
       if (!request.videoUrl) return res.status(400).json({ error: "No video uploaded" });
 
-      // Run watermarking
+      // Run watermarking using the raw S3 key (not a signed URL)
       const { watermarkVideo } = await import("./watermark");
-      const watermarkedKey = await watermarkVideo(request.videoUrl, req.params.id);
+      const videoKey = request.videoUrl.startsWith("http") ? request.videoUrl : request.videoUrl;
+      const watermarkedKey = await watermarkVideo(videoKey, req.params.id);
       const updated = await storage.updateVideoRequest(req.params.id, { watermarkedVideoUrl: watermarkedKey });
-      res.json({ success: true, watermarkedVideoUrl: watermarkedKey, request: updated });
+      res.json(await resolveVideoUrls({ success: true, watermarkedVideoUrl: watermarkedKey, ...(updated || {}) }));
     } catch (error) {
       console.error(`[Watermark] Manual trigger failed for ${req.params.id}:`, error);
       res.status(500).json({ error: "Failed to watermark video" });
