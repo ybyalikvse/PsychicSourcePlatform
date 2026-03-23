@@ -478,9 +478,10 @@ export function registerCiRoutes(app: Express) {
         return res.status(400).json({ error: `Brief item at index ${itemIndex} not found` });
       }
 
-      // Get script prompts from settings
+      // Get script prompts from settings — use script-specific model if available (faster)
       const systemPromptSetting = await storage.getCiSetting("script_system_prompt");
       const userPromptSetting = await storage.getCiSetting("script_user_prompt");
+      const scriptModelSetting = await storage.getCiSetting("script_ai_model");
       const modelSetting = await storage.getCiSetting("ai_model");
 
       if (!systemPromptSetting?.value || !userPromptSetting?.value) {
@@ -495,7 +496,7 @@ export function registerCiRoutes(app: Express) {
         creatorStyle: creatorStyle || "warm and conversational",
         platform: platform || "tiktok",
         duration: duration || "60-90 seconds",
-        model: modelSetting?.value || "anthropic/claude-sonnet-4-5",
+        model: scriptModelSetting?.value || modelSetting?.value || "anthropic/claude-sonnet-4-5",
       });
 
       // Parse script sections from content if possible
