@@ -87,9 +87,30 @@ export default function CiDashboard() {
     },
   });
 
+  const runScriptsParallel = async () => {
+    // Get latest brief to find how many items to generate
+    const briefsRes = await fetch("/api/ci/briefs", { credentials: "include" });
+    if (!briefsRes.ok) throw new Error("Failed to fetch briefs");
+    const briefs = await briefsRes.json();
+    const brief = Array.isArray(briefs) && briefs.length > 0 ? briefs[0] : null;
+    if (!brief) throw new Error("No brief found");
+    const items = Array.isArray(brief.briefData) ? brief.briefData : [];
+    if (items.length === 0) throw new Error("Brief has no items");
+
+    // Fire all script generation requests in parallel
+    const results = await Promise.allSettled(
+      items.map((_: any, i: number) =>
+        apiRequest("POST", "/api/ci/pipeline/run-step", { step: "scripts", itemIndex: i }).then(r => r.json())
+      )
+    );
+    const generated = results.filter(r => r.status === "fulfilled").length;
+    const failed = results.filter(r => r.status === "rejected").length;
+    return { generated, failed, total: items.length };
+  };
+
   const runFullPipeline = async () => {
-    const steps = ["scrape", "transcripts", "analyze", "brief", "scripts"];
-    for (const step of steps) {
+    const sequentialSteps = ["scrape", "transcripts", "analyze", "brief"];
+    for (const step of sequentialSteps) {
       setRunningStep(step);
       try {
         await runStepMutation.mutateAsync(step);
@@ -97,12 +118,34 @@ export default function CiDashboard() {
         break;
       }
     }
+    // Run scripts in parallel (like GitHub Actions)
+    setRunningStep("scripts");
+    try {
+      const result = await runScriptsParallel();
+      toast({ title: "scripts completed", description: `${result.generated} generated${result.failed ? `, ${result.failed} failed` : ""}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+    } catch (err: any) {
+      toast({ title: "scripts failed", description: err.message, variant: "destructive" });
+    }
     setRunningStep(null);
     queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
   };
 
   const runStep = (step: string) => {
     setRunningStep(step);
+    if (step === "scripts") {
+      runScriptsParallel()
+        .then((result) => {
+          toast({ title: "scripts completed", description: `${result.generated} generated${result.failed ? `, ${result.failed} failed` : ""}` });
+          setRunningStep(null);
+          queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+        })
+        .catch((err) => {
+          toast({ title: "scripts failed", description: err.message, variant: "destructive" });
+          setRunningStep(null);
+        });
+      return;
+    }
     runStepMutation.mutate(step);
   };
 
