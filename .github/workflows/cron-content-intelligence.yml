@@ -35,7 +35,7 @@ jobs:
       - name: Generate performance report
         run: |
           echo "Generating performance report..."
-          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
             -X POST "${APP_URL}/api/ci/pipeline/performance-report" \
             -H "Content-Type: application/json" \
             -H "${AUTH}")
@@ -71,7 +71,7 @@ jobs:
       - name: Scrape competitor ${{ matrix.competitorId }}
         run: |
           echo "Scraping ${{ matrix.competitorId }}..."
-          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
             -X POST "${APP_URL}/api/ci/pipeline/scrape" \
             -H "Content-Type: application/json" \
             -H "${AUTH}" \
@@ -114,7 +114,7 @@ jobs:
           for i in $(seq 0 $(($COUNT - 1))); do
             VIDEO_ID=$(echo "$VIDEOS" | jq -r ".[$i]")
             echo "Fetching transcript for $VIDEO_ID ($((i+1))/$COUNT)..."
-            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
               -X POST "${APP_URL}/api/ci/pipeline/transcript" \
               -H "Content-Type: application/json" \
               -H "${AUTH}" \
@@ -158,7 +158,7 @@ jobs:
           for i in $(seq 0 $(($COUNT - 1))); do
             VIDEO_ID=$(echo "$VIDEOS" | jq -r ".[$i]")
             echo "Analyzing video $VIDEO_ID ($((i+1))/$COUNT)..."
-            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
               -X POST "${APP_URL}/api/ci/pipeline/analyze" \
               -H "Content-Type: application/json" \
               -H "${AUTH}" \
@@ -200,7 +200,7 @@ jobs:
       - name: Generate brief for topic "${{ matrix.topic }}"
         run: |
           echo "Generating brief for topic: ${{ matrix.topic }}"
-          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
             -X POST "${APP_URL}/api/ci/pipeline/generate-brief" \
             -H "Content-Type: application/json" \
             -H "${AUTH}" \
@@ -233,7 +233,7 @@ jobs:
             exit 0
           fi
           echo "Generating script for brief $BRIEF_ID, item ${{ matrix.itemIndex }}..."
-          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
             -X POST "${APP_URL}/api/ci/pipeline/generate-script" \
             -H "Content-Type: application/json" \
             -H "${AUTH}" \
