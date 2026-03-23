@@ -24,6 +24,7 @@ import {
   Video,
   AlertTriangle,
   Upload,
+  Smartphone,
 } from "lucide-react";
 import PortalUpload from "./portal-upload";
 import type { VideoRequest, VideoMessage, Psychic } from "@shared/schema";
@@ -202,6 +203,10 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
                 </div>
               )}
               <div className="flex flex-wrap gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Smartphone className="h-4 w-4 text-muted-foreground" />
+                  <span>Portrait (9:16)</span>
+                </div>
                 {request.videoDuration && (
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="h-4 w-4 text-muted-foreground" />

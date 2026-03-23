@@ -8,7 +8,7 @@ import { DataState } from "@/components/data-state";
 import { portalApiRequest, portalFetch } from "@/lib/portal-api";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Clock, DollarSign, Video, Eye, AlertTriangle } from "lucide-react";
+import { Calendar, Clock, DollarSign, Video, Eye, AlertTriangle, Smartphone } from "lucide-react";
 import { getDeadlineInfo } from "@/lib/format-utils";
 import type { VideoRequest, Psychic } from "@shared/schema";
 
@@ -105,6 +105,10 @@ export default function PortalRequests({ psychic }: PortalRequestsProps) {
                   </p>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="no-default-active-elevate">
+                    <Smartphone className="h-3 w-3 mr-1" />
+                    Portrait
+                  </Badge>
                   {req.videoDuration && (
                     <Badge variant="outline" className="no-default-active-elevate">
                       <Clock className="h-3 w-3 mr-1" />

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Smartphone } from "lucide-react";
 
 interface StructuredBrief {
   _type: "ci_brief";
@@ -115,8 +115,13 @@ export function VideoRequestDescription({ description }: { description: string }
         </div>
       )}
 
-      {(structured.format_suggestion || structured.estimated_length || structured.difficulty) && (
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="outline" className="gap-1">
+          <Smartphone className="h-3 w-3" />
+          Portrait (9:16)
+        </Badge>
+        {(structured.format_suggestion || structured.estimated_length || structured.difficulty) && (
+          <>
           {structured.format_suggestion && (
             <TooltipProvider>
               <Tooltip>
@@ -146,8 +151,9 @@ export function VideoRequestDescription({ description }: { description: string }
               </Tooltip>
             </TooltipProvider>
           )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {structured.notes_for_creator && (
         <div>
