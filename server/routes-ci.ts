@@ -963,71 +963,83 @@ export function registerCiRoutes(app: Express) {
 
       // For scripts: generate from latest brief
       if (step === "scripts") {
-        // Support generating a single script by briefId + itemIndex, or all scripts for latest brief
+        // Support generating a single script by briefId + itemIndex, or all unscripted items across all briefs
         const targetBriefId = req.body.briefId;
         const targetItemIndex = req.body.itemIndex !== undefined ? Number(req.body.itemIndex) : undefined;
 
-        let brief;
-        if (targetBriefId) {
-          brief = await storage.getCiContentBrief(targetBriefId);
-        } else {
-          const briefs = await storage.getCiContentBriefs();
-          brief = briefs[0];
-        }
-        if (!brief) return res.status(400).json({ error: "No brief found" });
-        console.log(`[CI] Script generation: briefId=${brief.id}, targetItemIndex=${targetItemIndex}`);
         const scriptSystemPrompt = await storage.getCiSetting("script_system_prompt");
         const scriptUserPrompt = await storage.getCiSetting("script_user_prompt");
         const scriptModelSetting = await storage.getCiSetting("script_ai_model");
         const modelSetting = await storage.getCiSetting("ai_model");
         const scriptModel = scriptModelSetting?.value || modelSetting?.value || "anthropic/claude-sonnet-4-5";
-        console.log(`[CI] Script model: ${scriptModel}, hasSystemPrompt: ${!!scriptSystemPrompt?.value}, hasUserPrompt: ${!!scriptUserPrompt?.value}`);
-        const allItems = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
-        console.log(`[CI] Brief has ${allItems.length} items, targeting index ${targetItemIndex}`);
-        const items = targetItemIndex !== undefined ? [{ item: allItems[targetItemIndex], index: targetItemIndex }] : allItems.map((item, index) => ({ item, index }));
+
+        // Build list of briefs to process
+        let briefsToProcess: any[] = [];
+        if (targetBriefId) {
+          const brief = await storage.getCiContentBrief(targetBriefId);
+          if (brief) briefsToProcess = [brief];
+        } else {
+          briefsToProcess = await storage.getCiContentBriefs();
+        }
+        if (briefsToProcess.length === 0) return res.status(400).json({ error: "No briefs found" });
+
+        const existingScripts = await storage.getCiBriefScripts();
         let generated = 0;
+        let totalItems = 0;
         const errors: string[] = [];
-        for (const { item, index: i } of items) {
-          if (!item) { console.log(`[CI] Skipping null item at index ${i}`); continue; }
-          try {
-            console.log(`[CI] Generating script for item ${i}: "${item.title}"`);
-            const script = await generateScript({
-              briefItem: item,
-              systemPrompt: scriptSystemPrompt?.value || "",
-              userPromptTemplate: scriptUserPrompt?.value || "",
-              creatorName: "Creator",
-              creatorStyle: "warm and nurturing",
-              platform: "TikTok",
-              duration: item?.estimated_length || "60-90 seconds",
-              model: scriptModel,
-            });
-            const scriptText = typeof script === "string" ? script : JSON.stringify(script);
-            console.log(`[CI] Script generated for item ${i}, length: ${scriptText.length} chars`);
-            const hookMatch = scriptText.match(/HOOK[:\s]*\n?([\s\S]*?)(?=\nBODY[:\s]|$)/i);
-            const bodyMatch = scriptText.match(/BODY[:\s]*\n?([\s\S]*?)(?=\nCLOSE[:\s\+]|$)/i);
-            const ctaMatch = scriptText.match(/CLOSE\s*\+?\s*CTA[:\s]*\n?([\s\S]*?)$/i);
-            await storage.createCiBriefScript({
-              briefId: brief.id,
-              briefItemIndex: i,
-              title: item?.title || `Script ${i + 1}`,
-              hook: hookMatch?.[1]?.trim() || null,
-              body: bodyMatch?.[1]?.trim() || scriptText,
-              closeCta: ctaMatch?.[1]?.trim() || null,
-              status: "draft",
-              rawScript: { full: scriptText },
-            });
-            generated++;
-          } catch (err: any) {
-            const errMsg = err?.message || String(err);
-            console.error(`[CI] Script generation failed for item ${i}:`, errMsg);
-            errors.push(`Item ${i} (${item.title}): ${errMsg}`);
+
+        for (const brief of briefsToProcess) {
+          const allItems = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+          const briefExistingScripts = existingScripts.filter(s => String(s.briefId) === String(brief.id));
+
+          const items = targetItemIndex !== undefined
+            ? [{ item: allItems[targetItemIndex], index: targetItemIndex }]
+            : allItems.map((item: any, index: number) => ({ item, index }));
+
+          for (const { item, index: i } of items) {
+            if (!item) continue;
+            // Skip items that already have scripts
+            if (briefExistingScripts.some(s => s.briefItemIndex === i)) continue;
+            totalItems++;
+            try {
+              console.log(`[CI] Generating script for brief ${brief.id} item ${i}: "${item.title}"`);
+              const script = await generateScript({
+                briefItem: item,
+                systemPrompt: scriptSystemPrompt?.value || "",
+                userPromptTemplate: scriptUserPrompt?.value || "",
+                creatorName: "Creator",
+                creatorStyle: "warm and nurturing",
+                platform: "TikTok",
+                duration: item?.estimated_length || "60-90 seconds",
+                model: scriptModel,
+              });
+              const scriptText = typeof script === "string" ? script : JSON.stringify(script);
+              const hookMatch = scriptText.match(/HOOK[:\s]*\n?([\s\S]*?)(?=\nBODY[:\s]|$)/i);
+              const bodyMatch = scriptText.match(/BODY[:\s]*\n?([\s\S]*?)(?=\nCLOSE[:\s\+]|$)/i);
+              const ctaMatch = scriptText.match(/CLOSE\s*\+?\s*CTA[:\s]*\n?([\s\S]*?)$/i);
+              await storage.createCiBriefScript({
+                briefId: brief.id,
+                briefItemIndex: i,
+                title: item?.title || `Script ${i + 1}`,
+                hook: hookMatch?.[1]?.trim() || null,
+                body: bodyMatch?.[1]?.trim() || scriptText,
+                closeCta: ctaMatch?.[1]?.trim() || null,
+                status: "draft",
+                rawScript: { full: scriptText },
+              });
+              generated++;
+            } catch (err: any) {
+              const errMsg = err?.message || String(err);
+              console.error(`[CI] Script generation failed for brief ${brief.id} item ${i}:`, errMsg);
+              errors.push(`${item.title}: ${errMsg}`);
+            }
           }
         }
         await storage.upsertCiSetting("pipeline_last_run_scripts", new Date().toISOString());
         if (generated === 0 && errors.length > 0) {
-          return res.status(500).json({ success: false, step, generated, total: items.length, error: errors.join("; ") });
+          return res.status(500).json({ success: false, step, generated, total: totalItems, error: errors.join("; ") });
         }
-        return res.json({ success: true, step, generated, total: items.length, errors: errors.length > 0 ? errors : undefined });
+        return res.json({ success: true, step, generated, total: totalItems, errors: errors.length > 0 ? errors : undefined });
       }
 
       // For convert: auto-convert all unconverted scripts to video requests
