@@ -778,6 +778,12 @@ export function registerCiRoutes(app: Express) {
         let blocked = 0;
         for (const video of videos) {
           try {
+            // Guard: skip if analysis already exists (prevents duplicates on timeout/retry)
+            const existingAnalysis = await storage.getCiVideoAnalysisByVideoId(video.id);
+            if (existingAnalysis) {
+              await storage.updateCiScrapedVideo(video.id, { analysisStatus: existingAnalysis.blocked ? "blocked" : "completed" } as any);
+              continue;
+            }
             const competitor = await storage.getCiCompetitor(video.competitorId);
             const analysis = await analyzeVideo({
               transcript: video.transcript || "",
