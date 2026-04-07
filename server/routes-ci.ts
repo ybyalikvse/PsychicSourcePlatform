@@ -1574,6 +1574,48 @@ export function registerCiRoutes(app: Express) {
     }
   });
 
+  // Reset pipeline data (keeps competitors and settings)
+  router.post("/pipeline/reset", requireCronSecret, async (req, res) => {
+    try {
+      const deleteVideoRequests = req.body?.deleteVideoRequests === true;
+      const results: Record<string, number> = {};
+
+      // Delete in dependency order: scripts → briefs → analyses → videos
+      const allScripts = await storage.getCiBriefScripts();
+      for (const s of allScripts) await storage.deleteCiBriefScript(s.id);
+      results.scripts = allScripts.length;
+
+      const allBriefs = await storage.getCiContentBriefs();
+      for (const b of allBriefs) await storage.deleteCiContentBrief(b.id);
+      results.briefs = allBriefs.length;
+
+      const allAnalyses = await storage.getCiVideoAnalyses();
+      for (const a of allAnalyses) await storage.deleteCiVideoAnalysis(a.id);
+      results.analyses = allAnalyses.length;
+
+      const allVideos = await storage.getCiScrapedVideos();
+      for (const v of allVideos) await storage.deleteCiScrapedVideo(v.id);
+      results.videos = allVideos.length;
+
+      if (deleteVideoRequests) {
+        const allRequests = await storage.getVideoRequests();
+        for (const r of allRequests) await storage.deleteVideoRequest(r.id);
+        results.videoRequests = allRequests.length;
+      }
+
+      // Reset pipeline timestamps
+      const steps = ["scrape", "transcripts", "analyze", "brief", "scripts", "convert", "performance"];
+      for (const step of steps) {
+        await storage.upsertCiSetting(`pipeline_last_run_${step}`, "");
+      }
+
+      res.json({ success: true, deleted: results });
+    } catch (error: any) {
+      console.error("[CI] Reset error:", error);
+      res.status(500).json({ error: "Reset failed: " + (error?.message || "Unknown") });
+    }
+  });
+
   router.post("/settings/seed", async (req, res) => {
     try {
       const defaults: Array<{
