@@ -5412,6 +5412,12 @@ __export(schema_exports, {
   insertPsychicSchema: () => insertPsychicSchema,
   insertSeoSettingsSchema: () => insertSeoSettingsSchema,
   insertSiteUrlSchema: () => insertSiteUrlSchema,
+  insertSocialCarouselTypeSchema: () => insertSocialCarouselTypeSchema,
+  insertSocialMediaLibrarySchema: () => insertSocialMediaLibrarySchema,
+  insertSocialPostSchema: () => insertSocialPostSchema,
+  insertSocialPostSlideSchema: () => insertSocialPostSlideSchema,
+  insertSocialSlideTemplateSchema: () => insertSocialSlideTemplateSchema,
+  insertSocialTemplateSetSchema: () => insertSocialTemplateSetSchema,
   insertTargetAudienceSchema: () => insertTargetAudienceSchema,
   insertUserSchema: () => insertUserSchema,
   insertVideoCaptionPromptSchema: () => insertVideoCaptionPromptSchema,
@@ -5438,6 +5444,12 @@ __export(schema_exports, {
   psychics: () => psychics,
   seoSettings: () => seoSettings,
   siteUrls: () => siteUrls,
+  socialCarouselTypes: () => socialCarouselTypes,
+  socialMediaLibrary: () => socialMediaLibrary,
+  socialPostSlides: () => socialPostSlides,
+  socialPosts: () => socialPosts,
+  socialSlideTemplates: () => socialSlideTemplates,
+  socialTemplateSets: () => socialTemplateSets,
   targetAudiences: () => targetAudiences,
   users: () => users,
   videoCaptionPrompts: () => videoCaptionPrompts,
@@ -16420,8 +16432,8 @@ var vspContentProjects = pgTable("vsp_content_projects", {
   videoSettings: json("video_settings"),
   videoUrl: text("video_url"),
   revidProjectId: text("revid_project_id"),
-  soraJobId: text("sora_job_id"),
   veoOperationName: text("veo_operation_name"),
+  falRequestId: text("fal_request_id"),
   status: text("status").notNull().default("draft"),
   analytics: json("analytics"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -16626,7 +16638,7 @@ var vspCaptionGenerationSchema = external_exports.object({
 });
 var vspVideoGenerationSchema = external_exports.object({
   projectId: external_exports.string(),
-  videoEngine: external_exports.enum(["revid", "sora", "veo"]).default("revid"),
+  videoEngine: external_exports.enum(["revid", "veo", "kling", "omnihuman"]).default("revid"),
   style: external_exports.string().optional(),
   voice: external_exports.string().optional(),
   generationPreset: external_exports.string().optional(),
@@ -16643,17 +16655,17 @@ var vspVideoGenerationSchema = external_exports.object({
   hasToGenerateVoice: external_exports.boolean().optional(),
   hasToGenerateMusic: external_exports.boolean().optional(),
   generationMusicPrompt: external_exports.string().optional(),
-  soraModel: external_exports.enum(["sora-2", "sora-2-pro"]).optional(),
-  soraSize: external_exports.enum(["1280x720", "720x1280", "1080x1080"]).optional(),
-  soraSeconds: external_exports.number().optional(),
-  soraCustomInstructions: external_exports.string().optional(),
-  soraReferenceImage: external_exports.string().optional(),
-  soraVisualPrompt: external_exports.string().optional(),
   veoAspectRatio: external_exports.enum(["9:16", "16:9"]).optional(),
-  veoResolution: external_exports.enum(["720p", "1080p"]).optional(),
+  veoResolution: external_exports.enum(["720p", "1080p", "4k"]).optional(),
+  veoDuration: external_exports.enum(["auto", "4", "6", "8"]).optional(),
+  veoFirstFrameImage: external_exports.string().optional(),
+  // base64 image to use as first frame
+  veoLastFrameImage: external_exports.string().optional(),
+  // base64 image for interpolation (used with first frame)
+  veoPersonGeneration: external_exports.enum(["dont_allow", "allow_adult", "allow_all"]).optional(),
+  veoNumberOfVideos: external_exports.number().min(1).max(4).optional(),
   veoCustomInstructions: external_exports.string().optional(),
   veoReferenceImages: external_exports.array(external_exports.string()).max(3).optional(),
-  veoNegativePrompt: external_exports.string().optional(),
   characterProfile: external_exports.object({
     description: external_exports.string(),
     wardrobe: external_exports.string().optional(),
@@ -16663,7 +16675,20 @@ var vspVideoGenerationSchema = external_exports.object({
   cinematography: external_exports.object({
     cameraStyle: external_exports.string().optional(),
     lightingStyle: external_exports.string().optional()
-  }).optional()
+  }).optional(),
+  // Kling v3 Pro parameters
+  klingAspectRatio: external_exports.enum(["16:9", "9:16", "1:1"]).optional(),
+  klingDuration: external_exports.enum(["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"]).optional(),
+  klingTier: external_exports.enum(["pro", "standard"]).optional(),
+  klingReferenceImage: external_exports.string().optional(),
+  klingCustomInstructions: external_exports.string().optional(),
+  klingElementBinding: external_exports.boolean().optional(),
+  klingUseMultiPrompt: external_exports.boolean().optional(),
+  // OmniHuman 1.5 parameters
+  omniReferenceImage: external_exports.string().optional(),
+  omniAudioUrl: external_exports.string().optional(),
+  omniResolution: external_exports.enum(["720p", "1080p"]).optional(),
+  omniVoiceId: external_exports.string().optional()
 });
 var vspPublishToPostBridgeSchema = external_exports.object({
   socialAccountIds: external_exports.array(external_exports.number()).min(1),
@@ -16782,6 +16807,95 @@ var ciSettings = pgTable("ci_settings", {
   updatedAt: text("updated_at").notNull().default(sql`now()`)
 });
 var insertCiSettingSchema = createInsertSchema(ciSettings).omit({ id: true, updatedAt: true });
+var socialPosts = pgTable("social_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull().default("single"),
+  // 'single' or 'carousel'
+  platform: text("platform").notNull().default("both"),
+  // 'instagram', 'tiktok', 'both'
+  topic: text("topic"),
+  caption: text("caption"),
+  hashtags: text("hashtags"),
+  status: text("status").notNull().default("draft"),
+  // 'draft', 'scheduled', 'publishing', 'published', 'failed'
+  scheduledAt: text("scheduled_at"),
+  publishedAt: text("published_at"),
+  error: text("error"),
+  carouselTypeId: varchar("carousel_type_id"),
+  templateSetId: varchar("template_set_id"),
+  slideCount: integer("slide_count").default(5),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+  updatedAt: text("updated_at").notNull().default(sql`now()`)
+});
+var insertSocialPostSchema = createInsertSchema(socialPosts).omit({ id: true, createdAt: true, updatedAt: true });
+var socialPostSlides = pgTable("social_post_slides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").references(() => socialPosts.id, { onDelete: "cascade" }).notNull(),
+  slideOrder: integer("slide_order").notNull(),
+  templateType: text("template_type").notNull().default("content"),
+  // 'single', 'cover', 'content', 'cta'
+  title: text("title"),
+  bodyText: text("body_text"),
+  imageUrl: text("image_url"),
+  backgroundImageUrl: text("background_image_url"),
+  imagePrompt: text("image_prompt"),
+  platformUrls: json("platform_urls"),
+  // { instagram: "url", tiktok: "url" }
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertSocialPostSlideSchema = createInsertSchema(socialPostSlides).omit({ id: true, createdAt: true });
+var socialCarouselTypes = pgTable("social_carousel_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  emoji: text("emoji").default(""),
+  description: text("description"),
+  topicPrompt: text("topic_prompt"),
+  contentPrompt: text("content_prompt"),
+  captionPrompt: text("caption_prompt"),
+  active: boolean("active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertSocialCarouselTypeSchema = createInsertSchema(socialCarouselTypes).omit({ id: true, createdAt: true });
+var socialTemplateSets = pgTable("social_template_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  imagePromptTemplate: text("image_prompt_template"),
+  active: boolean("active").default(true),
+  igFontScale: text("ig_font_scale").default("1.0"),
+  watermark: text("watermark"),
+  watermarkImage: text("watermark_image"),
+  watermarkPosition: text("watermark_position").default("bottom-right"),
+  watermarkSize: integer("watermark_size").default(40),
+  watermarkOpacity: text("watermark_opacity").default("0.7"),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertSocialTemplateSetSchema = createInsertSchema(socialTemplateSets).omit({ id: true, createdAt: true });
+var socialSlideTemplates = pgTable("social_slide_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  // 'single', 'cover', 'content', 'cta'
+  setName: text("set_name").notNull(),
+  config: json("config").notNull(),
+  // { bg_gradient, text_color, accent_color, font, text_mode, etc. }
+  imagePromptTemplate: text("image_prompt_template"),
+  active: boolean("active").default(true),
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertSocialSlideTemplateSchema = createInsertSchema(socialSlideTemplates).omit({ id: true, createdAt: true });
+var socialMediaLibrary = pgTable("social_media_library", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  url: text("url").notNull(),
+  prompt: text("prompt"),
+  tags: json("tags"),
+  // string[]
+  source: text("source").default("ai"),
+  // 'ai', 'upload', 'unsplash'
+  createdAt: text("created_at").notNull().default(sql`now()`)
+});
+var insertSocialMediaLibrarySchema = createInsertSchema(socialMediaLibrary).omit({ id: true, createdAt: true });
 
 // server/storage.ts
 import { randomUUID } from "crypto";
@@ -17476,7 +17590,6 @@ var DatabaseStorage = class {
       script: vspContentProjects.script,
       caption: vspContentProjects.caption,
       revidProjectId: vspContentProjects.revidProjectId,
-      soraJobId: vspContentProjects.soraJobId,
       veoOperationName: vspContentProjects.veoOperationName,
       status: vspContentProjects.status,
       analytics: vspContentProjects.analytics,
@@ -18006,7 +18119,12 @@ var DatabaseStorage = class {
       rawAnalysis: ciVideoAnalyses.rawAnalysis,
       weekAdded: ciVideoAnalyses.weekAdded,
       createdAt: ciVideoAnalyses.createdAt,
-      videoBriefStatus: ciScrapedVideos.briefStatus
+      videoBriefStatus: ciScrapedVideos.briefStatus,
+      videoViewCount: ciScrapedVideos.viewCount,
+      videoLikeCount: ciScrapedVideos.likeCount,
+      videoCommentCount: ciScrapedVideos.commentCount,
+      videoShareCount: ciScrapedVideos.shareCount,
+      videoPostedAt: ciScrapedVideos.postedAt
     }).from(ciVideoAnalyses).leftJoin(ciScrapedVideos, eq(ciVideoAnalyses.scrapedVideoId, ciScrapedVideos.id)).where(
       and(
         eq(ciVideoAnalyses.blocked, false),
@@ -18014,7 +18132,15 @@ var DatabaseStorage = class {
         eq(ciScrapedVideos.briefStatus, "pending")
       )
     ).orderBy(desc(ciVideoAnalyses.createdAt));
-    return rows.map((r) => ({ ...r, videoBriefStatus: r.videoBriefStatus ?? "pending" }));
+    return rows.map((r) => ({
+      ...r,
+      videoBriefStatus: r.videoBriefStatus ?? "pending",
+      videoViewCount: r.videoViewCount ?? 0,
+      videoLikeCount: r.videoLikeCount ?? 0,
+      videoCommentCount: r.videoCommentCount ?? 0,
+      videoShareCount: r.videoShareCount ?? 0,
+      videoPostedAt: r.videoPostedAt ?? null
+    }));
   }
   async markVideoAsBriefed(videoId) {
     await db.update(ciScrapedVideos).set({ briefStatus: "briefed" }).where(eq(ciScrapedVideos.id, videoId));
@@ -18106,6 +18232,156 @@ var DatabaseStorage = class {
       valueType: meta?.valueType ?? "text"
     }).returning();
     return result;
+  }
+  // ============ SOCIAL POSTS ============
+  async getSocialPosts() {
+    const results = await db.select().from(socialPosts).orderBy(desc(socialPosts.updatedAt));
+    return results;
+  }
+  async getSocialPost(id) {
+    const [post] = await db.select().from(socialPosts).where(eq(socialPosts.id, id));
+    if (!post) return void 0;
+    return post;
+  }
+  async createSocialPost(post) {
+    const id = randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const [result] = await db.insert(socialPosts).values({ ...post, id, createdAt: now, updatedAt: now }).returning();
+    return result;
+  }
+  async updateSocialPost(id, updates) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const [result] = await db.update(socialPosts).set({ ...updates, updatedAt: now }).where(eq(socialPosts.id, id)).returning();
+    if (!result) return void 0;
+    return result;
+  }
+  async deleteSocialPost(id) {
+    const results = await db.delete(socialPosts).where(eq(socialPosts.id, id)).returning();
+    return results.length > 0;
+  }
+  // ============ SOCIAL POST SLIDES ============
+  async getSocialPostSlides(postId) {
+    const results = await db.select().from(socialPostSlides).where(eq(socialPostSlides.postId, postId)).orderBy(asc(socialPostSlides.slideOrder));
+    return results;
+  }
+  async createSocialPostSlide(slide) {
+    const id = randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const [result] = await db.insert(socialPostSlides).values({ ...slide, id, createdAt: now }).returning();
+    return result;
+  }
+  async updateSocialPostSlide(id, updates) {
+    const [result] = await db.update(socialPostSlides).set(updates).where(eq(socialPostSlides.id, id)).returning();
+    if (!result) return void 0;
+    return result;
+  }
+  async deleteSocialPostSlide(id) {
+    const results = await db.delete(socialPostSlides).where(eq(socialPostSlides.id, id)).returning();
+    return results.length > 0;
+  }
+  async deleteSocialPostSlidesByPostId(postId) {
+    const results = await db.delete(socialPostSlides).where(eq(socialPostSlides.postId, postId)).returning();
+    return results.length >= 0;
+  }
+  // ============ SOCIAL CAROUSEL TYPES ============
+  async getSocialCarouselTypes() {
+    const results = await db.select().from(socialCarouselTypes).orderBy(asc(socialCarouselTypes.sortOrder));
+    return results;
+  }
+  async getSocialCarouselType(id) {
+    const [result] = await db.select().from(socialCarouselTypes).where(eq(socialCarouselTypes.id, id));
+    if (!result) return void 0;
+    return result;
+  }
+  async createSocialCarouselType(type) {
+    const id = randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const [result] = await db.insert(socialCarouselTypes).values({ ...type, id, createdAt: now }).returning();
+    return result;
+  }
+  async updateSocialCarouselType(id, updates) {
+    const [result] = await db.update(socialCarouselTypes).set(updates).where(eq(socialCarouselTypes.id, id)).returning();
+    if (!result) return void 0;
+    return result;
+  }
+  async deleteSocialCarouselType(id) {
+    const results = await db.delete(socialCarouselTypes).where(eq(socialCarouselTypes.id, id)).returning();
+    return results.length > 0;
+  }
+  // ============ SOCIAL TEMPLATE SETS ============
+  async getSocialTemplateSets() {
+    const results = await db.select().from(socialTemplateSets).orderBy(desc(socialTemplateSets.createdAt));
+    return results;
+  }
+  async getSocialTemplateSet(id) {
+    const [result] = await db.select().from(socialTemplateSets).where(eq(socialTemplateSets.id, id));
+    if (!result) return void 0;
+    return result;
+  }
+  async createSocialTemplateSet(set) {
+    const id = randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const [result] = await db.insert(socialTemplateSets).values({ ...set, id, createdAt: now }).returning();
+    return result;
+  }
+  async updateSocialTemplateSet(id, updates) {
+    const [result] = await db.update(socialTemplateSets).set(updates).where(eq(socialTemplateSets.id, id)).returning();
+    if (!result) return void 0;
+    return result;
+  }
+  async deleteSocialTemplateSet(id) {
+    const results = await db.delete(socialTemplateSets).where(eq(socialTemplateSets.id, id)).returning();
+    return results.length > 0;
+  }
+  // ============ SOCIAL SLIDE TEMPLATES ============
+  async getSocialSlideTemplates(setName) {
+    if (setName) {
+      const results2 = await db.select().from(socialSlideTemplates).where(eq(socialSlideTemplates.setName, setName)).orderBy(asc(socialSlideTemplates.type));
+      return results2;
+    }
+    const results = await db.select().from(socialSlideTemplates).orderBy(asc(socialSlideTemplates.type));
+    return results;
+  }
+  async getSocialSlideTemplate(id) {
+    const [result] = await db.select().from(socialSlideTemplates).where(eq(socialSlideTemplates.id, id));
+    if (!result) return void 0;
+    return result;
+  }
+  async createSocialSlideTemplate(template) {
+    const id = randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const [result] = await db.insert(socialSlideTemplates).values({ ...template, id, createdAt: now }).returning();
+    return result;
+  }
+  async updateSocialSlideTemplate(id, updates) {
+    const [result] = await db.update(socialSlideTemplates).set(updates).where(eq(socialSlideTemplates.id, id)).returning();
+    if (!result) return void 0;
+    return result;
+  }
+  async deleteSocialSlideTemplate(id) {
+    const results = await db.delete(socialSlideTemplates).where(eq(socialSlideTemplates.id, id)).returning();
+    return results.length > 0;
+  }
+  // ============ SOCIAL MEDIA LIBRARY ============
+  async getSocialMediaLibrary(tag) {
+    const results = await db.select().from(socialMediaLibrary).orderBy(desc(socialMediaLibrary.createdAt));
+    if (tag) {
+      return results.filter((item) => {
+        const tags = item.tags;
+        return tags && tags.includes(tag);
+      });
+    }
+    return results;
+  }
+  async createSocialMediaLibraryItem(item) {
+    const id = randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const [result] = await db.insert(socialMediaLibrary).values({ ...item, id, createdAt: now }).returning();
+    return result;
+  }
+  async deleteSocialMediaLibraryItem(id) {
+    const results = await db.delete(socialMediaLibrary).where(eq(socialMediaLibrary.id, id)).returning();
+    return results.length > 0;
   }
 };
 var storage = new DatabaseStorage();
