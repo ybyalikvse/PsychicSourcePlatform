@@ -1189,32 +1189,7 @@ export function registerCiRoutes(app: Express) {
       if (req.query.minReplicationScore) filters.minReplicationScore = parseInt(req.query.minReplicationScore as string, 10);
       if (req.query.weekAdded) filters.weekAdded = req.query.weekAdded as string;
 
-      const analyses = await storage.getCiVideoAnalyses(filters);
-
-      // Batch-load all videos and competitors upfront (avoids N+1 queries)
-      const allVideos = await storage.getCiScrapedVideos({});
-      const allCompetitors = await storage.getCiCompetitors();
-      const videoMap = new Map(allVideos.map(v => [v.id, v]));
-      const competitorMap = new Map(allCompetitors.map(c => [c.id, c]));
-
-      const enriched = analyses.map((a) => {
-        const video = videoMap.get(a.scrapedVideoId);
-        const competitor = video ? competitorMap.get(video.competitorId) : null;
-        return {
-          ...a,
-          creator: competitor?.handle || "unknown",
-          platform: competitor?.platform || "tiktok",
-          views: video?.viewCount ?? 0,
-          videoUrl: video?.url || null,
-          likes: video?.likeCount ?? 0,
-          shares: video?.shareCount ?? 0,
-          comments: video?.commentCount ?? 0,
-          postedAt: video?.postedAt || null,
-          transcriptPreview: video?.transcript ? video.transcript.substring(0, 200) + (video.transcript.length > 200 ? "..." : "") : null,
-          transcript: video?.transcript || null,
-        };
-      });
-
+      const enriched = await storage.getCiVideoAnalysesEnriched(filters);
       res.json(enriched);
     } catch (error) {
       console.error("[CI] Error fetching analyses:", error);

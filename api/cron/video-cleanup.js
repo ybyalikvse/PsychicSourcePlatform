@@ -18069,15 +18069,69 @@ var DatabaseStorage = class {
   }
   // ===== CI Video Analyses =====
   async getCiVideoAnalyses(filters) {
-    const all = await db.select().from(ciVideoAnalyses).orderBy(desc(ciVideoAnalyses.createdAt));
-    if (!filters) return all;
-    return all.filter((a) => {
-      if (filters.hookType && a.hookType !== filters.hookType) return false;
-      if (filters.topicCategory && a.topicCategory !== filters.topicCategory) return false;
-      if (filters.minReplicationScore && (a.replicationScore || 0) < filters.minReplicationScore) return false;
-      if (filters.weekAdded && a.weekAdded !== filters.weekAdded) return false;
-      return true;
-    });
+    const conditions = [];
+    if (filters?.hookType) conditions.push(eq(ciVideoAnalyses.hookType, filters.hookType));
+    if (filters?.topicCategory) conditions.push(eq(ciVideoAnalyses.topicCategory, filters.topicCategory));
+    if (filters?.minReplicationScore) conditions.push(gte(ciVideoAnalyses.replicationScore, filters.minReplicationScore));
+    if (filters?.weekAdded) conditions.push(eq(ciVideoAnalyses.weekAdded, filters.weekAdded));
+    const query = db.select().from(ciVideoAnalyses).orderBy(desc(ciVideoAnalyses.createdAt));
+    if (conditions.length > 0) {
+      return query.where(and(...conditions));
+    }
+    return query;
+  }
+  async getCiVideoAnalysesEnriched(filters) {
+    const conditions = [];
+    if (filters?.hookType) conditions.push(eq(ciVideoAnalyses.hookType, filters.hookType));
+    if (filters?.topicCategory) conditions.push(eq(ciVideoAnalyses.topicCategory, filters.topicCategory));
+    if (filters?.minReplicationScore) conditions.push(gte(ciVideoAnalyses.replicationScore, filters.minReplicationScore));
+    if (filters?.weekAdded) conditions.push(eq(ciVideoAnalyses.weekAdded, filters.weekAdded));
+    const query = db.select({
+      id: ciVideoAnalyses.id,
+      scrapedVideoId: ciVideoAnalyses.scrapedVideoId,
+      blocked: ciVideoAnalyses.blocked,
+      blockReason: ciVideoAnalyses.blockReason,
+      topicCategory: ciVideoAnalyses.topicCategory,
+      topicSummary: ciVideoAnalyses.topicSummary,
+      hookText: ciVideoAnalyses.hookText,
+      hookType: ciVideoAnalyses.hookType,
+      hookSummary: ciVideoAnalyses.hookSummary,
+      emotionalAngle: ciVideoAnalyses.emotionalAngle,
+      targetAudience: ciVideoAnalyses.targetAudience,
+      format: ciVideoAnalyses.format,
+      ctaType: ciVideoAnalyses.ctaType,
+      replicationScore: ciVideoAnalyses.replicationScore,
+      notes: ciVideoAnalyses.notes,
+      rawAnalysis: ciVideoAnalyses.rawAnalysis,
+      weekAdded: ciVideoAnalyses.weekAdded,
+      createdAt: ciVideoAnalyses.createdAt,
+      // Video fields (no transcript)
+      videoUrl: ciScrapedVideos.url,
+      viewCount: ciScrapedVideos.viewCount,
+      likeCount: ciScrapedVideos.likeCount,
+      commentCount: ciScrapedVideos.commentCount,
+      shareCount: ciScrapedVideos.shareCount,
+      postedAt: ciScrapedVideos.postedAt,
+      transcriptPreview: sql`CASE WHEN length(${ciScrapedVideos.transcript}) > 200 THEN substring(${ciScrapedVideos.transcript} from 1 for 200) || '...' ELSE ${ciScrapedVideos.transcript} END`.as("transcript_preview"),
+      // Competitor fields
+      competitorHandle: ciCompetitors.handle,
+      competitorPlatform: ciCompetitors.platform
+    }).from(ciVideoAnalyses).leftJoin(ciScrapedVideos, eq(ciVideoAnalyses.scrapedVideoId, ciScrapedVideos.id)).leftJoin(ciCompetitors, eq(ciScrapedVideos.competitorId, ciCompetitors.id)).orderBy(desc(ciVideoAnalyses.createdAt));
+    const rows = conditions.length > 0 ? await query.where(and(...conditions)) : await query;
+    return rows.map((r) => ({
+      ...r,
+      creator: r.competitorHandle || "unknown",
+      platform: r.competitorPlatform || "tiktok",
+      views: r.viewCount ?? 0,
+      videoUrl: r.videoUrl || null,
+      likes: r.likeCount ?? 0,
+      shares: r.shareCount ?? 0,
+      comments: r.commentCount ?? 0,
+      postedAt: r.postedAt || null,
+      transcriptPreview: r.transcriptPreview || null,
+      transcript: null
+      // Don't send full transcripts in list view
+    }));
   }
   async getCiVideoAnalysis(id) {
     const [result] = await db.select().from(ciVideoAnalyses).where(eq(ciVideoAnalyses.id, id));
