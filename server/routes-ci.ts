@@ -23,6 +23,14 @@ function requireCronSecret(req: any, res: any, next: any) {
   next();
 }
 
+const MIN_VIDEOS_FOR_BRIEF = 3;
+
+function getDynamicBriefCount(videoCount: number): number {
+  if (videoCount <= 5) return 3;
+  if (videoCount <= 10) return 4;
+  return 5;
+}
+
 export function registerCiRoutes(app: Express) {
   const router = Router();
 
@@ -363,8 +371,8 @@ export function registerCiRoutes(app: Express) {
         } catch {}
       }
 
-      const briefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 5;
-      const userPromptTemplate = userPromptSetting.value.replace(/{BRIEF_COUNT}/g, String(briefCount));
+      const maxBriefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 5;
+      const userPromptTemplate = userPromptSetting.value; // {BRIEF_COUNT} replaced per-topic below
       const model = modelSetting?.value || "anthropic/claude-sonnet-4-5";
 
       // Get all unbriefed analyses (pending brief_status, not blocked, has topic)
@@ -385,8 +393,16 @@ export function registerCiRoutes(app: Express) {
         topicGroups[topic].push(a);
       }
 
+      // Filter out topics below minimum threshold
+      for (const [topic, group] of Object.entries(topicGroups)) {
+        if (group.length < MIN_VIDEOS_FOR_BRIEF) {
+          console.log(`[CI] Skipping topic "${topic}" — only ${group.length} video(s), need ${MIN_VIDEOS_FOR_BRIEF}+`);
+          delete topicGroups[topic];
+        }
+      }
+
       if (Object.keys(topicGroups).length === 0) {
-        return res.json({ success: true, message: filterTopic ? `No pending analyses for topic: ${filterTopic}` : "No new analyses to brief", briefs: [] });
+        return res.json({ success: true, message: filterTopic ? `Topic "${filterTopic}" has fewer than ${MIN_VIDEOS_FOR_BRIEF} analyses — accumulating` : "No topics have enough analyses yet", briefs: [] });
       }
 
       const createdBriefs: any[] = [];
@@ -394,16 +410,30 @@ export function registerCiRoutes(app: Express) {
 
       for (const [topicCategory, topicAnalyses] of Object.entries(topicGroups)) {
         try {
+          const dynamicCount = Math.min(getDynamicBriefCount(topicAnalyses.length), maxBriefCount);
+          const topicUserPrompt = userPromptTemplate.replace(/{BRIEF_COUNT}/g, String(dynamicCount));
+
           const briefResult = await generateWeeklyBrief({
             analyses: topicAnalyses.map(a => ({
               topicCategory: a.topicCategory,
-              hookType: a.hookType,
-              emotionalAngle: a.emotionalAngle,
-              replicationScore: a.replicationScore,
               topicSummary: a.topicSummary,
+              hookText: a.hookText,
+              hookType: a.hookType,
+              hookSummary: a.hookSummary,
+              emotionalAngle: a.emotionalAngle,
+              targetAudience: a.targetAudience,
+              format: a.format,
+              ctaType: a.ctaType,
+              replicationScore: a.replicationScore,
+              notes: a.notes,
+              viewCount: a.videoViewCount,
+              likeCount: a.videoLikeCount,
+              commentCount: a.videoCommentCount,
+              shareCount: a.videoShareCount,
+              postedAt: a.videoPostedAt,
             })),
             systemPrompt,
-            userPromptTemplate,
+            userPromptTemplate: topicUserPrompt,
             model,
           });
 
@@ -454,7 +484,15 @@ export function registerCiRoutes(app: Express) {
   router.get("/pipeline/brief-topics", requireCronSecret, async (req, res) => {
     try {
       const analyses = await storage.getCiAnalysesPendingBrief();
-      const topics = [...new Set(analyses.map(a => a.topicCategory).filter(Boolean))];
+      const topicCounts: Record<string, number> = {};
+      for (const a of analyses) {
+        if (a.topicCategory) {
+          topicCounts[a.topicCategory] = (topicCounts[a.topicCategory] || 0) + 1;
+        }
+      }
+      const topics = Object.entries(topicCounts)
+        .filter(([_, count]) => count >= MIN_VIDEOS_FOR_BRIEF)
+        .map(([topic]) => topic);
       res.json(topics);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch brief topics" });
@@ -823,9 +861,8 @@ export function registerCiRoutes(app: Express) {
           } catch {}
         }
 
-        const briefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 5;
-        const userPromptTemplate = (briefUserPrompt?.value || "")
-          .replace(/{BRIEF_COUNT}/g, String(briefCount));
+        const maxBriefCount = briefCountSetting ? parseInt(briefCountSetting.value, 10) : 5;
+        const userPromptTemplate = briefUserPrompt?.value || ""; // {BRIEF_COUNT} replaced per-topic below
         const model = modelSetting?.value || "anthropic/claude-sonnet-4-5";
 
         // Get all unbriefed analyses (pending brief_status, not blocked, has topic)
@@ -843,21 +880,43 @@ export function registerCiRoutes(app: Express) {
           topicGroups[topic].push(a);
         }
 
+        // Filter out topics below minimum threshold
+        for (const [topic, group] of Object.entries(topicGroups)) {
+          if (group.length < MIN_VIDEOS_FOR_BRIEF) {
+            console.log(`[CI] Skipping topic "${topic}" — only ${group.length} video(s), need ${MIN_VIDEOS_FOR_BRIEF}+`);
+            delete topicGroups[topic];
+          }
+        }
+
         const createdBriefs: any[] = [];
         let totalVideosProcessed = 0;
 
         for (const [topicCategory, topicAnalyses] of Object.entries(topicGroups)) {
           try {
+            const dynamicCount = Math.min(getDynamicBriefCount(topicAnalyses.length), maxBriefCount);
+            const topicUserPrompt = userPromptTemplate.replace(/{BRIEF_COUNT}/g, String(dynamicCount));
+
             const briefResult = await generateWeeklyBrief({
               analyses: topicAnalyses.map(a => ({
                 topicCategory: a.topicCategory,
-                hookType: a.hookType,
-                emotionalAngle: a.emotionalAngle,
-                replicationScore: a.replicationScore,
                 topicSummary: a.topicSummary,
+                hookText: a.hookText,
+                hookType: a.hookType,
+                hookSummary: a.hookSummary,
+                emotionalAngle: a.emotionalAngle,
+                targetAudience: a.targetAudience,
+                format: a.format,
+                ctaType: a.ctaType,
+                replicationScore: a.replicationScore,
+                notes: a.notes,
+                viewCount: a.videoViewCount,
+                likeCount: a.videoLikeCount,
+                commentCount: a.videoCommentCount,
+                shareCount: a.videoShareCount,
+                postedAt: a.videoPostedAt,
               })),
               systemPrompt,
-              userPromptTemplate,
+              userPromptTemplate: topicUserPrompt,
               model,
             });
 
@@ -916,17 +975,22 @@ export function registerCiRoutes(app: Express) {
           brief = briefs[0];
         }
         if (!brief) return res.status(400).json({ error: "No brief found" });
+        console.log(`[CI] Script generation: briefId=${brief.id}, targetItemIndex=${targetItemIndex}`);
         const scriptSystemPrompt = await storage.getCiSetting("script_system_prompt");
         const scriptUserPrompt = await storage.getCiSetting("script_user_prompt");
         const scriptModelSetting = await storage.getCiSetting("script_ai_model");
         const modelSetting = await storage.getCiSetting("ai_model");
         const scriptModel = scriptModelSetting?.value || modelSetting?.value || "anthropic/claude-sonnet-4-5";
+        console.log(`[CI] Script model: ${scriptModel}, hasSystemPrompt: ${!!scriptSystemPrompt?.value}, hasUserPrompt: ${!!scriptUserPrompt?.value}`);
         const allItems = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+        console.log(`[CI] Brief has ${allItems.length} items, targeting index ${targetItemIndex}`);
         const items = targetItemIndex !== undefined ? [{ item: allItems[targetItemIndex], index: targetItemIndex }] : allItems.map((item, index) => ({ item, index }));
         let generated = 0;
+        const errors: string[] = [];
         for (const { item, index: i } of items) {
-          if (!item) continue;
+          if (!item) { console.log(`[CI] Skipping null item at index ${i}`); continue; }
           try {
+            console.log(`[CI] Generating script for item ${i}: "${item.title}"`);
             const script = await generateScript({
               briefItem: item,
               systemPrompt: scriptSystemPrompt?.value || "",
@@ -938,6 +1002,7 @@ export function registerCiRoutes(app: Express) {
               model: scriptModel,
             });
             const scriptText = typeof script === "string" ? script : JSON.stringify(script);
+            console.log(`[CI] Script generated for item ${i}, length: ${scriptText.length} chars`);
             const hookMatch = scriptText.match(/HOOK[:\s]*\n?([\s\S]*?)(?=\nBODY[:\s]|$)/i);
             const bodyMatch = scriptText.match(/BODY[:\s]*\n?([\s\S]*?)(?=\nCLOSE[:\s\+]|$)/i);
             const ctaMatch = scriptText.match(/CLOSE\s*\+?\s*CTA[:\s]*\n?([\s\S]*?)$/i);
@@ -952,12 +1017,17 @@ export function registerCiRoutes(app: Express) {
               rawScript: { full: scriptText },
             });
             generated++;
-          } catch (err) {
-            console.error(`[CI] Script generation failed for item ${i}:`, err);
+          } catch (err: any) {
+            const errMsg = err?.message || String(err);
+            console.error(`[CI] Script generation failed for item ${i}:`, errMsg);
+            errors.push(`Item ${i} (${item.title}): ${errMsg}`);
           }
         }
         await storage.upsertCiSetting("pipeline_last_run_scripts", new Date().toISOString());
-        return res.json({ success: true, step, generated, total: items.length });
+        if (generated === 0 && errors.length > 0) {
+          return res.status(500).json({ success: false, step, generated, total: items.length, error: errors.join("; ") });
+        }
+        return res.json({ success: true, step, generated, total: items.length, errors: errors.length > 0 ? errors : undefined });
       }
 
       // For performance
@@ -1358,7 +1428,7 @@ export function registerCiRoutes(app: Express) {
         },
         {
           key: "brief_user_prompt",
-          value: "Based on the following competitor intelligence from {TOTAL_VIDEOS_ANALYZED} analyzed videos this week, generate {BRIEF_COUNT} video content briefs for our psychic creators.\n\nALL TOPICS FOUND (ranked by frequency):\n{INSERT_TOPICS}\n\nALL HOOK TYPES FOUND (ranked by frequency):\n{INSERT_HOOK_TYPES}\n\nALL EMOTIONAL ANGLES FOUND (ranked by frequency):\n{INSERT_EMOTIONAL_ANGLES}\n\nFor each brief, return a JSON array of objects with:\n- brief_id (string): sequential ID e.g. \"W23-01\"\n- topic_category (string)\n- title (string): the working title for this video - punchy, 8 words max\n- topic_description (string): 2-3 sentences explaining what the video should cover\n- hook_options (array of 3 strings): three different hooks the creator can choose from, each under 15 words, different styles\n- talking_points (array of 4-6 strings): the key points to hit in the video body\n- emotional_journey (string): describe the arc - where the viewer starts emotionally and where they should end\n- suggested_cta (string): what to ask viewers to do at the end\n- format_suggestion (string): recommended format for this topic\n- estimated_length (string): e.g. \"60-90 seconds\"\n- difficulty (string): easy | medium | advanced\n- notes_for_creator (string): any special tips, tone guidance, or things to avoid",
+          value: "Based on the following competitor intelligence from {TOTAL_VIDEOS_ANALYZED} analyzed videos this week, generate {BRIEF_COUNT} video content briefs for our psychic creators.\n\nIMPORTANT: Prioritize patterns from the highest-performing videos (most views, highest replication scores). Don't just count frequency — weight your ideas toward what actually gets views. Use the top videos below as your primary inspiration.\n\n=== TOP PERFORMING VIDEOS (ranked by views) ===\n{INSERT_TOP_VIDEOS}\n\n=== ENGAGEMENT-WEIGHTED TOPIC RANKING ===\n{INSERT_ENGAGEMENT_WEIGHTED_TOPICS}\n\n=== ENGAGEMENT-WEIGHTED HOOK RANKING ===\n{INSERT_ENGAGEMENT_WEIGHTED_HOOKS}\n\n=== ENGAGEMENT-WEIGHTED EMOTIONAL ANGLES ===\n{INSERT_ENGAGEMENT_WEIGHTED_EMOTIONS}\n\n=== FORMAT DISTRIBUTION ===\n{INSERT_FORMATS}\n\n=== CTA TYPES USED ===\n{INSERT_CTA_TYPES}\n\n=== TARGET AUDIENCES ===\n{INSERT_TARGET_AUDIENCES}\n\n=== AVERAGE REPLICATION SCORE: {AVG_REPLICATION_SCORE}/10 ===\n\n--- Frequency-based summaries ---\nTopics: {INSERT_TOPICS}\nHook types: {INSERT_HOOK_TYPES}\nEmotional angles: {INSERT_EMOTIONAL_ANGLES}\n\nFor each brief, return a JSON array of objects with:\n- brief_id (string): sequential ID e.g. \"W23-01\"\n- topic_category (string)\n- title (string): the working title for this video - punchy, 8 words max\n- topic_description (string): 2-3 sentences explaining what the video should cover\n- hook_options (array of 3 strings): three different hooks the creator can choose from, each under 15 words, different styles. Model these after the actual hooks that performed best above.\n- talking_points (array of 4-6 strings): the key points to hit in the video body\n- emotional_journey (string): describe the arc - where the viewer starts emotionally and where they should end\n- suggested_cta (string): what to ask viewers to do at the end\n- format_suggestion (string): recommended format for this topic based on what formats performed best\n- estimated_length (string): e.g. \"60-90 seconds\"\n- difficulty (string): easy | medium | advanced\n- notes_for_creator (string): any special tips, tone guidance, or things to avoid. Reference specific patterns from the top-performing videos when relevant.",
           category: "prompts",
           label: "Brief User Prompt",
           description: "User prompt template for weekly brief generation AI (supports placeholders)",
@@ -1504,8 +1574,12 @@ export function registerCiRoutes(app: Express) {
         },
       ];
 
+      // ?only=key1,key2 to re-seed specific settings without overwriting others
+      const onlyKeys = req.query.only ? (req.query.only as string).split(",").map(k => k.trim()) : null;
+      const filtered = onlyKeys ? defaults.filter(d => onlyKeys.includes(d.key)) : defaults;
+
       const results = [];
-      for (const d of defaults) {
+      for (const d of filtered) {
         const setting = await storage.upsertCiSetting(d.key, d.value, {
           category: d.category,
           label: d.label,

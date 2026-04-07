@@ -20,6 +20,10 @@ import {
   Brain,
   Eye,
   Search,
+  Instagram,
+  Palette,
+  LayoutGrid,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -139,6 +143,29 @@ const vspNavItems = [
   },
 ];
 
+const socialPostsNavItems = [
+  {
+    title: "Posts",
+    url: "/social-posts",
+    icon: Instagram,
+  },
+  {
+    title: "Templates",
+    url: "/social-posts/templates",
+    icon: Palette,
+  },
+  {
+    title: "Carousel Types",
+    url: "/social-posts/carousel-types",
+    icon: LayoutGrid,
+  },
+  {
+    title: "Media Library",
+    url: "/social-posts/media-library",
+    icon: ImageIcon,
+  },
+];
+
 const seoNavItems = [
   {
     title: "Performance",
@@ -228,6 +255,28 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     asChild
                     isActive={item.url === "/vsp" ? location === "/vsp" : location.startsWith(item.url)}
+                    data-testid={`nav-${item.title.toLowerCase().replace(/ /g, '-')}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Social Posts</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {socialPostsNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={item.url === "/social-posts" ? location === "/social-posts" : location.startsWith(item.url)}
                     data-testid={`nav-${item.title.toLowerCase().replace(/ /g, '-')}`}
                   >
                     <Link href={item.url}>

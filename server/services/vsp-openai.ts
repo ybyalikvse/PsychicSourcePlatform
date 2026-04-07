@@ -263,33 +263,29 @@ ${colorPalette.map((color, i) => `${i + 1}. ${color}`).join('\n')}`;
     cinematographySection = `\n\nCINEMATOGRAPHY REQUIREMENTS:${cinematography.cameraStyle ? `\n- Camera Style: ${cinematography.cameraStyle}` : ''}${cinematography.lightingStyle ? `\n- Lighting Style: ${cinematography.lightingStyle}` : ''}`;
   }
 
-  const prompt = `You are a professional video director creating detailed visual and audio instructions for an AI video generator (Sora 2).
+  const prompt = `You are creating a concise visual prompt for Veo 3.1 AI video generation. Keep your output SHORT (100-150 words max). Veo works best with direct, specific prompts — not long essays.
 
-CRITICAL - SPOKEN DIALOGUE (MUST INCLUDE VERBATIM):
-The character in the video MUST speak these EXACT words as voiceover/dialogue:
+SCRIPT (the character speaks these exact words):
 "${script.content}"
 
 Category: ${category}
 Topic: ${subtopic}${customInstructionSection}${characterSection}${colorSection}${cinematographySection}
 
-Create a comprehensive Sora 2 prompt that includes:
-1. DIALOGUE: Start with "The speaker says: '${script.content}'" - this is the MOST IMPORTANT part
-2. CHARACTER/SPEAKER: ${characterProfile ? 'Use the EXACT character description provided above' : 'Who is speaking (age, appearance, style, energy level)'}
-3. VOICE DELIVERY: How they speak the dialogue (tone, pace, emotion, expressiveness)
-4. SETTING: Environment, location, background details
-5. CAMERA: ${cinematography?.cameraStyle ? `Use the camera style specified above: ${cinematography.cameraStyle}` : 'Angles, movements, framing'}
-6. LIGHTING & MOOD: ${cinematography?.lightingStyle ? `Use the lighting specified above: ${cinematography.lightingStyle}` : 'Atmosphere, color palette, emotional tone'}${colorPalette ? `\n   Use ONLY these colors: ${colorPalette.join(', ')}` : ''}
-7. LIP-SYNC & ACTIONS: Physical movements, gestures, expressions matching the dialogue
-8. BACKGROUND AUDIO: Ambient sounds or subtle music (if any)
-${customInstructions ? '\nIMPORTANT: Incorporate the custom instructions above into your visual directions where relevant (style, camera, lighting, mood, etc.).' : ''}
-${characterProfile || colorPalette || cinematography ? '\nCRITICAL: You MUST include the character description, wardrobe, and color palette EXACTLY as specified.' : ''}
+Write a SHORT prompt that covers:
+1. Start with: "The speaker says: [first 20 words of script]..."
+2. Character appearance (${characterProfile ? 'use the exact description above' : 'specific age, features, clothing'})
+3. Setting and mood (cozy, warm, inviting — specific details)
+4. Voice delivery (warm, conversational, unhurried pace)
 
-YOUR OUTPUT MUST:
-1. Begin with the exact dialogue to be spoken
-2. Include "voiceover" or "speaks" to trigger Sora's audio generation
-3. Describe how the character delivers the lines with emotion and lip-sync
+MANDATORY REALISM RULES (weave these naturally into your prompt):
+- "Shot on 35mm film" or "documentary-style footage" — this triggers Veo's realism mode
+- Mention specific skin details: "visible pores, natural laugh lines, slight skin unevenness"
+- "Practical warm lighting from real lamps" — never say "studio lighting"
+- "Handheld camera with subtle natural movement"
+- "Muted, desaturated color grading" — avoid words like "vibrant" or "stunning"
+- NEVER use words: cinematic, beautiful, stunning, perfect, flawless, gorgeous, polished
 
-Write a detailed paragraph (200-300 words) for Sora 2 to generate a video with synchronized dialogue.`;
+OUTPUT: One concise paragraph, 100-150 words. No bullet points. No section headers.`;
 
   try {
     const response = await openai.chat.completions.create({

@@ -155,6 +155,12 @@ export async function analyzeVideo(params: {
   return JSON.parse(cleanJsonResponse(content));
 }
 
+function formatViewCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
+  return String(n);
+}
+
 /**
  * Generate a weekly content brief from aggregated analyses.
  */
@@ -169,7 +175,7 @@ export async function generateWeeklyBrief(params: {
     apiKey: process.env.OPENROUTER_API_KEY,
   });
 
-  // Aggregate top topics by frequency
+  // --- Frequency-based aggregations (backward compatible) ---
   const topicCounts: Record<string, number> = {};
   const hookCounts: Record<string, number> = {};
   const emotionCounts: Record<string, number> = {};
@@ -192,11 +198,94 @@ export async function generateWeeklyBrief(params: {
     .sort((a, b) => b[1] - a[1])
     .map(([emotion, count]) => `${emotion} (${count} videos)`);
 
+  // --- Engagement-weighted aggregations ---
+  const topicEngagement: Record<string, { count: number; totalViews: number; totalReplication: number }> = {};
+  const hookEngagement: Record<string, { count: number; totalViews: number }> = {};
+  const emotionEngagement: Record<string, { count: number; totalViews: number }> = {};
+  const formatCounts: Record<string, number> = {};
+  const ctaCounts: Record<string, number> = {};
+  const audienceCounts: Record<string, number> = {};
+  let totalReplication = 0;
+  let replicationCount = 0;
+
+  for (const a of params.analyses) {
+    const views = a.viewCount || 0;
+    if (a.topicCategory) {
+      const e = topicEngagement[a.topicCategory] || { count: 0, totalViews: 0, totalReplication: 0 };
+      e.count++;
+      e.totalViews += views;
+      e.totalReplication += a.replicationScore || 0;
+      topicEngagement[a.topicCategory] = e;
+    }
+    if (a.hookType) {
+      const e = hookEngagement[a.hookType] || { count: 0, totalViews: 0 };
+      e.count++;
+      e.totalViews += views;
+      hookEngagement[a.hookType] = e;
+    }
+    if (a.emotionalAngle) {
+      const e = emotionEngagement[a.emotionalAngle] || { count: 0, totalViews: 0 };
+      e.count++;
+      e.totalViews += views;
+      emotionEngagement[a.emotionalAngle] = e;
+    }
+    if (a.format) formatCounts[a.format] = (formatCounts[a.format] || 0) + 1;
+    if (a.ctaType) ctaCounts[a.ctaType] = (ctaCounts[a.ctaType] || 0) + 1;
+    if (a.targetAudience) audienceCounts[a.targetAudience] = (audienceCounts[a.targetAudience] || 0) + 1;
+    if (a.replicationScore) { totalReplication += a.replicationScore; replicationCount++; }
+  }
+
+  const avgReplication = replicationCount > 0 ? (totalReplication / replicationCount).toFixed(1) : "N/A";
+
+  // Top videos ranked by views (max 10)
+  const topVideos = [...params.analyses]
+    .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+    .slice(0, 10)
+    .map((a, i) => {
+      const lines = [`#${i + 1} — Views: ${formatViewCount(a.viewCount || 0)} | Likes: ${formatViewCount(a.likeCount || 0)} | Comments: ${formatViewCount(a.commentCount || 0)} | Shares: ${formatViewCount(a.shareCount || 0)}`];
+      if (a.hookText) lines.push(`  Hook: "${(a.hookText as string).slice(0, 200)}"`);
+      lines.push(`  Format: ${a.format || "unknown"} | Emotion: ${a.emotionalAngle || "unknown"} | Hook Type: ${a.hookType || "unknown"} | Replication: ${a.replicationScore || "?"}/10`);
+      if (a.topicSummary) lines.push(`  Summary: ${(a.topicSummary as string).slice(0, 200)}`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+
+  // Engagement-weighted rankings
+  const engWeightedTopics = Object.entries(topicEngagement)
+    .sort((a, b) => b[1].totalViews - a[1].totalViews)
+    .map(([t, e]) => `${t} (${e.count} videos, ${formatViewCount(e.totalViews)} total views, avg replication: ${(e.totalReplication / e.count).toFixed(1)}/10)`)
+    .join("\n");
+
+  const engWeightedHooks = Object.entries(hookEngagement)
+    .sort((a, b) => b[1].totalViews - a[1].totalViews)
+    .map(([h, e]) => `${h} (${e.count} videos, ${formatViewCount(e.totalViews)} total views)`)
+    .join("\n");
+
+  const engWeightedEmotions = Object.entries(emotionEngagement)
+    .sort((a, b) => b[1].totalViews - a[1].totalViews)
+    .map(([em, e]) => `${em} (${e.count} videos, ${formatViewCount(e.totalViews)} total views)`)
+    .join("\n");
+
+  const formatList = Object.entries(formatCounts).sort((a, b) => b[1] - a[1]).map(([f, c]) => `${f} (${c})`).join(", ");
+  const ctaList = Object.entries(ctaCounts).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} (${n})`).join(", ");
+  const audienceList = Object.entries(audienceCounts).sort((a, b) => b[1] - a[1]).map(([a, c]) => `${a} (${c})`).join(", ");
+
+  // --- Build user prompt with all replacements ---
   const userPrompt = params.userPromptTemplate
+    // Backward-compatible frequency-based placeholders
     .replace(/{INSERT_TOP_5_TOPICS_FROM_AIRTABLE}|{INSERT_TOP_5_TOPICS}|{INSERT_TOPICS}/g, allTopics.join("\n"))
     .replace(/{INSERT_TOP_HOOK_TYPES}|{INSERT_HOOK_TYPES}/g, allHooks.join("\n"))
     .replace(/{INSERT_TOP_EMOTIONAL_ANGLES}|{INSERT_EMOTIONAL_ANGLES}/g, allEmotions.join("\n"))
-    .replace(/{TOTAL_VIDEOS_ANALYZED}/g, String(params.analyses.length));
+    .replace(/{TOTAL_VIDEOS_ANALYZED}/g, String(params.analyses.length))
+    // New engagement-weighted placeholders
+    .replace(/{INSERT_TOP_VIDEOS}/g, topVideos)
+    .replace(/{INSERT_ENGAGEMENT_WEIGHTED_TOPICS}/g, engWeightedTopics)
+    .replace(/{INSERT_ENGAGEMENT_WEIGHTED_HOOKS}/g, engWeightedHooks)
+    .replace(/{INSERT_ENGAGEMENT_WEIGHTED_EMOTIONS}/g, engWeightedEmotions)
+    .replace(/{INSERT_FORMATS}/g, formatList)
+    .replace(/{INSERT_CTA_TYPES}/g, ctaList)
+    .replace(/{INSERT_TARGET_AUDIENCES}/g, audienceList)
+    .replace(/{AVG_REPLICATION_SCORE}/g, avgReplication);
 
   const response = await openai.chat.completions.create({
     model: params.model,

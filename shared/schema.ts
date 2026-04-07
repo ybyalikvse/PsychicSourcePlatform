@@ -517,8 +517,8 @@ export const vspContentProjects = pgTable("vsp_content_projects", {
   videoSettings: json("video_settings"),
   videoUrl: text("video_url"),
   revidProjectId: text("revid_project_id"),
-  soraJobId: text("sora_job_id"),
   veoOperationName: text("veo_operation_name"),
+  falRequestId: text("fal_request_id"),
   status: text("status").notNull().default("draft"),
   analytics: json("analytics"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -730,7 +730,7 @@ export type VspCaptionGenerationRequest = z.infer<typeof vspCaptionGenerationSch
 
 export const vspVideoGenerationSchema = z.object({
   projectId: z.string(),
-  videoEngine: z.enum(['revid', 'sora', 'veo']).default('revid'),
+  videoEngine: z.enum(['revid', 'veo', 'kling', 'omnihuman']).default('revid'),
   style: z.string().optional(),
   voice: z.string().optional(),
   generationPreset: z.string().optional(),
@@ -747,17 +747,15 @@ export const vspVideoGenerationSchema = z.object({
   hasToGenerateVoice: z.boolean().optional(),
   hasToGenerateMusic: z.boolean().optional(),
   generationMusicPrompt: z.string().optional(),
-  soraModel: z.enum(['sora-2', 'sora-2-pro']).optional(),
-  soraSize: z.enum(['1280x720', '720x1280', '1080x1080']).optional(),
-  soraSeconds: z.number().optional(),
-  soraCustomInstructions: z.string().optional(),
-  soraReferenceImage: z.string().optional(),
-  soraVisualPrompt: z.string().optional(),
   veoAspectRatio: z.enum(['9:16', '16:9']).optional(),
-  veoResolution: z.enum(['720p', '1080p']).optional(),
+  veoResolution: z.enum(['720p', '1080p', '4k']).optional(),
+  veoDuration: z.enum(['auto', '4', '6', '8']).optional(),
+  veoFirstFrameImage: z.string().optional(), // base64 image to use as first frame
+  veoLastFrameImage: z.string().optional(), // base64 image for interpolation (used with first frame)
+  veoPersonGeneration: z.enum(['dont_allow', 'allow_adult', 'allow_all']).optional(),
+  veoNumberOfVideos: z.number().min(1).max(4).optional(),
   veoCustomInstructions: z.string().optional(),
   veoReferenceImages: z.array(z.string()).max(3).optional(),
-  veoNegativePrompt: z.string().optional(),
   characterProfile: z.object({
     description: z.string(),
     wardrobe: z.string().optional(),
@@ -768,6 +766,19 @@ export const vspVideoGenerationSchema = z.object({
     cameraStyle: z.string().optional(),
     lightingStyle: z.string().optional(),
   }).optional(),
+  // Kling v3 Pro parameters
+  klingAspectRatio: z.enum(['16:9', '9:16', '1:1']).optional(),
+  klingDuration: z.enum(['3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15']).optional(),
+  klingTier: z.enum(['pro', 'standard']).optional(),
+  klingReferenceImage: z.string().optional(),
+  klingCustomInstructions: z.string().optional(),
+  klingElementBinding: z.boolean().optional(),
+  klingUseMultiPrompt: z.boolean().optional(),
+  // OmniHuman 1.5 parameters
+  omniReferenceImage: z.string().optional(),
+  omniAudioUrl: z.string().optional(),
+  omniResolution: z.enum(['720p', '1080p']).optional(),
+  omniVoiceId: z.string().optional(),
 });
 export type VspVideoGenerationRequest = z.infer<typeof vspVideoGenerationSchema>;
 
@@ -921,3 +932,115 @@ export const ciSettings = pgTable("ci_settings", {
 export const insertCiSettingSchema = createInsertSchema(ciSettings).omit({ id: true, updatedAt: true });
 export type InsertCiSetting = z.infer<typeof insertCiSettingSchema>;
 export type CiSetting = typeof ciSettings.$inferSelect;
+
+// ============ SOCIAL MEDIA POSTS ============
+
+// Social Posts
+export const socialPosts = pgTable("social_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull().default("single"), // 'single' or 'carousel'
+  platform: text("platform").notNull().default("both"), // 'instagram', 'tiktok', 'both'
+  topic: text("topic"),
+  caption: text("caption"),
+  hashtags: text("hashtags"),
+  status: text("status").notNull().default("draft"), // 'draft', 'scheduled', 'publishing', 'published', 'failed'
+  scheduledAt: text("scheduled_at"),
+  publishedAt: text("published_at"),
+  error: text("error"),
+  carouselTypeId: varchar("carousel_type_id"),
+  templateSetId: varchar("template_set_id"),
+  slideCount: integer("slide_count").default(5),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
+export type SocialPost = typeof socialPosts.$inferSelect;
+
+// Social Post Slides
+export const socialPostSlides = pgTable("social_post_slides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").references(() => socialPosts.id, { onDelete: "cascade" }).notNull(),
+  slideOrder: integer("slide_order").notNull(),
+  templateType: text("template_type").notNull().default("content"), // 'single', 'cover', 'content', 'cta'
+  title: text("title"),
+  bodyText: text("body_text"),
+  imageUrl: text("image_url"),
+  backgroundImageUrl: text("background_image_url"),
+  imagePrompt: text("image_prompt"),
+  platformUrls: json("platform_urls"), // { instagram: "url", tiktok: "url" }
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSocialPostSlideSchema = createInsertSchema(socialPostSlides).omit({ id: true, createdAt: true });
+export type InsertSocialPostSlide = z.infer<typeof insertSocialPostSlideSchema>;
+export type SocialPostSlide = typeof socialPostSlides.$inferSelect;
+
+// Social Carousel Types
+export const socialCarouselTypes = pgTable("social_carousel_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  emoji: text("emoji").default(""),
+  description: text("description"),
+  topicPrompt: text("topic_prompt"),
+  contentPrompt: text("content_prompt"),
+  captionPrompt: text("caption_prompt"),
+  active: boolean("active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSocialCarouselTypeSchema = createInsertSchema(socialCarouselTypes).omit({ id: true, createdAt: true });
+export type InsertSocialCarouselType = z.infer<typeof insertSocialCarouselTypeSchema>;
+export type SocialCarouselType = typeof socialCarouselTypes.$inferSelect;
+
+// Social Template Sets
+export const socialTemplateSets = pgTable("social_template_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  imagePromptTemplate: text("image_prompt_template"),
+  active: boolean("active").default(true),
+  igFontScale: text("ig_font_scale").default("1.0"),
+  watermark: text("watermark"),
+  watermarkImage: text("watermark_image"),
+  watermarkPosition: text("watermark_position").default("bottom-right"),
+  watermarkSize: integer("watermark_size").default(40),
+  watermarkOpacity: text("watermark_opacity").default("0.7"),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSocialTemplateSetSchema = createInsertSchema(socialTemplateSets).omit({ id: true, createdAt: true });
+export type InsertSocialTemplateSet = z.infer<typeof insertSocialTemplateSetSchema>;
+export type SocialTemplateSet = typeof socialTemplateSets.$inferSelect;
+
+// Social Slide Templates
+export const socialSlideTemplates = pgTable("social_slide_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // 'single', 'cover', 'content', 'cta'
+  setName: text("set_name").notNull(),
+  config: json("config").notNull(), // { bg_gradient, text_color, accent_color, font, text_mode, etc. }
+  imagePromptTemplate: text("image_prompt_template"),
+  active: boolean("active").default(true),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSocialSlideTemplateSchema = createInsertSchema(socialSlideTemplates).omit({ id: true, createdAt: true });
+export type InsertSocialSlideTemplate = z.infer<typeof insertSocialSlideTemplateSchema>;
+export type SocialSlideTemplate = typeof socialSlideTemplates.$inferSelect;
+
+// Social Media Library
+export const socialMediaLibrary = pgTable("social_media_library", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  url: text("url").notNull(),
+  prompt: text("prompt"),
+  tags: json("tags"), // string[]
+  source: text("source").default("ai"), // 'ai', 'upload', 'unsplash'
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSocialMediaLibrarySchema = createInsertSchema(socialMediaLibrary).omit({ id: true, createdAt: true });
+export type InsertSocialMediaLibrary = z.infer<typeof insertSocialMediaLibrarySchema>;
+export type SocialMediaLibrary = typeof socialMediaLibrary.$inferSelect;

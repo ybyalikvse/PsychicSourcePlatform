@@ -14,3 +14,5 @@ client/.env
 replit.md
 .local/
 .agents/
+.vercel
+.env*.local

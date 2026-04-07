@@ -91,12 +91,25 @@ export function ContentHistoryDialog({
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-medium text-lg">{project.subtopic}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-lg">{project.subtopic || "Untitled"}</h3>
+                          <span className="text-xs text-muted-foreground font-mono">#{project.id?.slice(0, 6) || '???'}</span>
+                        </div>
                         <p className="text-sm text-muted-foreground capitalize">
-                          {project.category.replace("-", " ")}
+                          {(project.category || "custom").replace("-", " ")}
                         </p>
                       </div>
                       <div className="flex items-center space-x-2">
+                        {(() => {
+                          const vs = typeof project.videoSettings === 'string' ? (() => { try { return JSON.parse(project.videoSettings); } catch { return null; } })() : project.videoSettings;
+                          const engine = vs?.videoEngine;
+                          if (!engine) return null;
+                          return (
+                            <Badge variant="secondary" className="text-xs">
+                              {engine === 'veo' ? 'Veo 3.1' : engine === 'kling' ? 'Kling v3' : engine === 'omnihuman' ? 'OmniHuman' : engine === 'revid' ? 'Revid' : engine}
+                            </Badge>
+                          );
+                        })()}
                         <Badge
                           variant="outline"
                           className={getStatusColor(project.status)}
@@ -105,7 +118,7 @@ export function ContentHistoryDialog({
                           {getStatusText(project.status)}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          {formatDate(project.updatedAt!)}
+                          {project.updatedAt ? formatDate(project.updatedAt) : ''}
                         </span>
                       </div>
                     </div>

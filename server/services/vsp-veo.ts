@@ -17,8 +17,13 @@ export interface VeoVideoRequest {
   prompt: string;
   aspectRatio?: "9:16" | "16:9";
   referenceImages?: string[];
-  negativePrompt?: string;
+  resolution?: '720p' | '1080p' | '4k';
   extendVideo?: { uri: string };
+  firstFrameImage?: string; // base64 image
+  lastFrameImage?: string; // base64 image
+  personGeneration?: 'dont_allow' | 'allow_adult' | 'allow_all';
+  numberOfVideos?: number;
+  durationSeconds?: number; // 4, 6, or 8
 }
 
 export interface VeoVideoResult {
@@ -50,12 +55,48 @@ export async function generateVeoVideo(request: VeoVideoRequest): Promise<VeoVid
 
   const config: any = {};
 
+  if (request.firstFrameImage) {
+    const base64Data = request.firstFrameImage.replace(/^data:image\/\w+;base64,/, "");
+    const mimeMatch = request.firstFrameImage.match(/^data:(image\/\w+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+    params.image = {
+      imageBytes: base64Data,
+      mimeType,
+    };
+  }
+
+  if (request.lastFrameImage) {
+    const base64Data = request.lastFrameImage.replace(/^data:image\/\w+;base64,/, "");
+    const mimeMatch = request.lastFrameImage.match(/^data:(image\/\w+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+    config.lastFrame = {
+      image: {
+        imageBytes: base64Data,
+        mimeType,
+      },
+    };
+  }
+
   if (request.aspectRatio) {
     config.aspectRatio = request.aspectRatio;
   }
 
-  if (request.negativePrompt) {
-    config.negativePrompt = request.negativePrompt;
+  // Scene extension requires 720p input — don't send resolution when extending
+  if (request.resolution && !request.extendVideo) {
+    config.resolution = request.resolution;
+  }
+
+  // Only send personGeneration when explicitly restricting — "allow_adult" is not yet supported by the API
+  if (request.personGeneration && request.personGeneration !== 'allow_adult') {
+    config.personGeneration = request.personGeneration;
+  }
+
+  if (request.numberOfVideos) {
+    config.numberOfVideos = request.numberOfVideos;
+  }
+
+  if (request.durationSeconds) {
+    config.durationSeconds = request.durationSeconds;
   }
 
   if (request.referenceImages && request.referenceImages.length > 0) {
@@ -205,8 +246,13 @@ export async function generateVeoClip(params: {
   clipNumber: number;
   aspectRatio?: "9:16" | "16:9";
   referenceImages?: string[];
-  negativePrompt?: string;
+  resolution?: '720p' | '1080p' | '4k';
   extendVideo?: { uri: string };
+  firstFrameImage?: string;
+  lastFrameImage?: string;
+  personGeneration?: 'dont_allow' | 'allow_adult' | 'allow_all';
+  numberOfVideos?: number;
+  durationSeconds?: number;
 }): Promise<{ operationName: string }> {
   console.log(`Starting Veo clip ${params.clipNumber} generation...`);
 
@@ -214,8 +260,13 @@ export async function generateVeoClip(params: {
     prompt: params.prompt,
     aspectRatio: params.aspectRatio,
     referenceImages: params.referenceImages,
-    negativePrompt: params.negativePrompt,
+    resolution: params.resolution,
     extendVideo: params.extendVideo,
+    firstFrameImage: params.firstFrameImage,
+    lastFrameImage: params.lastFrameImage,
+    personGeneration: params.personGeneration,
+    numberOfVideos: params.numberOfVideos,
+    durationSeconds: params.durationSeconds,
   });
 
   console.log(`Veo clip ${params.clipNumber} operation started: ${result.operationName}`);

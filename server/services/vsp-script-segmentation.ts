@@ -11,22 +11,6 @@ export interface ScriptSegment {
 
 export type DurationTier = number[];
 
-export const STANDARD_DURATIONS: DurationTier = [4, 8, 12];
-export const PRO_DURATIONS: DurationTier = [10, 15, 25];
-
-export function getDurationTierForModel(model: string): { durations: DurationTier; maxClipDuration: number } {
-  if (model === 'sora-2-pro') {
-    return { durations: PRO_DURATIONS, maxClipDuration: 25 };
-  }
-  return { durations: STANDARD_DURATIONS, maxClipDuration: 12 };
-}
-
-export function getMaxSingleClipWords(model: string): number {
-  const WORDS_PER_SECOND = 2.5;
-  const { maxClipDuration } = getDurationTierForModel(model);
-  return Math.floor(maxClipDuration * WORDS_PER_SECOND * 1.15);
-}
-
 function findNaturalBreakpoint(text: string, maxLength: number): number {
   if (text.length <= maxLength) return text.length;
 
@@ -73,7 +57,7 @@ function pickDuration(estimatedDuration: number, durations: DurationTier): numbe
 export function segmentScriptForSora(
   script: GeneratedScript,
   maxClipDuration: number = 12,
-  durations: DurationTier = STANDARD_DURATIONS
+  durations: DurationTier = [4, 8, 12]
 ): ScriptSegment[] {
   const WORDS_PER_SECOND = 2.5;
   const CHARS_PER_WORD = 5;
@@ -173,33 +157,73 @@ export function createClipPrompt(
   hasReferenceImage?: boolean,
   styleBlock?: string
 ): string {
-  let prompt = '';
+  // Build a concise prompt — Veo responds better to shorter, direct prompts
+  const parts: string[] = [];
 
+  // 1. Core photorealism directive (always first — most important)
+  parts.push(`Cinematic footage shot on 35mm film. Documentary-style realism. Real skin with visible pores, natural imperfections, subtle asymmetry. Practical warm lighting from real lamps. Handheld camera with natural micro-sway. Shallow depth of field. No AI look, no glossy skin, no perfect symmetry.`);
+
+  // 2. Style block (character description, color palette, cinematography)
   if (styleBlock) {
-    prompt += `${styleBlock}\n\n`;
+    parts.push(styleBlock);
   }
 
-  prompt += `${visualPrompt}\n\n`;
-
-  if (hasReferenceImage) {
-    if (previousSegment) {
-      prompt += `REFERENCE IMAGE: This image is the LAST FRAME of the previous clip. Continue this EXACT scene — same person, same clothes, same setting, same camera angle. The video should look like a seamless continuation.\n\n`;
-    } else {
-      prompt += `REFERENCE IMAGE: Use this image to establish the character's appearance, setting, and visual style. Maintain these exact details throughout.\n\n`;
-    }
+  // 3. Visual context (condensed from the AI-generated visual prompt)
+  // Only use the first 400 chars to keep it concise
+  if (visualPrompt) {
+    const condensed = visualPrompt.length > 400 ? visualPrompt.substring(0, 400) + '...' : visualPrompt;
+    parts.push(condensed);
   }
 
+  // 4. Continuity for clips 2+
   if (previousSegment) {
-    prompt += `CONTINUITY REQUIREMENTS:\n`;
-    prompt += `- This is clip ${segment.clipNumber} — a DIRECT CONTINUATION of the previous clip\n`;
-    prompt += `- CRITICAL: Same person, same face, same clothing, same setting, same lighting\n`;
-    prompt += `- The camera and scene should flow naturally as if this is one continuous shot\n`;
-    prompt += `- Previous clip ended with: "${previousSegment.scriptSegment.slice(-80)}"\n\n`;
-  } else {
-    prompt += `This is the FIRST clip. Establish the character, setting, and visual style that will be maintained throughout all subsequent clips.\n\n`;
+    parts.push(`Continuation of previous shot. Same person, clothes, setting, lighting, camera angle. Seamless transition.`);
   }
 
-  prompt += `SCRIPT FOR THIS CLIP (${segment.duration} seconds):\n"${segment.scriptSegment}"`;
+  // 5. The dialogue — keep it clean and explicit
+  parts.push(`The speaker says exactly: "${segment.scriptSegment}"`);
+  parts.push(`After saying the last word, the speaker pauses and holds a gentle expression. Silence. Do not speak any additional words beyond the script above.`);
+
+  return parts.join('\n\n');
+}
+
+/**
+ * Create a clip prompt for Kling v3
+ * IMPORTANT: Kling multi_prompt has a 512 character limit per shot.
+ * Must be extremely concise — just character description + dialogue.
+ */
+export function createKlingClipPrompt(
+  visualPrompt: string,
+  segment: ScriptSegment,
+  styleBlock?: string
+): string {
+  // Extract just the character description from style block (most important part)
+  let charDesc = '';
+  if (styleBlock) {
+    const charMatch = styleBlock.match(/CHARACTER:\s*([^\n|]+)/);
+    if (charMatch) charDesc = charMatch[1].trim();
+    const wardrobeMatch = styleBlock.match(/WARDROBE:\s*([^\n|]+)/);
+    if (wardrobeMatch) charDesc += '. ' + wardrobeMatch[1].trim();
+  }
+
+  // Build concise prompt within 512 chars
+  // Priority: character look + dialogue (these matter most for Kling)
+  const dialogue = segment.scriptSegment.trim();
+
+  let prompt = '';
+  if (charDesc) {
+    // Truncate character desc to leave room for dialogue
+    const maxCharDesc = 300 - dialogue.length;
+    const trimmedChar = charDesc.length > maxCharDesc ? charDesc.substring(0, maxCharDesc).trim() + '...' : charDesc;
+    prompt = `Photorealistic talking head video. ${trimmedChar} She speaks to camera: "${dialogue}"`;
+  } else {
+    prompt = `Photorealistic talking head video. Woman speaks warmly to camera: "${dialogue}"`;
+  }
+
+  // Hard cap at 512
+  if (prompt.length > 512) {
+    prompt = prompt.substring(0, 509) + '..."';
+  }
 
   return prompt;
 }

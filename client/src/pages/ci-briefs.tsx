@@ -100,21 +100,26 @@ export default function CiBriefs() {
       if (!res.ok) throw new Error("Failed to fetch scripts");
       return res.json();
     },
-    enabled: !!selectedBriefId,
+    staleTime: 0,
   });
 
   const generateScriptMutation = useMutation({
-    mutationFn: async ({ briefId, itemIndex }: { briefId: number; itemIndex: number }) => {
+    mutationFn: async ({ briefId, itemIndex }: { briefId: string | number; itemIndex: number }) => {
       const res = await apiRequest("POST", "/api/ci/pipeline/run-step", {
         step: "scripts",
-        briefId,
+        briefId: String(briefId),
         itemIndex,
       });
       return res.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ci/scripts"] });
-      toast({ title: "Script generated", description: "The script has been generated successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/ci/briefs"] });
+      if (data?.generated === 0) {
+        toast({ title: "No script generated", description: "Check CI Settings for script prompts and AI model configuration.", variant: "destructive" });
+      } else {
+        toast({ title: "Script generated", description: "The script has been generated successfully." });
+      }
     },
     onError: (err: Error) => {
       toast({ title: "Failed to generate script", description: err.message, variant: "destructive" });

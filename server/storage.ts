@@ -37,6 +37,12 @@ import {
   type CiBriefScript, type InsertCiBriefScript,
   type CiPerformanceReport, type InsertCiPerformanceReport,
   type CiSetting, type InsertCiSetting,
+  type SocialPost, type InsertSocialPost,
+  type SocialPostSlide, type InsertSocialPostSlide,
+  type SocialCarouselType, type InsertSocialCarouselType,
+  type SocialTemplateSet, type InsertSocialTemplateSet,
+  type SocialSlideTemplate, type InsertSocialSlideTemplate,
+  type SocialMediaLibrary, type InsertSocialMediaLibrary,
   users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
   writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
   horoscopePrompts, horoscopeEntries,
@@ -45,6 +51,7 @@ import {
   vspCampaignTemplates, vspBulkGenerationJobs,
   vspContentCategories, vspContentSubtopics, vspScriptStyles, vspCaptionStyles,
   ciCompetitors, ciScrapedVideos, ciVideoAnalyses, ciContentBriefs, ciBriefScripts, ciPerformanceReports, ciSettings,
+  socialPosts, socialPostSlides, socialCarouselTypes, socialTemplateSets, socialSlideTemplates, socialMediaLibrary,
 } from "../shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -300,6 +307,46 @@ export interface IStorage {
   getCiSettings(category?: string): Promise<CiSetting[]>;
   getCiSetting(key: string): Promise<CiSetting | undefined>;
   upsertCiSetting(key: string, value: string, meta?: { category?: string, label?: string, description?: string, valueType?: string }): Promise<CiSetting>;
+
+  // Social Posts
+  getSocialPosts(): Promise<SocialPost[]>;
+  getSocialPost(id: string): Promise<SocialPost | undefined>;
+  createSocialPost(post: InsertSocialPost): Promise<SocialPost>;
+  updateSocialPost(id: string, updates: Partial<SocialPost>): Promise<SocialPost | undefined>;
+  deleteSocialPost(id: string): Promise<boolean>;
+
+  // Social Post Slides
+  getSocialPostSlides(postId: string): Promise<SocialPostSlide[]>;
+  createSocialPostSlide(slide: InsertSocialPostSlide): Promise<SocialPostSlide>;
+  updateSocialPostSlide(id: string, updates: Partial<SocialPostSlide>): Promise<SocialPostSlide | undefined>;
+  deleteSocialPostSlide(id: string): Promise<boolean>;
+  deleteSocialPostSlidesByPostId(postId: string): Promise<boolean>;
+
+  // Social Carousel Types
+  getSocialCarouselTypes(): Promise<SocialCarouselType[]>;
+  getSocialCarouselType(id: string): Promise<SocialCarouselType | undefined>;
+  createSocialCarouselType(type: InsertSocialCarouselType): Promise<SocialCarouselType>;
+  updateSocialCarouselType(id: string, updates: Partial<SocialCarouselType>): Promise<SocialCarouselType | undefined>;
+  deleteSocialCarouselType(id: string): Promise<boolean>;
+
+  // Social Template Sets
+  getSocialTemplateSets(): Promise<SocialTemplateSet[]>;
+  getSocialTemplateSet(id: string): Promise<SocialTemplateSet | undefined>;
+  createSocialTemplateSet(set: InsertSocialTemplateSet): Promise<SocialTemplateSet>;
+  updateSocialTemplateSet(id: string, updates: Partial<SocialTemplateSet>): Promise<SocialTemplateSet | undefined>;
+  deleteSocialTemplateSet(id: string): Promise<boolean>;
+
+  // Social Slide Templates
+  getSocialSlideTemplates(setName?: string): Promise<SocialSlideTemplate[]>;
+  getSocialSlideTemplate(id: string): Promise<SocialSlideTemplate | undefined>;
+  createSocialSlideTemplate(template: InsertSocialSlideTemplate): Promise<SocialSlideTemplate>;
+  updateSocialSlideTemplate(id: string, updates: Partial<SocialSlideTemplate>): Promise<SocialSlideTemplate | undefined>;
+  deleteSocialSlideTemplate(id: string): Promise<boolean>;
+
+  // Social Media Library
+  getSocialMediaLibrary(tag?: string): Promise<SocialMediaLibrary[]>;
+  createSocialMediaLibraryItem(item: InsertSocialMediaLibrary): Promise<SocialMediaLibrary>;
+  deleteSocialMediaLibraryItem(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -1245,7 +1292,6 @@ export class DatabaseStorage implements IStorage {
       script: vspContentProjects.script,
       caption: vspContentProjects.caption,
       revidProjectId: vspContentProjects.revidProjectId,
-      soraJobId: vspContentProjects.soraJobId,
       veoOperationName: vspContentProjects.veoOperationName,
       status: vspContentProjects.status,
       analytics: vspContentProjects.analytics,
@@ -1869,7 +1915,7 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
-  async getCiAnalysesPendingBrief(): Promise<(CiVideoAnalysis & { videoBriefStatus: string })[]> {
+  async getCiAnalysesPendingBrief() {
     const rows = await db
       .select({
         id: ciVideoAnalyses.id,
@@ -1891,6 +1937,11 @@ export class DatabaseStorage implements IStorage {
         weekAdded: ciVideoAnalyses.weekAdded,
         createdAt: ciVideoAnalyses.createdAt,
         videoBriefStatus: ciScrapedVideos.briefStatus,
+        videoViewCount: ciScrapedVideos.viewCount,
+        videoLikeCount: ciScrapedVideos.likeCount,
+        videoCommentCount: ciScrapedVideos.commentCount,
+        videoShareCount: ciScrapedVideos.shareCount,
+        videoPostedAt: ciScrapedVideos.postedAt,
       })
       .from(ciVideoAnalyses)
       .leftJoin(ciScrapedVideos, eq(ciVideoAnalyses.scrapedVideoId, ciScrapedVideos.id))
@@ -1902,7 +1953,15 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(desc(ciVideoAnalyses.createdAt));
-    return rows.map(r => ({ ...r, videoBriefStatus: r.videoBriefStatus ?? "pending" }));
+    return rows.map(r => ({
+      ...r,
+      videoBriefStatus: r.videoBriefStatus ?? "pending",
+      videoViewCount: r.videoViewCount ?? 0,
+      videoLikeCount: r.videoLikeCount ?? 0,
+      videoCommentCount: r.videoCommentCount ?? 0,
+      videoShareCount: r.videoShareCount ?? 0,
+      videoPostedAt: r.videoPostedAt ?? null,
+    }));
   }
 
   async markVideoAsBriefed(videoId: string): Promise<void> {
@@ -2025,6 +2084,190 @@ export class DatabaseStorage implements IStorage {
       valueType: meta?.valueType ?? "text",
     }).returning();
     return result;
+  }
+
+  // ============ SOCIAL POSTS ============
+
+  async getSocialPosts(): Promise<SocialPost[]> {
+    const results = await db.select().from(socialPosts).orderBy(desc(socialPosts.updatedAt));
+    return results as SocialPost[];
+  }
+
+  async getSocialPost(id: string): Promise<SocialPost | undefined> {
+    const [post] = await db.select().from(socialPosts).where(eq(socialPosts.id, id));
+    if (!post) return undefined;
+    return post as SocialPost;
+  }
+
+  async createSocialPost(post: InsertSocialPost): Promise<SocialPost> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const [result] = await db.insert(socialPosts).values({ ...post, id, createdAt: now, updatedAt: now } as any).returning();
+    return result as SocialPost;
+  }
+
+  async updateSocialPost(id: string, updates: Partial<SocialPost>): Promise<SocialPost | undefined> {
+    const now = new Date().toISOString();
+    const [result] = await db.update(socialPosts).set({ ...updates, updatedAt: now } as any).where(eq(socialPosts.id, id)).returning();
+    if (!result) return undefined;
+    return result as SocialPost;
+  }
+
+  async deleteSocialPost(id: string): Promise<boolean> {
+    const results = await db.delete(socialPosts).where(eq(socialPosts.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ============ SOCIAL POST SLIDES ============
+
+  async getSocialPostSlides(postId: string): Promise<SocialPostSlide[]> {
+    const results = await db.select().from(socialPostSlides).where(eq(socialPostSlides.postId, postId)).orderBy(asc(socialPostSlides.slideOrder));
+    return results as SocialPostSlide[];
+  }
+
+  async createSocialPostSlide(slide: InsertSocialPostSlide): Promise<SocialPostSlide> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const [result] = await db.insert(socialPostSlides).values({ ...slide, id, createdAt: now } as any).returning();
+    return result as SocialPostSlide;
+  }
+
+  async updateSocialPostSlide(id: string, updates: Partial<SocialPostSlide>): Promise<SocialPostSlide | undefined> {
+    const [result] = await db.update(socialPostSlides).set(updates as any).where(eq(socialPostSlides.id, id)).returning();
+    if (!result) return undefined;
+    return result as SocialPostSlide;
+  }
+
+  async deleteSocialPostSlide(id: string): Promise<boolean> {
+    const results = await db.delete(socialPostSlides).where(eq(socialPostSlides.id, id)).returning();
+    return results.length > 0;
+  }
+
+  async deleteSocialPostSlidesByPostId(postId: string): Promise<boolean> {
+    const results = await db.delete(socialPostSlides).where(eq(socialPostSlides.postId, postId)).returning();
+    return results.length >= 0;
+  }
+
+  // ============ SOCIAL CAROUSEL TYPES ============
+
+  async getSocialCarouselTypes(): Promise<SocialCarouselType[]> {
+    const results = await db.select().from(socialCarouselTypes).orderBy(asc(socialCarouselTypes.sortOrder));
+    return results as SocialCarouselType[];
+  }
+
+  async getSocialCarouselType(id: string): Promise<SocialCarouselType | undefined> {
+    const [result] = await db.select().from(socialCarouselTypes).where(eq(socialCarouselTypes.id, id));
+    if (!result) return undefined;
+    return result as SocialCarouselType;
+  }
+
+  async createSocialCarouselType(type: InsertSocialCarouselType): Promise<SocialCarouselType> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const [result] = await db.insert(socialCarouselTypes).values({ ...type, id, createdAt: now } as any).returning();
+    return result as SocialCarouselType;
+  }
+
+  async updateSocialCarouselType(id: string, updates: Partial<SocialCarouselType>): Promise<SocialCarouselType | undefined> {
+    const [result] = await db.update(socialCarouselTypes).set(updates as any).where(eq(socialCarouselTypes.id, id)).returning();
+    if (!result) return undefined;
+    return result as SocialCarouselType;
+  }
+
+  async deleteSocialCarouselType(id: string): Promise<boolean> {
+    const results = await db.delete(socialCarouselTypes).where(eq(socialCarouselTypes.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ============ SOCIAL TEMPLATE SETS ============
+
+  async getSocialTemplateSets(): Promise<SocialTemplateSet[]> {
+    const results = await db.select().from(socialTemplateSets).orderBy(desc(socialTemplateSets.createdAt));
+    return results as SocialTemplateSet[];
+  }
+
+  async getSocialTemplateSet(id: string): Promise<SocialTemplateSet | undefined> {
+    const [result] = await db.select().from(socialTemplateSets).where(eq(socialTemplateSets.id, id));
+    if (!result) return undefined;
+    return result as SocialTemplateSet;
+  }
+
+  async createSocialTemplateSet(set: InsertSocialTemplateSet): Promise<SocialTemplateSet> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const [result] = await db.insert(socialTemplateSets).values({ ...set, id, createdAt: now } as any).returning();
+    return result as SocialTemplateSet;
+  }
+
+  async updateSocialTemplateSet(id: string, updates: Partial<SocialTemplateSet>): Promise<SocialTemplateSet | undefined> {
+    const [result] = await db.update(socialTemplateSets).set(updates as any).where(eq(socialTemplateSets.id, id)).returning();
+    if (!result) return undefined;
+    return result as SocialTemplateSet;
+  }
+
+  async deleteSocialTemplateSet(id: string): Promise<boolean> {
+    const results = await db.delete(socialTemplateSets).where(eq(socialTemplateSets.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ============ SOCIAL SLIDE TEMPLATES ============
+
+  async getSocialSlideTemplates(setName?: string): Promise<SocialSlideTemplate[]> {
+    if (setName) {
+      const results = await db.select().from(socialSlideTemplates).where(eq(socialSlideTemplates.setName, setName)).orderBy(asc(socialSlideTemplates.type));
+      return results as SocialSlideTemplate[];
+    }
+    const results = await db.select().from(socialSlideTemplates).orderBy(asc(socialSlideTemplates.type));
+    return results as SocialSlideTemplate[];
+  }
+
+  async getSocialSlideTemplate(id: string): Promise<SocialSlideTemplate | undefined> {
+    const [result] = await db.select().from(socialSlideTemplates).where(eq(socialSlideTemplates.id, id));
+    if (!result) return undefined;
+    return result as SocialSlideTemplate;
+  }
+
+  async createSocialSlideTemplate(template: InsertSocialSlideTemplate): Promise<SocialSlideTemplate> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const [result] = await db.insert(socialSlideTemplates).values({ ...template, id, createdAt: now } as any).returning();
+    return result as SocialSlideTemplate;
+  }
+
+  async updateSocialSlideTemplate(id: string, updates: Partial<SocialSlideTemplate>): Promise<SocialSlideTemplate | undefined> {
+    const [result] = await db.update(socialSlideTemplates).set(updates as any).where(eq(socialSlideTemplates.id, id)).returning();
+    if (!result) return undefined;
+    return result as SocialSlideTemplate;
+  }
+
+  async deleteSocialSlideTemplate(id: string): Promise<boolean> {
+    const results = await db.delete(socialSlideTemplates).where(eq(socialSlideTemplates.id, id)).returning();
+    return results.length > 0;
+  }
+
+  // ============ SOCIAL MEDIA LIBRARY ============
+
+  async getSocialMediaLibrary(tag?: string): Promise<SocialMediaLibrary[]> {
+    const results = await db.select().from(socialMediaLibrary).orderBy(desc(socialMediaLibrary.createdAt));
+    if (tag) {
+      return (results as SocialMediaLibrary[]).filter(item => {
+        const tags = item.tags as string[] | null;
+        return tags && tags.includes(tag);
+      });
+    }
+    return results as SocialMediaLibrary[];
+  }
+
+  async createSocialMediaLibraryItem(item: InsertSocialMediaLibrary): Promise<SocialMediaLibrary> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const [result] = await db.insert(socialMediaLibrary).values({ ...item, id, createdAt: now } as any).returning();
+    return result as SocialMediaLibrary;
+  }
+
+  async deleteSocialMediaLibraryItem(id: string): Promise<boolean> {
+    const results = await db.delete(socialMediaLibrary).where(eq(socialMediaLibrary.id, id)).returning();
+    return results.length > 0;
   }
 }
 

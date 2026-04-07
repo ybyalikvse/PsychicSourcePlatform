@@ -6,8 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Wand2, Hash, Video, Loader2, Upload, X, PenLine } from "lucide-react";
+import { Wand2, Hash, Video, Loader2, Upload, X, PenLine, HelpCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { VspContentProject as ContentProject, VspScriptStyle as ScriptStyle, VspCaptionStyle as CaptionStyle } from "@shared/schema";
@@ -39,7 +40,7 @@ export function WorkflowCards({
   });
   
   const [videoSettings, setVideoSettings] = useState({
-    videoEngine: "revid" as "revid" | "sora" | "veo",
+    videoEngine: "revid" as "revid" | "veo" | "kling" | "omnihuman",
     
     // Revid.ai settings
     style: "stockVideo", // Media type ID (updated to match API)
@@ -60,23 +61,34 @@ export function WorkflowCards({
     hasToGenerateMusic: false, // Generate music from AI
     generationMusicPrompt: "", // Optional prompt for AI music generation
     
-    // Sora 2 settings
-    soraModel: "sora-2" as "sora-2" | "sora-2-pro",
-    soraSize: "720x1280" as "1280x720" | "720x1280" | "1080x1080", // Default to vertical (TikTok/Reels)
-    soraCustomInstructions: "", // Custom instructions for video style/mood
-    soraReferenceImage: undefined as string | undefined,
-    
     // Veo 3.1 settings
     veoAspectRatio: "9:16" as "9:16" | "16:9",
-    veoResolution: "1080p" as "720p" | "1080p",
+    veoResolution: "1080p" as "720p" | "1080p" | "4k",
+    veoDuration: "auto" as "auto" | "4" | "6" | "8",
     veoCustomInstructions: "",
     veoReferenceImages: [] as string[],
-    veoNegativePrompt: "",
+    veoFirstFrameImage: undefined as string | undefined,
+    veoLastFrameImage: undefined as string | undefined,
+    veoPersonGeneration: "allow_adult" as "dont_allow" | "allow_adult" | "allow_all", // allow_adult is default behavior (not sent to API)
+    veoNumberOfVideos: 1 as number,
     
     // Character Consistency Settings
     characterProfile: undefined as { description: string; wardrobe: string; distinctiveFeatures?: string } | undefined,
     colorPalette: [] as string[],
     cinematography: undefined as { cameraStyle?: string; lightingStyle?: string } | undefined,
+    // Kling v3 settings
+    klingAspectRatio: "9:16" as "16:9" | "9:16" | "1:1",
+    klingDuration: "10" as string,
+    klingTier: "pro" as "pro" | "standard",
+    klingReferenceImage: undefined as string | undefined,
+    klingCustomInstructions: "",
+    klingElementBinding: true,
+    klingUseMultiPrompt: true,
+    // OmniHuman 1.5 settings
+    omniReferenceImage: undefined as string | undefined,
+    omniAudioUrl: "",
+    omniResolution: "1080p" as "720p" | "1080p",
+    omniVoiceId: "",
   });
   const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
   const [calculatingCredits, setCalculatingCredits] = useState(false);
@@ -343,28 +355,43 @@ export function WorkflowCards({
       };
 
       let payload: any = basePayload;
-      if (videoSettings.videoEngine === 'sora') {
-        payload = {
-          ...basePayload,
-          soraModel: videoSettings.soraModel,
-          soraSize: videoSettings.soraSize,
-          soraCustomInstructions: videoSettings.soraCustomInstructions,
-          soraReferenceImage: videoSettings.soraReferenceImage,
-          characterProfile: videoSettings.characterProfile,
-          colorPalette: videoSettings.colorPalette.length > 0 ? videoSettings.colorPalette : undefined,
-          cinematography: videoSettings.cinematography,
-        };
-      } else if (videoSettings.videoEngine === 'veo') {
+      if (videoSettings.videoEngine === 'veo') {
         payload = {
           ...basePayload,
           veoAspectRatio: videoSettings.veoAspectRatio,
           veoResolution: videoSettings.veoResolution,
           veoCustomInstructions: videoSettings.veoCustomInstructions,
           veoReferenceImages: videoSettings.veoReferenceImages.length > 0 ? videoSettings.veoReferenceImages : undefined,
-          veoNegativePrompt: videoSettings.veoNegativePrompt || undefined,
+          veoDuration: videoSettings.veoDuration || 'auto',
+          veoFirstFrameImage: videoSettings.veoFirstFrameImage,
+          veoLastFrameImage: videoSettings.veoLastFrameImage,
+          veoPersonGeneration: videoSettings.veoPersonGeneration,
+          veoNumberOfVideos: videoSettings.veoNumberOfVideos,
           characterProfile: videoSettings.characterProfile,
           colorPalette: videoSettings.colorPalette.length > 0 ? videoSettings.colorPalette : undefined,
           cinematography: videoSettings.cinematography,
+        };
+      } else if (videoSettings.videoEngine === 'kling') {
+        payload = {
+          ...basePayload,
+          klingAspectRatio: videoSettings.klingAspectRatio,
+          klingDuration: videoSettings.klingDuration,
+          klingTier: videoSettings.klingTier,
+          klingReferenceImage: videoSettings.klingReferenceImage,
+          klingCustomInstructions: videoSettings.klingCustomInstructions,
+          klingElementBinding: videoSettings.klingElementBinding,
+          klingUseMultiPrompt: videoSettings.klingUseMultiPrompt,
+          characterProfile: videoSettings.characterProfile?.description ? videoSettings.characterProfile : undefined,
+          colorPalette: videoSettings.colorPalette?.length > 0 ? videoSettings.colorPalette : undefined,
+          cinematography: videoSettings.cinematography,
+        };
+      } else if (videoSettings.videoEngine === 'omnihuman') {
+        payload = {
+          ...basePayload,
+          omniReferenceImage: videoSettings.omniReferenceImage,
+          omniAudioUrl: videoSettings.omniAudioUrl,
+          omniResolution: videoSettings.omniResolution,
+          omniVoiceId: videoSettings.omniVoiceId,
         };
       } else {
         payload = {
@@ -409,7 +436,10 @@ export function WorkflowCards({
       
       // Update local state to trigger UI refresh
       onProjectUpdate(project);
-      
+
+      // Force video status polling to start immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/vsp/projects", project.id, "video-status"] });
+
       toast({
         title: "Video Generation Started!",
         description: "Your video is being created. This may take a few minutes.",
@@ -433,8 +463,6 @@ export function WorkflowCards({
       processedValue = parseInt(value as string) as 9 | 18 | 33;
     } else if (key === "frameRate") {
       processedValue = parseInt(value as string) as 30 | 60;
-    } else if (key === "soraSeconds") {
-      processedValue = typeof value === 'number' ? value : parseInt(value as string);
     }
     // Boolean values (like hasToGenerateCover) are passed through as-is
     
@@ -472,6 +500,14 @@ export function WorkflowCards({
       calculateCreditsMutation.mutate();
     }
   }, [currentProject?.id, currentProject?.script]);
+
+  // Populate custom script and switch to custom mode when loading a project with an existing script
+  React.useEffect(() => {
+    if (currentProject?.script?.content) {
+      setCustomScript(currentProject.script.content);
+      setScriptMode("custom");
+    }
+  }, [currentProject?.id]);
 
   const getStepStatus = (step: 1 | 2 | 3) => {
     if (!currentProject) {
@@ -671,7 +707,7 @@ export function WorkflowCards({
               <label className="block text-sm font-medium text-foreground mb-3">
                 Video Generation Engine
               </label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => handleSettingsChange("videoEngine", "revid")}
@@ -690,22 +726,6 @@ export function WorkflowCards({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleSettingsChange("videoEngine", "sora")}
-                  className={`p-3 rounded-lg border-2 transition-all ${
-                    videoSettings.videoEngine === "sora"
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                  disabled={getStepStatus(2) === "disabled"}
-                  data-testid="button-engine-sora"
-                >
-                  <div className="text-sm font-semibold">Sora 2</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    AI video • Auto audio • Premium quality
-                  </div>
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleSettingsChange("videoEngine", "veo")}
                   className={`p-3 rounded-lg border-2 transition-all ${
                     videoSettings.videoEngine === "veo"
@@ -718,6 +738,38 @@ export function WorkflowCards({
                   <div className="text-sm font-semibold">Veo 3.1</div>
                   <div className="text-xs text-muted-foreground mt-1">
                     Google AI • Native audio • Scene extension
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSettingsChange("videoEngine", "kling")}
+                  className={`p-3 rounded-lg border-2 transition-all ${
+                    videoSettings.videoEngine === "kling"
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                  disabled={getStepStatus(2) === "disabled"}
+                  data-testid="button-engine-kling"
+                >
+                  <div className="text-sm font-semibold">Kling v3 Pro</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Character lock • Element binding • 1080p
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSettingsChange("videoEngine", "omnihuman")}
+                  className={`p-3 rounded-lg border-2 transition-all ${
+                    videoSettings.videoEngine === "omnihuman"
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                  disabled={getStepStatus(2) === "disabled"}
+                  data-testid="button-engine-omnihuman"
+                >
+                  <div className="text-sm font-semibold">OmniHuman 1.5</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Talking head • Audio sync • 60s max
                   </div>
                 </button>
               </div>
@@ -1172,273 +1224,23 @@ export function WorkflowCards({
               </div>
             </div>
               </>
-            ) : videoSettings.videoEngine === "sora" ? (
-              <>
-                {/* Sora 2 Settings */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Model
-                  </label>
-                  <Select 
-                    value={videoSettings.soraModel} 
-                    onValueChange={(value) => handleSettingsChange("soraModel", value)}
-                    disabled={getStepStatus(2) === "disabled"}
-                    data-testid="select-sora-model"
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sora-2">
-                        Sora 2 - Faster, $0.10/sec
-                      </SelectItem>
-                      <SelectItem value="sora-2-pro">
-                        Sora 2 Pro - Premium Quality, $0.30/sec
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Aspect Ratio
-                  </label>
-                  <Select 
-                    value={videoSettings.soraSize} 
-                    onValueChange={(value) => handleSettingsChange("soraSize", value)}
-                    disabled={getStepStatus(2) === "disabled"}
-                    data-testid="select-sora-size"
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="720x1280">
-                        Vertical (9:16) - 720x1280 - TikTok/Reels
-                      </SelectItem>
-                      <SelectItem value="1280x720">
-                        Landscape (16:9) - 1280x720 - YouTube
-                      </SelectItem>
-                      <SelectItem value="1080x1080">
-                        Square (1:1) - 1080x1080 - Instagram
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-foreground">
-                    Custom Instructions (Optional)
-                  </label>
-                  <textarea
-                    value={videoSettings.soraCustomInstructions || ''}
-                    onChange={(e) => handleSettingsChange("soraCustomInstructions", e.target.value)}
-                    placeholder="E.g., cinematic style with dramatic lighting, focus on close-ups, vibrant colors..."
-                    className="w-full min-h-[80px] px-3 py-2 text-sm rounded-md border border-input bg-background"
-                    disabled={getStepStatus(2) === "disabled"}
-                    data-testid="input-sora-instructions"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Optional: Add specific instructions to guide the visual style, camera angles, lighting, or mood. AI will combine this with your script to create the video.
-                  </p>
-                </div>
-
-                {/* Character Consistency Settings */}
-                <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-border">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-foreground">Character Consistency (Recommended)</h4>
-                    <p className="text-xs text-muted-foreground">Maintain consistent appearance across clips</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-foreground">
-                      Character Description
-                    </label>
-                    <textarea
-                      value={videoSettings.characterProfile?.description || ''}
-                      onChange={(e) => handleSettingsChange("characterProfile", {
-                        ...videoSettings.characterProfile,
-                        description: e.target.value,
-                        wardrobe: videoSettings.characterProfile?.wardrobe || ''
-                      })}
-                      placeholder="E.g., A woman in her early 30s with shoulder-length auburn hair, green eyes, round face, fair skin..."
-                      className="w-full min-h-[60px] px-3 py-2 text-sm rounded-md border border-input bg-background"
-                      disabled={getStepStatus(2) === "disabled"}
-                      data-testid="input-character-description"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-foreground">
-                      Wardrobe & Clothing
-                    </label>
-                    <input
-                      type="text"
-                      value={videoSettings.characterProfile?.wardrobe || ''}
-                      onChange={(e) => handleSettingsChange("characterProfile", {
-                        ...videoSettings.characterProfile,
-                        description: videoSettings.characterProfile?.description || '',
-                        wardrobe: e.target.value
-                      })}
-                      placeholder="E.g., Navy blue blazer, white shirt, silver hoop earrings..."
-                      className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
-                      disabled={getStepStatus(2) === "disabled"}
-                      data-testid="input-character-wardrobe"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-foreground">
-                      Color Palette (3-5 colors)
-                    </label>
-                    <input
-                      type="text"
-                      value={videoSettings.colorPalette.join(', ')}
-                      onChange={(e) => {
-                        const colors = e.target.value.split(',').map(c => c.trim()).filter(c => c);
-                        handleSettingsChange("colorPalette", colors);
-                      }}
-                      placeholder="E.g., crimson red, slate blue, cream white, charcoal gray..."
-                      className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
-                      disabled={getStepStatus(2) === "disabled"}
-                      data-testid="input-color-palette"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Separate colors with commas. These colors will be used consistently across all video clips.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-foreground">
-                        Camera Style
-                      </label>
-                      <input
-                        type="text"
-                        value={videoSettings.cinematography?.cameraStyle || ''}
-                        onChange={(e) => handleSettingsChange("cinematography", {
-                          ...videoSettings.cinematography,
-                          cameraStyle: e.target.value
-                        })}
-                        placeholder="E.g., Medium shot, eye level"
-                        className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
-                        disabled={getStepStatus(2) === "disabled"}
-                        data-testid="input-camera-style"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-foreground">
-                        Lighting Style
-                      </label>
-                      <input
-                        type="text"
-                        value={videoSettings.cinematography?.lightingStyle || ''}
-                        onChange={(e) => handleSettingsChange("cinematography", {
-                          ...videoSettings.cinematography,
-                          lightingStyle: e.target.value
-                        })}
-                        placeholder="E.g., Soft window light, warm fill"
-                        className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
-                        disabled={getStepStatus(2) === "disabled"}
-                        data-testid="input-lighting-style"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800">
-                    <p className="text-xs text-blue-900 dark:text-blue-100">
-                      <strong>Why this helps:</strong> Since Sora doesn't support reference images reliably, providing detailed character descriptions, specific colors, and consistent cinematography helps maintain visual continuity across multiple video clips.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-foreground">
-                    Reference Image (Optional)
-                  </label>
-                  <div className="space-y-3">
-                    {videoSettings.soraReferenceImage ? (
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <img 
-                            src={videoSettings.soraReferenceImage} 
-                            alt="Reference" 
-                            className="w-full h-48 object-cover rounded-md border border-input"
-                          />
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-2 right-2"
-                            onClick={() => handleSettingsChange("soraReferenceImage", undefined)}
-                            disabled={getStepStatus(2) === "disabled"}
-                            data-testid="button-remove-image"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => handleSettingsChange("soraReferenceImage", undefined)}
-                          disabled={getStepStatus(2) === "disabled"}
-                          data-testid="button-clear-reference-image"
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          Clear Reference Image
-                        </Button>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center w-full h-32 px-4 border-2 border-dashed border-input rounded-lg cursor-pointer bg-muted/20 hover:bg-muted/40 transition-colors">
-                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
-                          <p className="mb-2 text-sm text-muted-foreground">
-                            <span className="font-semibold">Click to upload</span> or drag and drop
-                          </p>
-                          <p className="text-xs text-muted-foreground">PNG, JPG or WEBP (MAX. 10MB)</p>
-                        </div>
-                        <input
-                          type="file"
-                          className="hidden"
-                          accept="image/png,image/jpeg,image/jpg,image/webp"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 10 * 1024 * 1024) {
-                                alert('File size must be less than 10MB');
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                handleSettingsChange("soraReferenceImage", reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          disabled={getStepStatus(2) === "disabled"}
-                          data-testid="input-reference-image"
-                        />
-                      </label>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Upload a reference image for consistent character/scene appearance across all video clips. This helps maintain visual continuity in multi-clip videos.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-900">
-                  <p className="text-sm text-blue-900 dark:text-blue-100">
-                    <strong>Sora 2 Auto-generates:</strong> Video with synced spatial audio from your script. No separate voice/music selection needed.
-                  </p>
-                </div>
-              </>
             ) : null}
 
             {videoSettings.videoEngine === "veo" && (
               <>
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    Aspect Ratio
+                    <span className="flex items-center gap-1.5">
+                      Aspect Ratio
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs text-xs">
+                          9:16 vertical for TikTok, Reels, and Shorts. 16:9 landscape for YouTube.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
                   </label>
                   <Select
                     value={videoSettings.veoAspectRatio}
@@ -1460,8 +1262,96 @@ export function WorkflowCards({
                 </div>
 
                 <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    <span className="flex items-center gap-1.5">
+                      Clip Duration
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs text-xs">
+                          Auto uses 8s clips for consistency, with shorter clips for remaining script. 8s is required for 1080p and 4K resolution.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                  </label>
+                  <Select
+                    value={videoSettings.veoDuration}
+                    onValueChange={(value) => handleSettingsChange("veoDuration", value)}
+                    disabled={getStepStatus(2) === "disabled"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">
+                        Auto (optimize based on script length)
+                      </SelectItem>
+                      <SelectItem value="8">
+                        8 seconds (best quality, recommended)
+                      </SelectItem>
+                      <SelectItem value="6">
+                        6 seconds
+                      </SelectItem>
+                      <SelectItem value="4">
+                        4 seconds (fastest)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Auto mode uses 8s clips for consistency, with shorter clips for remaining script.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    <span className="flex items-center gap-1.5">
+                      Resolution
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs text-xs">
+                          720p is fastest for drafts. 1080p for production quality. 4K for highest quality — both 1080p and 4K require 8s clip duration.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                  </label>
+                  <Select
+                    value={videoSettings.veoResolution}
+                    onValueChange={(value) => handleSettingsChange("veoResolution", value)}
+                    disabled={getStepStatus(2) === "disabled"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="720p">
+                        720p (faster generation)
+                      </SelectItem>
+                      <SelectItem value="1080p">
+                        1080p (recommended)
+                      </SelectItem>
+                      <SelectItem value="4k">
+                        4K (highest quality, 8s clips only)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
                   <label className="block text-sm font-medium text-foreground">
-                    Custom Instructions (Optional)
+                    <span className="flex items-center gap-1.5">
+                      Custom Instructions (Optional)
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs text-xs">
+                          Describe the visual style, mood, camera angles, lighting, and setting. E.g., 'warm cozy living room, soft golden lighting, close-up shots.'
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
                   </label>
                   <textarea
                     value={videoSettings.veoCustomInstructions || ''}
@@ -1472,26 +1362,22 @@ export function WorkflowCards({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-foreground">
-                    Negative Prompt (Optional)
-                  </label>
-                  <textarea
-                    value={videoSettings.veoNegativePrompt || ''}
-                    onChange={(e) => handleSettingsChange("veoNegativePrompt", e.target.value)}
-                    placeholder="E.g., blurry, low quality, distorted faces, text overlays..."
-                    className="w-full min-h-[60px] px-3 py-2 text-sm rounded-md border border-input bg-background"
-                    disabled={getStepStatus(2) === "disabled"}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Describe what you want to avoid in the video.
-                  </p>
-                </div>
-
                 {/* Reference Images (up to 3) */}
                 <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-foreground">Reference Images (Up to 3)</h4>
+                    <h4 className="text-sm font-semibold text-foreground">
+                      <span className="flex items-center gap-1.5">
+                        Reference Images (Up to 3)
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Guide images for style and character consistency. Unlike the first frame, these influence the look without appearing in the video. Only applied to the first clip.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </h4>
                     <p className="text-xs text-muted-foreground">{videoSettings.veoReferenceImages.length}/3 uploaded</p>
                   </div>
 
@@ -1551,16 +1437,132 @@ export function WorkflowCards({
                   </p>
                 </div>
 
+                {/* First Frame Image */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground">
+                    <span className="flex items-center gap-1.5">
+                      First Frame Image (Optional)
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs text-xs">
+                          Upload a photo to use as the starting frame. Veo will animate from this image — great for brand consistency with a specific character or set.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                  </label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Upload an image to use as the starting frame. The video will animate from this image.
+                  </p>
+                  {videoSettings.veoFirstFrameImage ? (
+                    <div className="relative inline-block">
+                      <img src={videoSettings.veoFirstFrameImage} alt="First frame" className="h-24 rounded-md border border-input" />
+                      <Button variant="destructive" size="sm" className="absolute top-1 right-1 h-6 w-6 p-0"
+                        onClick={() => handleSettingsChange("veoFirstFrameImage", undefined)}
+                        disabled={getStepStatus(2) === "disabled"}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center h-24 w-32 border-2 border-dashed border-input rounded-md cursor-pointer bg-muted/20 hover:bg-muted/40 transition-colors">
+                      <Upload className="w-5 h-5 mb-1 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Upload image</span>
+                      <input type="file" className="hidden" accept="image/png,image/jpeg,image/webp"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) { alert('File size must be less than 10MB'); return; }
+                            const reader = new FileReader();
+                            reader.onloadend = () => handleSettingsChange("veoFirstFrameImage", reader.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        disabled={getStepStatus(2) === "disabled"} />
+                    </label>
+                  )}
+                </div>
+
+                {/* Last Frame Image - only when first frame is set */}
+                {videoSettings.veoFirstFrameImage && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">
+                      <span className="flex items-center gap-1.5">
+                        Last Frame Image (Optional)
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Upload an end frame to create a smooth interpolation between first and last frame. Useful for specific visual storytelling journeys.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Upload an end frame to interpolate between first and last frame.
+                    </p>
+                    {videoSettings.veoLastFrameImage ? (
+                      <div className="relative inline-block">
+                        <img src={videoSettings.veoLastFrameImage} alt="Last frame" className="h-24 rounded-md border border-input" />
+                        <Button variant="destructive" size="sm" className="absolute top-1 right-1 h-6 w-6 p-0"
+                          onClick={() => handleSettingsChange("veoLastFrameImage", undefined)}
+                          disabled={getStepStatus(2) === "disabled"}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center h-24 w-32 border-2 border-dashed border-input rounded-md cursor-pointer bg-muted/20 hover:bg-muted/40 transition-colors">
+                        <Upload className="w-5 h-5 mb-1 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Upload image</span>
+                        <input type="file" className="hidden" accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 10 * 1024 * 1024) { alert('File size must be less than 10MB'); return; }
+                              const reader = new FileReader();
+                              reader.onloadend = () => handleSettingsChange("veoLastFrameImage", reader.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          disabled={getStepStatus(2) === "disabled"} />
+                      </label>
+                    )}
+                  </div>
+                )}
+
                 {/* Character Consistency Settings for Veo */}
                 <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-border">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-foreground">Character Consistency (Optional)</h4>
+                    <h4 className="text-sm font-semibold text-foreground">
+                      <span className="flex items-center gap-1.5">
+                        Character Consistency (Optional)
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Describe your character's appearance in detail to maintain consistent look across all clips in multi-clip videos.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </h4>
                     <p className="text-xs text-muted-foreground">Helps maintain consistent appearance</p>
                   </div>
 
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-foreground">
-                      Character Description
+                      <span className="flex items-center gap-1.5">
+                        Character Description
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Physical appearance details — age, hair, eyes, build, expression. The more specific, the more consistent across clips.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
                     </label>
                     <textarea
                       value={videoSettings.characterProfile?.description || ''}
@@ -1577,7 +1579,45 @@ export function WorkflowCards({
 
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-foreground">
-                      Color Palette (3-5 colors)
+                      <span className="flex items-center gap-1.5">
+                        Wardrobe
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Describe clothing, accessories, and overall style to keep the character's outfit consistent across clips.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={videoSettings.characterProfile?.wardrobe || ''}
+                      onChange={(e) => handleSettingsChange("characterProfile", {
+                        ...videoSettings.characterProfile,
+                        description: videoSettings.characterProfile?.description || '',
+                        wardrobe: e.target.value
+                      })}
+                      placeholder="E.g., Flowing burgundy wrap top, gold pendant necklace..."
+                      className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+                      disabled={getStepStatus(2) === "disabled"}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">
+                      <span className="flex items-center gap-1.5">
+                        Color Palette (3-5 colors)
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Enter brand or mood colors to dominate the visual style. Veo will try to incorporate these across all clips.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
                     </label>
                     <input
                       type="text"
@@ -1591,11 +1631,458 @@ export function WorkflowCards({
                       disabled={getStepStatus(2) === "disabled"}
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">
+                      <span className="flex items-center gap-1.5">
+                        Camera Style
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Camera angles and framing — e.g., medium close-up, slow push-in, eye level. Keeps the cinematographic style consistent across clips.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={videoSettings.cinematography?.cameraStyle || ''}
+                      onChange={(e) => handleSettingsChange("cinematography", {
+                        ...videoSettings.cinematography,
+                        cameraStyle: e.target.value
+                      })}
+                      placeholder="E.g., Medium close-up, slight slow push-in, eye level..."
+                      className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+                      disabled={getStepStatus(2) === "disabled"}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">
+                      <span className="flex items-center gap-1.5">
+                        Lighting Style
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs text-xs">
+                            Lighting approach — e.g., warm golden hour, soft key light, natural window light. Sets the mood and keeps it consistent.
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={videoSettings.cinematography?.lightingStyle || ''}
+                      onChange={(e) => handleSettingsChange("cinematography", {
+                        ...videoSettings.cinematography,
+                        lightingStyle: e.target.value
+                      })}
+                      placeholder="E.g., Warm golden hour, soft key light from the left..."
+                      className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+                      disabled={getStepStatus(2) === "disabled"}
+                    />
+                  </div>
+                </div>
+
+                {/* Person Generation */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    <span className="flex items-center gap-1.5">
+                      Person Generation
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs text-xs">
+                          Controls whether Veo generates human figures. 'Allow Adults' is default for most content. 'Don't Allow' for abstract or nature-only visuals.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                  </label>
+                  <Select
+                    value={videoSettings.veoPersonGeneration}
+                    onValueChange={(value) => handleSettingsChange("veoPersonGeneration", value)}
+                    disabled={getStepStatus(2) === "disabled"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="allow_adult">Allow Adults (default)</SelectItem>
+                      <SelectItem value="allow_all">Allow All People</SelectItem>
+                      <SelectItem value="dont_allow">Don't Allow People</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Number of Videos */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    <span className="flex items-center gap-1.5">
+                      Variations per Generation
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs text-xs">
+                          Generate multiple versions of the same video to pick the best one. Only applies to single-clip videos. Each variation costs a separate generation.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                  </label>
+                  <Select
+                    value={String(videoSettings.veoNumberOfVideos)}
+                    onValueChange={(value) => handleSettingsChange("veoNumberOfVideos", parseInt(value))}
+                    disabled={getStepStatus(2) === "disabled"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 video (default)</SelectItem>
+                      <SelectItem value="2">2 variations</SelectItem>
+                      <SelectItem value="3">3 variations</SelectItem>
+                      <SelectItem value="4">4 variations</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Generate multiple variations to pick the best one. Only applies to single-clip videos.
+                  </p>
                 </div>
 
                 <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
                   <p className="text-sm text-green-900 dark:text-green-100">
                     <strong>Veo 3.1 Features:</strong> Native audio generation with dialogue, sound effects, and ambient sounds. Scene extension automatically continues from the last second of each clip for seamless multi-clip videos.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {videoSettings.videoEngine === "kling" && (
+              <>
+                {/* Kling v3 Settings */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Model Tier
+                    <span className="ml-1 text-xs text-muted-foreground" title="Pro: highest quality ($0.168/s with audio). Standard: 25% cheaper ($0.126/s with audio), minor quality difference for talking heads.">ⓘ</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSettingsChange("klingTier", "pro")}
+                      className={`p-2 rounded-lg border-2 text-sm ${videoSettings.klingTier === "pro" ? "border-primary bg-primary/10" : "border-border"}`}
+                    >
+                      <div className="font-medium">Pro</div>
+                      <div className="text-xs text-muted-foreground">$0.168/s</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSettingsChange("klingTier", "standard")}
+                      className={`p-2 rounded-lg border-2 text-sm ${videoSettings.klingTier === "standard" ? "border-primary bg-primary/10" : "border-border"}`}
+                    >
+                      <div className="font-medium">Standard</div>
+                      <div className="text-xs text-muted-foreground">$0.126/s</div>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Aspect Ratio
+                    <span className="ml-1 text-xs text-muted-foreground" title="16:9 for YouTube/landscape, 9:16 for TikTok/Reels/Shorts, 1:1 for Instagram feed">ⓘ</span>
+                  </label>
+                  <select
+                    value={videoSettings.klingAspectRatio}
+                    onChange={(e) => handleSettingsChange("klingAspectRatio", e.target.value)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    disabled={getStepStatus(2) === "disabled"}
+                  >
+                    <option value="9:16">9:16 (Vertical — TikTok/Reels)</option>
+                    <option value="16:9">16:9 (Landscape — YouTube)</option>
+                    <option value="1:1">1:1 (Square — Instagram)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Shot Duration
+                    <span className="ml-1 text-xs text-muted-foreground" title="Max duration per shot. Kling supports 3-15s. Longer shots = fewer cuts but higher cost per shot. The script is automatically split into shots of this length.">ⓘ</span>
+                  </label>
+                  <select
+                    value={videoSettings.klingDuration}
+                    onChange={(e) => handleSettingsChange("klingDuration", e.target.value)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    disabled={getStepStatus(2) === "disabled"}
+                  >
+                    {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(d => (
+                      <option key={d} value={String(d)}>{d} seconds{d === 10 ? ' (recommended)' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Cost estimate */}
+                {currentProject?.script && (
+                  <div className="p-2 bg-muted/50 rounded-lg text-xs text-muted-foreground">
+                    {(() => {
+                      const words = currentProject.script.content.trim().split(/\s+/).length;
+                      const estDuration = words / 3.0;
+                      const maxShot = parseInt(videoSettings.klingDuration);
+                      const shots = Math.max(1, Math.ceil(estDuration / maxShot));
+                      // Each shot uses actual needed duration (word-based), not max
+                      const avgShotDur = Math.min(maxShot, Math.ceil(estDuration / shots) + 2);
+                      const totalSec = shots === 1 ? Math.min(maxShot, Math.ceil(estDuration + 2)) : shots * avgShotDur;
+                      const rate = videoSettings.klingTier === 'standard' ? 0.126 : 0.168;
+                      const cost = (totalSec * rate).toFixed(2);
+                      return `Est. ${shots} shot${shots > 1 ? 's' : ''}, ~${totalSec}s billed ~ $${cost}`;
+                    })()}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Reference Image (Face Lock)
+                    <span className="ml-1 text-xs text-muted-foreground" title="Upload a clear frontal face photo. Kling's Element Binding will lock this face across all clips for character consistency. This is the key feature — without it, each clip may generate a different-looking person.">ⓘ</span>
+                  </label>
+                  <div className="space-y-2">
+                    {videoSettings.klingReferenceImage ? (
+                      <div className="relative">
+                        <img
+                          src={videoSettings.klingReferenceImage}
+                          alt="Reference"
+                          className="w-32 h-32 object-cover rounded-lg border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSettingsChange("klingReferenceImage", undefined)}
+                          className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 cursor-pointer p-3 border-2 border-dashed rounded-lg hover:border-primary/50">
+                        <span className="text-sm text-muted-foreground">Upload face photo for character consistency</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = () => handleSettingsChange("klingReferenceImage", reader.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="klingElementBinding"
+                    checked={videoSettings.klingElementBinding}
+                    onChange={(e) => handleSettingsChange("klingElementBinding", e.target.checked)}
+                    className="rounded"
+                  />
+                  <label htmlFor="klingElementBinding" className="text-sm font-medium text-foreground">
+                    Element Binding
+                    <span className="ml-1 text-xs text-muted-foreground" title="Locks facial features (eyes, hair, bone structure) to the reference image. Keeps the same person across all clips. Requires a reference image.">ⓘ</span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Custom Instructions
+                    <span className="ml-1 text-xs text-muted-foreground" title="Additional visual style guidance. Describe the mood, setting, camera work, lighting, etc. These get woven into the AI visual prompt for each clip.">ⓘ</span>
+                  </label>
+                  <textarea
+                    value={videoSettings.klingCustomInstructions}
+                    onChange={(e) => handleSettingsChange("klingCustomInstructions", e.target.value)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground min-h-[80px]"
+                    placeholder="e.g., Warm cinematic lighting, shallow depth of field, cozy living room setting..."
+                    disabled={getStepStatus(2) === "disabled"}
+                  />
+                </div>
+
+                {/* Character Profile - reuse same fields as Veo */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Character Description
+                    <span className="ml-1 text-xs text-muted-foreground" title="Text description of the character's appearance. Works together with the reference image — the image locks the face, this describes everything else (age, expression, mannerisms).">ⓘ</span>
+                  </label>
+                  <textarea
+                    value={videoSettings.characterProfile?.description || ""}
+                    onChange={(e) => handleSettingsChange("characterProfile", {
+                      ...videoSettings.characterProfile,
+                      description: e.target.value,
+                      wardrobe: videoSettings.characterProfile?.wardrobe || "",
+                    })}
+                    className="w-full p-2 rounded-md border bg-background text-foreground min-h-[60px]"
+                    placeholder="e.g., Woman in her 50s with warm smile, silver-streaked dark hair, kind hazel eyes..."
+                    disabled={getStepStatus(2) === "disabled"}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Wardrobe
+                    <span className="ml-1 text-xs text-muted-foreground" title="Describe clothing and accessories. Kling will try to maintain this across clips.">ⓘ</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={videoSettings.characterProfile?.wardrobe || ""}
+                    onChange={(e) => handleSettingsChange("characterProfile", {
+                      ...videoSettings.characterProfile,
+                      description: videoSettings.characterProfile?.description || "",
+                      wardrobe: e.target.value,
+                    })}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    placeholder="e.g., Burgundy wrap cardigan, gold pendant necklace"
+                    disabled={getStepStatus(2) === "disabled"}
+                  />
+                </div>
+
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-900">
+                  <p className="text-sm text-blue-900 dark:text-blue-100">
+                    <strong>Kling v3 Pro:</strong> Best for character consistency across clips. Upload a clear frontal face photo and enable Element Binding — Kling locks facial features (eyes, hair, bone structure) to your reference image. Each clip generates independently but with the same face. Max 10s per clip at 1080p.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {videoSettings.videoEngine === "omnihuman" && (
+              <>
+                {/* OmniHuman 1.5 Settings */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Reference Image (Required)
+                    <span className="ml-1 text-xs text-muted-foreground" title="Upload a clear photo of the person who should appear in the video. OmniHuman will animate this person's face, head, and upper body with lip-synced speech matching your audio. Use a high-quality frontal photo with good lighting.">ⓘ</span>
+                  </label>
+                  <div className="space-y-2">
+                    {videoSettings.omniReferenceImage ? (
+                      <div className="relative">
+                        <img
+                          src={videoSettings.omniReferenceImage}
+                          alt="Reference"
+                          className="w-32 h-32 object-cover rounded-lg border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSettingsChange("omniReferenceImage", undefined)}
+                          className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 cursor-pointer p-3 border-2 border-dashed rounded-lg hover:border-primary/50">
+                        <span className="text-sm text-muted-foreground">Upload face photo (required)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = () => handleSettingsChange("omniReferenceImage", reader.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Audio Source
+                    <span className="ml-1 text-xs text-muted-foreground" title="OmniHuman needs audio to sync lip movements. Either generate speech from your script using AI text-to-speech (ElevenLabs), or upload your own pre-recorded audio file.">ⓘ</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => handleSettingsChange("omniAudioUrl", "")}
+                      className={`p-2 rounded-lg border-2 text-sm ${
+                        !videoSettings.omniAudioUrl
+                          ? "border-primary bg-primary/10"
+                          : "border-border"
+                      }`}
+                    >
+                      Generate with TTS
+                    </button>
+                    <label
+                      className={`p-2 rounded-lg border-2 text-sm text-center cursor-pointer ${
+                        videoSettings.omniAudioUrl
+                          ? "border-primary bg-primary/10"
+                          : "border-border"
+                      }`}
+                    >
+                      Upload Audio
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              // For uploaded audio, we'd need to upload to S3 first
+                              // For now store as data URL indicator
+                              handleSettingsChange("omniAudioUrl", `uploaded:${file.name}`);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {!videoSettings.omniAudioUrl && (
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">
+                        TTS Voice ID (ElevenLabs)
+                        <span className="ml-1 text-xs text-muted-foreground" title="Enter an ElevenLabs voice ID. The system will generate speech audio from your script using this voice, then feed it to OmniHuman for lip-synced video.">ⓘ</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={videoSettings.omniVoiceId}
+                        onChange={(e) => handleSettingsChange("omniVoiceId", e.target.value)}
+                        className="w-full p-2 rounded-md border bg-background text-foreground text-sm"
+                        placeholder="e.g., EXAVITQu4vr4xnSDxMaL (Sarah)"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Resolution
+                    <span className="ml-1 text-xs text-muted-foreground" title="720p supports up to 60 seconds of video. 1080p supports up to 30 seconds. Choose based on your script length.">ⓘ</span>
+                  </label>
+                  <select
+                    value={videoSettings.omniResolution}
+                    onChange={(e) => handleSettingsChange("omniResolution", e.target.value)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    disabled={getStepStatus(2) === "disabled"}
+                  >
+                    <option value="720p">720p (up to 60s)</option>
+                    <option value="1080p">1080p (up to 30s)</option>
+                  </select>
+                </div>
+
+                <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-900">
+                  <p className="text-sm text-purple-900 dark:text-purple-100">
+                    <strong>OmniHuman 1.5:</strong> Best for talking-head videos. Upload a face photo + provide audio → generates a full lip-synced video with natural head movement, facial expressions, and gestures. Up to 60s at 720p in a single generation — no clip stitching needed. Does not generate speech — uses your provided audio or AI-generated TTS.
                   </p>
                 </div>
               </>

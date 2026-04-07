@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Plus, Clock, Save, Share, Calendar, TrendingUp } from "lucide-react";
@@ -10,11 +10,31 @@ import { ContentDisplay } from "@/components/vsp/content-display";
 import type { VspContentProject as ContentProject } from "@shared/schema";
 
 export default function ContentCreator() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  // Check if URL has a project ID: /vsp/:projectId
+  const [, routeParams] = useRoute("/vsp/:projectId");
+  const urlProjectId = routeParams?.projectId || null;
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSubtopic, setSelectedSubtopic] = useState<string | null>(null);
   const [selectedTopicName, setSelectedTopicName] = useState<string | null>(null);
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(urlProjectId);
+
+  // Sync URL project ID to state
+  useEffect(() => {
+    if (urlProjectId && urlProjectId !== currentProjectId) {
+      setCurrentProjectId(urlProjectId);
+    }
+  }, [urlProjectId]);
+
+  // Update URL when project changes
+  useEffect(() => {
+    if (currentProjectId && location !== `/vsp/${currentProjectId}`) {
+      setLocation(`/vsp/${currentProjectId}`, { replace: true });
+    } else if (!currentProjectId && location !== '/vsp') {
+      setLocation('/vsp', { replace: true });
+    }
+  }, [currentProjectId]);
 
   // Get all projects for loading by ID
   const { data: projects } = useQuery({
@@ -25,15 +45,6 @@ export default function ContentCreator() {
   const { data: currentProject } = useQuery<ContentProject>({
     queryKey: ["/api/vsp/projects", currentProjectId],
     enabled: !!currentProjectId,
-    select: (data) => {
-      // If the query returns a single project, use it
-      if (data && 'id' in data) return data as ContentProject;
-      // Otherwise find it in the projects list
-      if (Array.isArray(projects)) {
-        return projects.find((p: ContentProject) => p.id === currentProjectId) || null;
-      }
-      return null;
-    },
   });
 
   const handleTopicSelect = (categoryId: string, subtopicId: string, subtopicName: string) => {
@@ -47,30 +58,29 @@ export default function ContentCreator() {
     setCurrentProjectId(project.id);
   };
 
+  const qc = useQueryClient();
+
   const handleProjectLoad = (project: ContentProject) => {
+    // Pre-populate the query cache so the project is immediately available
+    qc.setQueryData(["/api/vsp/projects", project.id], project);
     setCurrentProjectId(project.id);
     // Extract category and subtopic info from the project
     setSelectedCategory(project.category);
     setSelectedSubtopic(project.subtopic);
-    setSelectedTopicName(project.subtopic.split('-').map(word => 
+    setSelectedTopicName((project.subtopic || 'custom').split('-').map(word =>
       word.charAt(0).toUpperCase() + word.slice(1)
     ).join(' '));
   };
 
-  // Handle project loading from URL parameter
+  // Load project from URL on first render
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const projectId = urlParams.get('projectId');
-    
-    if (projectId && projects && Array.isArray(projects)) {
-      const project = projects.find((p: ContentProject) => p.id === projectId);
+    if (urlProjectId && projects && Array.isArray(projects)) {
+      const project = projects.find((p: ContentProject) => p.id === urlProjectId);
       if (project) {
         handleProjectLoad(project);
-        // Clear the URL parameter after loading
-        window.history.replaceState({}, '', '/');
       }
     }
-  }, [projects]);
+  }, [urlProjectId, projects]);
 
   return (
     <div className="min-h-screen flex bg-background">

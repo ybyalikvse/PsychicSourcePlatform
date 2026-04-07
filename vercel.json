@@ -2,6 +2,12 @@
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "dist/public",
   "framework": null,
+  "crons": [
+    {
+      "path": "/api/cron/video-cleanup",
+      "schedule": "0 8 * * *"
+    }
+  ],
   "functions": {
     "api/index.js": {
       "maxDuration": 300

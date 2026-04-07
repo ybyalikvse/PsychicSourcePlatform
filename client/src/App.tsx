@@ -46,6 +46,11 @@ import CiAnalyses from "@/pages/ci-analyses";
 import CiBriefs from "@/pages/ci-briefs";
 import CiSettingsPage from "@/pages/ci-settings";
 import CiPerformance from "@/pages/ci-performance";
+import SocialPosts from "@/pages/social-posts";
+import SocialPostsCreate from "@/pages/social-posts-create";
+import SocialPostsTemplates from "@/pages/social-posts-templates";
+import SocialPostsCarouselTypes from "@/pages/social-posts-carousel-types";
+import SocialPostsMedia from "@/pages/social-posts-media";
 
 interface AuthInfo {
   uid: string;
@@ -77,6 +82,7 @@ function AdminRouter() {
       <Route path="/psychics" component={Psychics} />
       <Route path="/video-requests/:id" component={VideoRequests} />
       <Route path="/video-requests" component={VideoRequests} />
+      <Route path="/vsp/:projectId" component={VspContentCreator} />
       <Route path="/vsp" component={VspContentCreator} />
       <Route path="/vsp/history" component={VspHistory} />
       <Route path="/vsp/calendar" component={VspCalendar} />
@@ -87,6 +93,12 @@ function AdminRouter() {
       <Route path="/ci/briefs" component={CiBriefs} />
       <Route path="/ci/performance" component={CiPerformance} />
       <Route path="/ci/settings" component={CiSettingsPage} />
+      <Route path="/social-posts/create" component={SocialPostsCreate} />
+      <Route path="/social-posts/edit/:id" component={SocialPostsCreate} />
+      <Route path="/social-posts/templates" component={SocialPostsTemplates} />
+      <Route path="/social-posts/carousel-types" component={SocialPostsCarouselTypes} />
+      <Route path="/social-posts/media-library" component={SocialPostsMedia} />
+      <Route path="/social-posts" component={SocialPosts} />
       <Route component={NotFound} />
     </Switch>
   );

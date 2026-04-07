@@ -11,10 +11,31 @@ import { apiRequest } from "@/lib/queryClient";
 import type { VspContentProject as ContentProject } from "@shared/schema";
 import { PublishModal } from "./publish-modal";
 
-function getVideoSrc(url: string | null | undefined): string {
-  if (!url) return '';
+function getVideoSrc(rawUrl: string | null | undefined): string {
+  if (!rawUrl) return '';
+  let url = rawUrl;
+  // Handle case where videoUrl is a JSON object stored as string: {"key":"...","url":"..."}
+  if (url.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(url);
+      if (parsed.key) {
+        return `/api/vsp/video-proxy-key?key=${encodeURIComponent(parsed.key)}`;
+      }
+      url = parsed.url || url;
+    } catch {
+      // not JSON, use as-is
+    }
+  }
   if (url.includes('.s3.') && url.includes('.amazonaws.com')) {
-    return `/api/vsp/video-proxy?url=${encodeURIComponent(url)}`;
+    // Extract the full S3 key (path after the bucket hostname), strip query params
+    const cleanUrl = url.split('?')[0];
+    const match = cleanUrl.match(/\.amazonaws\.com\/(.+)$/);
+    const key = match ? match[1] : cleanUrl.split('/').pop() || '';
+    return `/api/vsp/video-proxy-key?key=${encodeURIComponent(key)}`;
+  }
+  // Gemini video URLs need API key appended
+  if (url.includes('generativelanguage.googleapis.com')) {
+    return `/api/vsp/veo-clip-proxy?uri=${encodeURIComponent(url)}`;
   }
   return url;
 }
@@ -36,8 +57,15 @@ export function ContentDisplay({ project, onProjectUpdate }: ContentDisplayProps
 
   // Poll for video status when video is being generated OR when project is completed (to load full video data)
   const activeEngine = project?.videoSettings?.videoEngine;
-  const activeClips = activeEngine === 'veo' ? project?.videoSettings?.veoClips : project?.videoSettings?.soraClips;
-  const activeStitchingStatus = activeEngine === 'veo' ? project?.videoSettings?.veoStitchingStatus : project?.videoSettings?.soraStitchingStatus;
+  const isKlingMultiShot = activeEngine === 'kling' && project?.videoSettings?.klingMultiShot;
+  const activeClips = activeEngine === 'veo' ? project?.videoSettings?.veoClips
+    : (activeEngine === 'kling' && !isKlingMultiShot) ? project?.videoSettings?.klingClips
+    : undefined;
+  const activeStitchingStatus = activeEngine === 'veo' ? project?.videoSettings?.veoStitchingStatus
+    : (activeEngine === 'kling' && !isKlingMultiShot) ? project?.videoSettings?.klingStitchingStatus
+    : activeEngine === 'kling' ? project?.videoSettings?.klingStatus
+    : activeEngine === 'omnihuman' ? project?.videoSettings?.omniStatus
+    : undefined;
   const isMultiClip = activeClips && activeClips.length > 0;
   const { data: statusCheck } = useQuery({
     queryKey: ['/api/vsp/projects', project?.id, 'video-status'],
@@ -242,6 +270,46 @@ export function ContentDisplay({ project, onProjectUpdate }: ContentDisplayProps
         description: error.message || "Failed to mark clip as failed. Please try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  const cancelVideoMutation = useMutation({
+    mutationFn: async () => {
+      if (!project?.id) throw new Error("No project ID");
+      const response = await apiRequest("POST", `/api/vsp/projects/${project.id}/cancel-video`, {});
+      return response.json();
+    },
+    onSuccess: (updatedProject: ContentProject) => {
+      queryClient.setQueryData(["/api/vsp/projects", updatedProject.id], updatedProject);
+      queryClient.setQueryData(["/api/vsp/projects"], (old: ContentProject[] | undefined) => {
+        if (!old) return [updatedProject];
+        return old.map(p => p.id === updatedProject.id ? updatedProject : p);
+      });
+      onProjectUpdate?.(updatedProject);
+      toast({ title: "Video Cancelled", description: "Video generation has been cancelled." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to Cancel", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resetVideoMutation = useMutation({
+    mutationFn: async () => {
+      if (!project?.id) throw new Error("No project ID");
+      const response = await apiRequest("POST", `/api/vsp/projects/${project.id}/reset-video`, {});
+      return response.json();
+    },
+    onSuccess: (updatedProject: ContentProject) => {
+      queryClient.setQueryData(["/api/vsp/projects", updatedProject.id], updatedProject);
+      queryClient.setQueryData(["/api/vsp/projects"], (old: ContentProject[] | undefined) => {
+        if (!old) return [updatedProject];
+        return old.map(p => p.id === updatedProject.id ? updatedProject : p);
+      });
+      onProjectUpdate?.(updatedProject);
+      toast({ title: "Video Reset", description: "You can now regenerate the video with new settings." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to Reset", description: error.message, variant: "destructive" });
     },
   });
 
@@ -540,8 +608,8 @@ export function ContentDisplay({ project, onProjectUpdate }: ContentDisplayProps
                         </div>
                         {clip.status === 'generating' && typeof clip.progress === 'number' && (<div className="mt-2 pl-7"><Progress value={clip.progress} className="h-1.5" /><div className="text-xs text-muted-foreground mt-1">{clip.progress}%</div></div>)}
                         {clip.error && clip.status === 'failed' && (<div className="mt-2 text-xs text-red-600 pl-7">{clip.error}</div>)}
-                        {clip.status === 'completed' && activeEngine === 'veo' && !clip.videoUrl && (<div className="mt-2 pl-7 text-xs text-green-600">Included in final video via scene extension</div>)}
-                        {clip.videoUrl && clip.status === 'completed' && (<div className="mt-3 pl-7"><video src={getVideoSrc(clip.videoUrl)} controls className="w-full max-w-xs rounded-lg border border-green-300" data-testid={`video-clip-${clip.clipNumber}`}>Your browser does not support the video tag.</video></div>)}
+                        {clip.status === 'completed' && activeEngine === 'veo' && !clip.videoUrl && !clip.videoFileId && (<div className="mt-2 pl-7 text-xs text-green-600">Included in final video via scene extension</div>)}
+                        {(clip.videoUrl || clip.videoFileId) && clip.status === 'completed' && (<div className="mt-3 pl-7"><video src={getVideoSrc(clip.videoUrl || clip.videoFileId)} controls className="w-full max-w-xs rounded-lg border border-green-300" data-testid={`video-clip-${clip.clipNumber}`}>Your browser does not support the video tag.</video></div>)}
                       </div>
                     ))}
 
@@ -567,7 +635,7 @@ export function ContentDisplay({ project, onProjectUpdate }: ContentDisplayProps
                 </div>
               )}
 
-              {project.status === "video_generating" && !isMultiClip && project.videoSettings?.videoEngine !== 'sora' && project.videoSettings?.videoEngine !== 'veo' && (
+              {project.status === "video_generating" && !isMultiClip && project.videoSettings?.videoEngine === 'revid' && (
                 <div>
                   <h4 className="font-medium mb-4">Generation Progress</h4>
                   <div className="space-y-3">
@@ -578,7 +646,43 @@ export function ContentDisplay({ project, onProjectUpdate }: ContentDisplayProps
                 </div>
               )}
 
-              {project.status === "video_generating" && !isMultiClip && (project.videoSettings?.videoEngine === 'sora' || project.videoSettings?.videoEngine === 'veo') && (
+              {project.status === "video_generating" && !isMultiClip && project.videoSettings?.videoEngine === 'omnihuman' && (
+                <div>
+                  <h4 className="font-medium mb-4">OmniHuman Generation Progress</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"><div className="flex items-center space-x-3"><CheckCircle className="w-4 h-4 text-green-500" /><span className="text-sm">Reference Image Uploaded</span></div><span className="text-xs text-green-600">Completed</span></div>
+                    <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg"><div className="flex items-center space-x-3"><Loader2 className="w-4 h-4 text-blue-500 animate-spin" /><span className="text-sm">Generating Talking Head Video</span></div><span className="text-xs text-blue-600">In Progress</span></div>
+                  </div>
+                </div>
+              )}
+
+              {project.status === "video_generating" && isKlingMultiShot && (
+                <div>
+                  <h4 className="font-medium mb-4">Kling Multi-Shot Generation</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                        <div>
+                          <span className="text-sm">Generating {project.videoSettings?.klingShots?.length || '?'}-shot video</span>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {project.videoSettings?.klingTier === 'standard' ? 'Standard' : 'Pro'} tier
+                            {project.videoSettings?.klingEstimatedCost && ` — Est. $${project.videoSettings.klingEstimatedCost}`}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-blue-600">In Progress</span>
+                    </div>
+                    {project.videoSettings?.klingShots?.map((shot: any) => (
+                      <div key={shot.shotNumber} className="p-2 bg-muted/30 rounded text-xs">
+                        <span className="font-medium">Shot {shot.shotNumber}</span> ({shot.duration}s): <span className="text-muted-foreground">"{shot.scriptSegment.substring(0, 60)}..."</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {project.status === "video_generating" && !isMultiClip && !isKlingMultiShot && (project.videoSettings?.videoEngine === 'veo') && (
                 <div>
                   <h4 className="font-medium mb-4">Generation Progress</h4>
                   <div className="space-y-3">
@@ -591,16 +695,50 @@ export function ContentDisplay({ project, onProjectUpdate }: ContentDisplayProps
                 <div>
                   <h4 className="font-medium mb-4">Video Settings</h4>
                   <div className="space-y-3 text-sm">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Format:</span><span>{project.videoSettings.format}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Resolution:</span><span>1080x1920</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Duration:</span><span>{project.videoSettings.length} seconds</span></div>
-                    {project.videoSettings.voice && (<div className="flex justify-between"><span className="text-muted-foreground">Voice:</span><span>{project.videoSettings.voice.replace("-", " ").replace(/\b\w/g, l => l.toUpperCase())}</span></div>)}
-                    {project.videoSettings.style && (<div className="flex justify-between"><span className="text-muted-foreground">Style:</span><span>{project.videoSettings.style.replace("-", " ").replace(/\b\w/g, l => l.toUpperCase())}</span></div>)}
+                    <div className="flex justify-between"><span className="text-muted-foreground">Engine:</span><span className="capitalize">{project.videoSettings?.videoEngine || 'revid'}</span></div>
+                    {project.videoSettings?.videoEngine === 'revid' && (
+                      <>
+                        {project.videoSettings.format && <div className="flex justify-between"><span className="text-muted-foreground">Format:</span><span>{project.videoSettings.format}</span></div>}
+                        <div className="flex justify-between"><span className="text-muted-foreground">Resolution:</span><span>1080x1920</span></div>
+                        {project.videoSettings.length && <div className="flex justify-between"><span className="text-muted-foreground">Duration:</span><span>{project.videoSettings.length} seconds</span></div>}
+                        {project.videoSettings.voice && (<div className="flex justify-between"><span className="text-muted-foreground">Voice:</span><span>{project.videoSettings.voice.replace("-", " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>)}
+                        {project.videoSettings.style && (<div className="flex justify-between"><span className="text-muted-foreground">Style:</span><span>{project.videoSettings.style.replace("-", " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}</span></div>)}
+                      </>
+                    )}
+                    {project.videoSettings?.videoEngine === 'veo' && (
+                      <>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Resolution:</span><span>{project.videoSettings.veoResolution || '720p'}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Aspect Ratio:</span><span>{project.videoSettings.veoAspectRatio || '9:16'}</span></div>
+                      </>
+                    )}
+                    {project.videoSettings?.videoEngine === 'kling' && (
+                      <>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Aspect Ratio:</span><span>{project.videoSettings.klingAspectRatio || '9:16'}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Clip Duration:</span><span>{project.videoSettings.klingDuration || '10'}s</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Element Binding:</span><span>{project.videoSettings.klingElementBinding ? 'On' : 'Off'}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Clips:</span><span>{project.videoSettings.klingClips?.length || 0}</span></div>
+                      </>
+                    )}
+                    {project.videoSettings?.videoEngine === 'omnihuman' && (
+                      <>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Resolution:</span><span>{project.videoSettings.omniResolution || '1080p'}</span></div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
 
               <div className="flex flex-col space-y-3">
+                {project.status === "video_generating" && (
+                  <Button variant="destructive" size="sm" onClick={() => cancelVideoMutation.mutate()} disabled={cancelVideoMutation.isPending} data-testid="button-cancel-video">
+                    <X className="w-4 h-4 mr-2" />{cancelVideoMutation.isPending ? 'Cancelling...' : 'Cancel Generation'}
+                  </Button>
+                )}
+                {project.status === "video_failed" && (
+                  <Button variant="outline" size="sm" onClick={() => resetVideoMutation.mutate()} disabled={resetVideoMutation.isPending} data-testid="button-reset-video">
+                    <RefreshCw className="w-4 h-4 mr-2" />{resetVideoMutation.isPending ? 'Resetting...' : 'Reset & Try Again'}
+                  </Button>
+                )}
                 <div className="flex space-x-3">
                   <Button className="flex-1" onClick={downloadVideo} disabled={!(statusCheck?.videoUrl || project.videoUrl)} data-testid="button-download-video"><Download className="w-4 h-4 mr-2" />Download Video</Button>
                   <Button variant="outline" size="icon" disabled={!(statusCheck?.videoUrl || project.videoUrl)} data-testid="button-refresh-video"><RefreshCw className="w-4 h-4" /></Button>

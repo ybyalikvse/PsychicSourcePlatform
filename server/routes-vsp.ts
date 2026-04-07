@@ -31,12 +31,101 @@ import {
   getAvailableAspectRatios,
   getAvailableCaptionPositions
 } from "./services/vsp-revid";
-import { generateSoraVideo, getSoraVideoStatus, generateSoraClip, waitForClipAndExtractFrame, downloadAndConvertSoraVideo } from "./services/vsp-sora";
 import { generateVeoClip, waitForVeoVideo, pollVeoOperation, downloadVeoVideo } from "./services/vsp-veo";
+import { generateKlingClip, pollKlingJob, waitForKlingVideo } from "./services/vsp-kling";
+import { generateOmniHumanVideo, waitForOmniHumanVideo } from "./services/vsp-omnihuman";
+import { generateAndUploadTTS, listTTSVoices } from "./services/vsp-tts";
 import { getSocialAccounts, publishToPostBridge } from "./services/vsp-postbridge";
 import { BulkContentGenerator } from "./services/vsp-bulk-generator";
-import { segmentScriptForSora, createClipPrompt, buildStyleBlock, getDurationTierForModel, getMaxSingleClipWords } from "./services/vsp-script-segmentation";
-import { uploadVideoToS3, getPresignedUrl } from "./s3";
+import { segmentScriptForSora, createClipPrompt, createKlingClipPrompt, buildStyleBlock } from "./services/vsp-script-segmentation";
+import { uploadVideoToS3, getPresignedUrl, getSignedVideoUrl } from "./s3";
+
+function segmentScriptForVeo(
+  script: { content: string },
+  primaryDuration: number,
+  availableDurations: number[],
+  totalWords: number
+): Array<{ clipNumber: number; scriptSegment: string; duration: number; wordCount: number; startTime: number; endTime: number; isLastClip: boolean }> {
+  // Very conservative WPS — leaves 1.5-2s buffer at end so speaker finishes
+  // and holds a natural pause before clip ends. Real speech is 2.3-2.8 WPS.
+  const WORDS_PER_SECOND = 1.7;
+  const maxWordsPerClip = Math.floor(primaryDuration * WORDS_PER_SECOND);
+
+  // Split into sentences first for cleaner breaks
+  const sentences = script.content.split(/(?<=[.!?])\s+/).filter(s => s.length > 0);
+  const words = script.content.split(/\s+/).filter(w => w.length > 0);
+  const segments: Array<{ clipNumber: number; scriptSegment: string; duration: number; wordCount: number; startTime: number; endTime: number; isLastClip: boolean }> = [];
+
+  let currentStart = 0;
+  let clipNumber = 1;
+  let timeOffset = 0;
+
+  while (currentStart < words.length) {
+    const remainingWords = words.length - currentStart;
+
+    // Pick best duration for this clip
+    let clipDuration = primaryDuration;
+    let clipMaxWords = maxWordsPerClip;
+
+    // For the last clip, pick the shortest duration that fits
+    if (remainingWords <= maxWordsPerClip) {
+      for (const d of [...availableDurations].sort((a, b) => a - b)) {
+        const maxForDuration = Math.floor(d * WORDS_PER_SECOND);
+        if (remainingWords <= maxForDuration) {
+          clipDuration = d;
+          clipMaxWords = maxForDuration;
+          break;
+        }
+      }
+    }
+
+    const endIndex = Math.min(currentStart + clipMaxWords, words.length);
+
+    // ALWAYS break at sentence boundaries — never split mid-sentence
+    let actualEnd = endIndex;
+    if (endIndex < words.length) {
+      // Search backwards from endIndex for a sentence-ending punctuation
+      let bestBreak = -1;
+      for (let i = endIndex - 1; i >= currentStart + Math.floor(clipMaxWords * 0.4); i--) {
+        if (words[i].match(/[.!?]$/)) {
+          bestBreak = i + 1;
+          break;
+        }
+      }
+      if (bestBreak > currentStart) {
+        actualEnd = bestBreak;
+      } else {
+        // No sentence boundary found — look forward for one
+        for (let i = endIndex; i < Math.min(endIndex + 5, words.length); i++) {
+          if (words[i].match(/[.!?]$/)) {
+            actualEnd = i + 1;
+            break;
+          }
+        }
+      }
+    }
+
+    const segmentWords = words.slice(currentStart, actualEnd);
+    const segmentText = segmentWords.join(' ');
+    const isLastClip = actualEnd >= words.length;
+
+    segments.push({
+      clipNumber,
+      scriptSegment: segmentText,
+      duration: clipDuration,
+      wordCount: segmentWords.length,
+      startTime: timeOffset,
+      endTime: timeOffset + clipDuration,
+      isLastClip,
+    });
+
+    timeOffset += clipDuration;
+    currentStart = actualEnd;
+    clipNumber++;
+  }
+
+  return segments;
+}
 
 export function registerVspRoutes(app: Express) {
   const router = Router();
@@ -374,10 +463,9 @@ export function registerVspRoutes(app: Express) {
         hasToGenerateMusic
       } = parsedBody;
 
-      // Only calculate credits for Revid engine
-      if (videoEngine === 'sora') {
-        // Sora uses OpenAI API pricing, not Revid credits
-        return res.json({ credits: 0, note: "Sora videos use OpenAI API pricing, not Revid credits" });
+      // Veo uses Google API pricing, not Revid credits
+      if (videoEngine === 'veo') {
+        return res.json({ credits: 0, note: "Veo videos use Google API pricing, not Revid credits" });
       }
 
       if (!style || !voice) {
@@ -441,18 +529,15 @@ export function registerVspRoutes(app: Express) {
         captionPositionName,
         hasToGenerateVoice,
         hasToGenerateMusic,
-        // Sora parameters
-        soraModel,
-        soraSize,
-        soraSeconds,
-        soraCustomInstructions,
-        soraReferenceImage,
         // Veo parameters
         veoAspectRatio,
         veoResolution,
         veoCustomInstructions,
         veoReferenceImages,
-        veoNegativePrompt,
+        veoFirstFrameImage,
+        veoLastFrameImage,
+        veoPersonGeneration,
+        veoNumberOfVideos,
         // Character Consistency Settings
         characterProfile,
         colorPalette,
@@ -470,275 +555,24 @@ export function registerVspRoutes(app: Express) {
       console.log(`Script: "${project.script.content.substring(0, 100)}..."`);
       console.log(`===============================\n`);
 
-      // Update status to generating
+      // Save settings immediately so they persist even if generation fails
+      // (excludes large base64 image blobs — only saves text/config fields)
+      const initialVideoSettings: any = { videoEngine };
+      if (videoEngine === 'veo') {
+        Object.assign(initialVideoSettings, {
+          veoAspectRatio, veoResolution, veoCustomInstructions,
+          veoPersonGeneration, veoNumberOfVideos,
+          veoDuration: (parsedBody as any).veoDuration || 'auto',
+          characterProfile, colorPalette, cinematography,
+        });
+      }
+
       await storage.updateVspProject(projectId, {
-        status: "video_generating"
+        status: "video_generating",
+        videoSettings: initialVideoSettings,
       });
 
-      if (videoEngine === 'sora') {
-        // Handle Sora video generation
-        if (!soraModel || !soraSize) {
-          return res.status(400).json({
-            error: "Sora parameters (soraModel, soraSize) are required when using Sora engine"
-          });
-        }
-
-        if (soraReferenceImage) {
-          console.log('Reference image will be used for image-to-video generation');
-        }
-
-        const WORDS_PER_SECOND = 2.5;
-        const { durations: modelDurations, maxClipDuration } = getDurationTierForModel(soraModel);
-        const MAX_SINGLE_CLIP_WORDS = getMaxSingleClipWords(soraModel);
-        const scriptWordCount = project.script.content.split(' ').length;
-        const estimatedDuration = Math.round(scriptWordCount / WORDS_PER_SECOND);
-        const needsMultiClip = scriptWordCount > MAX_SINGLE_CLIP_WORDS;
-
-        console.log(`Script analysis: ${scriptWordCount} words, ~${estimatedDuration}s duration`);
-        console.log(`Model: ${soraModel}, max clip: ${maxClipDuration}s, durations: [${modelDurations.join(',')}]`);
-        console.log(`Multi-clip threshold: ${MAX_SINGLE_CLIP_WORDS} words`);
-        console.log(`Multi-clip mode: ${needsMultiClip ? 'YES' : 'NO'}`);
-
-        if (needsMultiClip) {
-          console.log('Starting sequential multi-clip Sora generation with frame chaining...');
-
-          const subtopicData = await storage.getVspContentSubtopic(project.subtopic);
-          const subtopicForAI = subtopicData?.description || project.subtopic;
-
-          const visualPrompt = await generateSoraVisualPrompt(
-            project.script,
-            project.category,
-            subtopicForAI,
-            soraCustomInstructions,
-            characterProfile,
-            colorPalette,
-            cinematography
-          );
-
-          const styleBlock = buildStyleBlock(characterProfile, colorPalette, cinematography, soraCustomInstructions);
-
-          const segments = segmentScriptForSora(project.script, maxClipDuration, modelDurations);
-          console.log(`Created ${segments.length} clip segments`);
-
-          const clips: Array<{
-            clipNumber: number;
-            scriptSegment: string;
-            duration: number;
-            prompt: string;
-            jobId?: string;
-            videoUrl?: string;
-            status: 'pending' | 'generating' | 'completed' | 'failed';
-            error?: string;
-            attempts?: number;
-            progress?: number;
-          }> = [];
-
-          let lastFrameRef = soraReferenceImage || '';
-
-          for (let i = 0; i < segments.length; i++) {
-            const segment = segments[i];
-            const previousSegment = i > 0 ? segments[i - 1] : null;
-
-            const clipPrompt = createClipPrompt(
-              visualPrompt,
-              segment,
-              previousSegment,
-              soraCustomInstructions,
-              !!lastFrameRef,
-              styleBlock
-            );
-
-            const clip: {
-              clipNumber: number;
-              scriptSegment: string;
-              duration: number;
-              prompt: string;
-              jobId?: string;
-              videoUrl?: string;
-              status: 'pending' | 'generating' | 'completed' | 'failed';
-              error?: string;
-              attempts?: number;
-              progress?: number;
-            } = {
-              clipNumber: segment.clipNumber,
-              scriptSegment: segment.scriptSegment,
-              duration: segment.duration,
-              prompt: clipPrompt,
-              status: 'generating',
-              attempts: 1,
-              progress: 0
-            };
-
-            console.log(`Submitting clip ${segment.clipNumber}/${segments.length}${lastFrameRef ? ' (with reference frame)' : ''}...`);
-
-            const result = await generateSoraClip({
-              prompt: clipPrompt,
-              model: soraModel as 'sora-2' | 'sora-2-pro',
-              size: soraSize as '1280x720' | '720x1280' | '1080x1080',
-              seconds: clip.duration,
-              clipNumber: clip.clipNumber,
-              referenceImage: lastFrameRef || undefined
-            });
-
-            clip.jobId = result.jobId;
-            clips.push(clip);
-
-            await storage.updateVspProject(projectId, {
-              videoSettings: {
-                videoEngine: 'sora',
-                soraModel,
-                soraSize,
-                soraSeconds: maxClipDuration,
-                soraCustomInstructions,
-                soraReferenceImage,
-                characterProfile,
-                colorPalette,
-                cinematography,
-                soraVisualPrompt: visualPrompt,
-                soraClips: clips,
-                soraStitchingStatus: 'pending'
-              },
-              status: 'video_generating'
-            });
-
-            const shouldWaitForFrame = i < segments.length - 1;
-
-            if (shouldWaitForFrame) {
-              try {
-                console.log(`Waiting for clip ${segment.clipNumber} to complete for frame extraction...`);
-                const { videoDataUrl, lastFrameBase64 } = await waitForClipAndExtractFrame(
-                  result.jobId,
-                  async (progress, pollStatus) => {
-                    clip.progress = progress;
-                    await storage.updateVspProject(projectId, {
-                      videoSettings: {
-                        videoEngine: 'sora',
-                        soraModel,
-                        soraSize,
-                        soraSeconds: maxClipDuration,
-                        soraCustomInstructions,
-                        soraReferenceImage,
-                        characterProfile,
-                        colorPalette,
-                        cinematography,
-                        soraVisualPrompt: visualPrompt,
-                        soraClips: clips,
-                        soraStitchingStatus: 'pending'
-                      },
-                      status: 'video_generating'
-                    });
-                  }
-                );
-
-                clip.status = 'completed';
-                clip.progress = 100;
-
-                const s3ClipUrl = await uploadVideoToS3(videoDataUrl, projectId, `sora-clip-${segment.clipNumber}`);
-                clip.videoUrl = s3ClipUrl;
-
-                if (lastFrameBase64) {
-                  lastFrameRef = lastFrameBase64;
-                  console.log(`Using last frame of clip ${segment.clipNumber} as reference for clip ${segment.clipNumber + 1}`);
-                }
-
-                await storage.updateVspProject(projectId, {
-                  videoSettings: {
-                    videoEngine: 'sora',
-                    soraModel,
-                    soraSize,
-                    soraSeconds: maxClipDuration,
-                    soraCustomInstructions,
-                    soraReferenceImage,
-                    characterProfile,
-                    colorPalette,
-                    cinematography,
-                    soraVisualPrompt: visualPrompt,
-                    soraClips: clips,
-                    soraStitchingStatus: 'pending'
-                  },
-                  status: 'video_generating'
-                });
-              } catch (err) {
-                console.warn(`Failed to wait for clip ${segment.clipNumber}, continuing without frame reference:`, err);
-              }
-            }
-          }
-
-          const updatedProject = await storage.updateVspProject(projectId, {
-            videoSettings: {
-              videoEngine: 'sora',
-              soraModel,
-              soraSize,
-              soraSeconds: maxClipDuration,
-              soraCustomInstructions,
-              soraReferenceImage,
-              characterProfile,
-              colorPalette,
-              cinematography,
-              soraVisualPrompt: visualPrompt,
-              soraClips: clips,
-              soraStitchingStatus: 'pending'
-            },
-            status: 'video_generating'
-          });
-
-          console.log(`Sequential multi-clip generation complete: ${clips.length} clips`);
-          return res.json(updatedProject);
-        } else {
-          // SINGLE-CLIP WORKFLOW
-          console.log('Starting single-clip Sora generation workflow...');
-
-          // Fetch subtopic to get its description
-          const subtopicData = await storage.getVspContentSubtopic(project.subtopic);
-          const subtopicForAI = subtopicData?.description || project.subtopic;
-
-          // Generate visual/audio prompt
-          const visualPrompt = await generateSoraVisualPrompt(
-            project.script,
-            project.category,
-            subtopicForAI,
-            soraCustomInstructions,
-            characterProfile,
-            colorPalette,
-            cinematography
-          );
-
-          // Target duration for single clip (4, 8, or 12)
-          let singleClipDuration: 4 | 8 | 12 = 12;
-          if (estimatedDuration <= 4) singleClipDuration = 4;
-          else if (estimatedDuration <= 8) singleClipDuration = 8;
-
-          const soraResult = await generateSoraVideo({
-            prompt: visualPrompt,
-            model: soraModel as 'sora-2' | 'sora-2-pro',
-            size: soraSize as '1280x720' | '720x1280' | '1080x1080',
-            seconds: singleClipDuration,
-            referenceImage: soraReferenceImage
-          });
-
-          // Store Sora job ID for polling
-          const updatedProject = await storage.updateVspProject(projectId, {
-            videoSettings: {
-              ...project.videoSettings,
-              videoEngine: 'sora',
-              soraModel,
-              soraSize,
-              soraSeconds: singleClipDuration,
-              soraCustomInstructions,
-              soraReferenceImage,
-              characterProfile,
-              colorPalette,
-              cinematography,
-              soraVisualPrompt: visualPrompt
-            },
-            videoUrl: soraResult.videoUrl || null,
-            status: soraResult.videoUrl ? "completed" : "video_generating",
-            soraJobId: soraResult.jobId
-          });
-
-          res.json(updatedProject);
-        }
-      } else if (videoEngine === 'veo') {
+      if (videoEngine === 'veo') {
         // Handle Veo 3.1 video generation
         const subtopicData = await storage.getVspContentSubtopic(project.subtopic);
         const subtopicForAI = subtopicData?.description || project.subtopic;
@@ -756,18 +590,42 @@ export function registerVspRoutes(app: Express) {
         const styleBlock = buildStyleBlock(characterProfile, colorPalette, cinematography, veoCustomInstructions);
 
         const WORDS_PER_SECOND = 2.5;
-        const VEO_CLIP_DURATION = 8;
-        const MAX_SINGLE_CLIP_WORDS = Math.floor(VEO_CLIP_DURATION * WORDS_PER_SECOND * 1.15);
+        const veoDurationSetting = (parsedBody as any).veoDuration || 'auto';
         const scriptWordCount = project.script.content.split(' ').length;
+
+        // Smart duration logic:
+        // - "auto": use 8s clips for most, pick best shorter duration for remainder
+        // - specific value: use that duration for all clips
+        let primaryDuration: number;
+        let availableDurations: number[];
+
+        // Scene extension only works with 720p — downgrade for multi-clip
+        const effectiveResolution = (veoResolution === '1080p' || veoResolution === '4k') ? '720p' : veoResolution;
+
+        // 1080p and 4k require 8s clips — override duration setting
+        const requiresEightSeconds = veoResolution === '1080p' || veoResolution === '4k';
+
+        if (requiresEightSeconds) {
+          primaryDuration = 8;
+          availableDurations = [8];
+        } else if (veoDurationSetting === 'auto') {
+          primaryDuration = 8;
+          availableDurations = [8, 6, 4]; // prefer 8s, fall back to 6 or 4 for last clip
+        } else {
+          primaryDuration = parseInt(veoDurationSetting);
+          availableDurations = [primaryDuration];
+        }
+
+        const MAX_SINGLE_CLIP_WORDS = Math.floor(primaryDuration * WORDS_PER_SECOND * 1.15);
         const needsMultiClip = scriptWordCount > MAX_SINGLE_CLIP_WORDS;
 
-        console.log(`Veo script analysis: ${scriptWordCount} words, clip duration: ${VEO_CLIP_DURATION}s`);
+        console.log(`Veo script analysis: ${scriptWordCount} words, duration mode: ${veoDurationSetting}, primary: ${primaryDuration}s`);
         console.log(`Multi-clip mode: ${needsMultiClip ? 'YES' : 'NO'}`);
 
         if (needsMultiClip) {
           console.log('Starting sequential Veo multi-clip generation with scene extension...');
 
-          const segments = segmentScriptForSora(project.script, VEO_CLIP_DURATION, [8]);
+          const segments = segmentScriptForVeo(project.script, primaryDuration, availableDurations, scriptWordCount);
           console.log(`Created ${segments.length} clip segments`);
 
           const clips: Array<{
@@ -786,20 +644,29 @@ export function registerVspRoutes(app: Express) {
 
           let lastVideoObject: { uri: string } | undefined;
 
-          const makeVeoSettings = () => ({
-            videoEngine: 'veo' as const,
-            veoAspectRatio,
-            veoResolution,
-            veoCustomInstructions,
-            veoReferenceImages,
-            veoNegativePrompt,
-            characterProfile,
-            colorPalette,
-            cinematography,
-            veoVisualPrompt: visualPrompt,
-            veoClips: clips,
-            veoStitchingStatus: 'pending' as const
-          });
+          const makeVeoSettings = () => {
+            // Strip base64 images from settings to avoid JSON column size issues
+            const settings: any = {
+              videoEngine: 'veo' as const,
+              veoAspectRatio,
+              veoResolution,
+              veoCustomInstructions,
+              veoDuration: veoDurationSetting,
+              veoPersonGeneration,
+              veoNumberOfVideos,
+              characterProfile,
+              colorPalette,
+              cinematography,
+              veoVisualPrompt: visualPrompt,
+              veoClips: clips,
+              veoStitchingStatus: 'pending' as const,
+              // Store image presence flags instead of full base64
+              hasReferenceImages: !!(veoReferenceImages && veoReferenceImages.length),
+              hasFirstFrameImage: !!veoFirstFrameImage,
+              hasLastFrameImage: !!veoLastFrameImage,
+            };
+            return settings;
+          };
 
           for (let i = 0; i < segments.length; i++) {
             const segment = segments[i];
@@ -826,28 +693,51 @@ export function registerVspRoutes(app: Express) {
 
             console.log(`Submitting Veo clip ${segment.clipNumber}/${segments.length}${lastVideoObject ? ' (with scene extension)' : ''}...`);
 
-            const result = await generateVeoClip({
-              prompt: clipPrompt,
-              clipNumber: clip.clipNumber,
-              aspectRatio: veoAspectRatio as '9:16' | '16:9' | undefined,
-              referenceImages: i === 0 ? veoReferenceImages : undefined,
-              negativePrompt: veoNegativePrompt,
-              extendVideo: lastVideoObject,
-            });
+            try {
+              const result = await generateVeoClip({
+                prompt: clipPrompt,
+                clipNumber: clip.clipNumber,
+                aspectRatio: veoAspectRatio as '9:16' | '16:9' | undefined,
+                referenceImages: i === 0 ? veoReferenceImages : undefined,
+                resolution: effectiveResolution as any,
+                extendVideo: lastVideoObject,
+                firstFrameImage: i === 0 ? veoFirstFrameImage : undefined,
+                lastFrameImage: i === 0 ? veoLastFrameImage : undefined,
+                personGeneration: veoPersonGeneration,
+                durationSeconds: segment.duration,
+              });
 
-            clip.operationName = result.operationName;
+              clip.operationName = result.operationName;
+            } catch (submitErr) {
+              console.error(`Failed to submit Veo clip ${clip.clipNumber}:`, submitErr);
+              clip.status = 'failed';
+              clip.error = submitErr instanceof Error ? submitErr.message : 'Failed to submit clip';
+              clips.push(clip);
+              await storage.updateVspProject(projectId, { videoSettings: makeVeoSettings(), status: 'video_generating' });
+              lastVideoObject = undefined; // Reset scene extension since this clip failed
+              continue; // Skip to next clip
+            }
+
             clips.push(clip);
 
-            await storage.updateVspProject(projectId, {
-              videoSettings: makeVeoSettings(),
-              status: 'video_generating'
-            });
+            try {
+              const settingsToSave = makeVeoSettings();
+              const settingsSize = JSON.stringify(settingsToSave).length;
+              console.log(`Saving videoSettings for clip ${clip.clipNumber} (${(settingsSize / 1024).toFixed(1)}KB)...`);
+              await storage.updateVspProject(projectId, {
+                videoSettings: settingsToSave,
+                status: 'video_generating'
+              });
+              console.log(`videoSettings saved successfully for clip ${clip.clipNumber}`);
+            } catch (saveErr) {
+              console.error(`FAILED to save videoSettings for clip ${clip.clipNumber}:`, saveErr);
+            }
 
             if (i < segments.length - 1) {
               try {
                 console.log(`Waiting for Veo clip ${segment.clipNumber} to complete for scene extension...`);
                 const { videoBuffer, videoFileId, videoObject } = await waitForVeoVideo(
-                  result.operationName,
+                  clip.operationName!,
                   async (status) => {
                     clip.progress = status === 'completed' ? 100 : 50;
                     await storage.updateVspProject(projectId, {
@@ -894,7 +784,12 @@ export function registerVspRoutes(app: Express) {
             clipNumber: 1,
             aspectRatio: veoAspectRatio as '9:16' | '16:9' | undefined,
             referenceImages: veoReferenceImages,
-            negativePrompt: veoNegativePrompt,
+            resolution: veoResolution as any,
+            firstFrameImage: veoFirstFrameImage,
+            lastFrameImage: veoLastFrameImage,
+            personGeneration: veoPersonGeneration,
+            numberOfVideos: veoNumberOfVideos,
+            durationSeconds: primaryDuration,
           });
 
           const updatedProject = await storage.updateVspProject(projectId, {
@@ -904,7 +799,11 @@ export function registerVspRoutes(app: Express) {
               veoResolution,
               veoCustomInstructions,
               veoReferenceImages,
-              veoNegativePrompt,
+              veoDuration: veoDurationSetting,
+              veoFirstFrameImage,
+              veoLastFrameImage,
+              veoPersonGeneration,
+              veoNumberOfVideos,
               characterProfile,
               colorPalette,
               cinematography,
@@ -916,6 +815,297 @@ export function registerVspRoutes(app: Express) {
 
           res.json(updatedProject);
         }
+      } else if (videoEngine === 'kling') {
+        // === KLING V3 VIDEO GENERATION ===
+        const klingAspectRatio = parsedBody.klingAspectRatio || '9:16';
+        const klingDuration = parsedBody.klingDuration || '10';
+        const klingTier = (parsedBody as any).klingTier || 'pro';
+        const klingReferenceImage = parsedBody.klingReferenceImage;
+        const klingCustomInstructions = parsedBody.klingCustomInstructions;
+        const klingElementBinding = parsedBody.klingElementBinding !== false;
+        const klingUseMultiPrompt = (parsedBody as any).klingUseMultiPrompt !== false; // default true
+
+        console.log(`[Kling] Starting generation for project ${projectId}`);
+        console.log(`[Kling] Tier: ${klingTier}, Aspect: ${klingAspectRatio}, Duration: ${klingDuration}s, MultiPrompt: ${klingUseMultiPrompt}`);
+
+        // Generate visual prompt using existing AI prompt generator
+        const visualPrompt = await generateSoraVisualPrompt(
+          project.script,
+          project.category,
+          project.subtopic,
+          klingCustomInstructions,
+          characterProfile,
+          colorPalette,
+          cinematography
+        );
+
+        const styleBlock = buildStyleBlock(characterProfile, colorPalette, cinematography, klingCustomInstructions);
+
+        // Segment script using the same smart approach as Veo
+        // Kling supports 3-15s per shot. Use segmentScriptForVeo with available durations.
+        const maxShotDuration = parseInt(klingDuration);
+        const wordCount = project.script.content.trim().split(/\s+/).length;
+
+        // Build available durations: 3 to maxShotDuration
+        const availableKlingDurations: number[] = [];
+        for (let d = 3; d <= maxShotDuration; d++) availableKlingDurations.push(d);
+
+        const finalSegments = segmentScriptForVeo(
+          project.script,
+          maxShotDuration,
+          availableKlingDurations,
+          wordCount
+        );
+
+        const totalShotDuration = finalSegments.reduce((sum, s) => sum + s.duration, 0);
+        console.log(`[Kling] Script: ${wordCount} words, ${finalSegments.length} shots, ${totalShotDuration}s total (max ${klingDuration}s/shot)`);
+
+        // Build prompts for each segment
+        const shotPrompts = finalSegments.map(seg => createKlingClipPrompt(visualPrompt, seg, styleBlock));
+
+        // Estimate cost based on actual shot durations
+        const totalSeconds = finalSegments.reduce((sum, s) => sum + s.duration, 0);
+        const costPerSec = klingTier === 'standard' ? 0.126 : 0.168;
+        const estimatedCost = (totalSeconds * costPerSec).toFixed(2);
+        console.log(`[Kling] Estimated cost: $${estimatedCost} (${totalSeconds}s x $${costPerSec}/s)`);
+
+        // Multi-prompt only works if total duration ≤ 15s (Kling API limit)
+        const canUseMultiPrompt = klingUseMultiPrompt && finalSegments.length > 1 && totalShotDuration <= 15;
+        if (!canUseMultiPrompt && klingUseMultiPrompt && totalShotDuration > 15) {
+          console.log(`[Kling] Multi-prompt disabled: total ${totalShotDuration}s exceeds 15s limit. Using separate clips.`);
+        }
+
+        if (canUseMultiPrompt) {
+          // === MULTI-PROMPT: One API call for all shots ===
+          const multiPromptSegments = finalSegments.map((seg, i) => ({
+            prompt: shotPrompts[i],
+            duration: seg.duration,
+          }));
+
+          // Save settings immediately
+          await storage.updateVspProject(projectId, {
+            videoSettings: {
+              videoEngine: 'kling',
+              klingAspectRatio,
+              klingDuration,
+              klingTier,
+              klingElementBinding,
+              klingCustomInstructions,
+              klingUseMultiPrompt: true,
+              characterProfile: characterProfile ? { description: characterProfile.description, wardrobe: characterProfile.wardrobe } : undefined,
+              colorPalette,
+              cinematography,
+              klingVisualPrompt: visualPrompt,
+              klingMultiShot: true,
+              klingShots: finalSegments.map((seg, i) => ({
+                shotNumber: seg.clipNumber,
+                scriptSegment: seg.scriptSegment,
+                duration: seg.duration,
+                prompt: shotPrompts[i],
+              })),
+              klingRequestId: '',
+              klingModelId: '',
+              klingStatus: 'generating',
+              klingEstimatedCost: estimatedCost,
+            },
+            status: 'video_generating',
+          });
+
+          try {
+            const { generateKlingMultiShot } = await import("./services/vsp-kling");
+            const result = await generateKlingMultiShot({
+              segments: multiPromptSegments,
+              aspectRatio: klingAspectRatio as "16:9" | "9:16" | "1:1",
+              referenceImage: klingReferenceImage,
+              tier: klingTier as any,
+              generateAudio: true,
+            });
+
+            await storage.updateVspProject(projectId, {
+              videoSettings: {
+                ...((await storage.getVspProject(projectId))?.videoSettings || {}),
+                klingRequestId: result.requestId,
+                klingModelId: result.modelId,
+                klingStatusUrl: result.statusUrl,
+                klingResponseUrl: result.responseUrl,
+                klingStatus: 'generating',
+              },
+              falRequestId: result.requestId,
+            });
+
+            const updatedProject = await storage.getVspProject(projectId);
+            res.json(updatedProject);
+          } catch (err) {
+            console.error(`[Kling] Multi-shot submission failed:`, err);
+            await storage.updateVspProject(projectId, {
+              videoSettings: {
+                ...((await storage.getVspProject(projectId))?.videoSettings || {}),
+                klingStatus: 'failed',
+                klingError: err instanceof Error ? err.message : 'Submission failed',
+              },
+              status: 'video_failed',
+            });
+            throw err;
+          }
+
+        } else {
+          // === SINGLE-CLIP or LEGACY MULTI-CLIP (separate API calls) ===
+          const klingClips = finalSegments.map(seg => ({
+            clipNumber: seg.clipNumber,
+            scriptSegment: seg.scriptSegment,
+            duration: seg.duration,
+            prompt: '',
+            requestId: '',
+            modelId: '',
+            videoUrl: '',
+            status: 'pending' as const,
+            error: '',
+            attempts: 0,
+          }));
+
+          await storage.updateVspProject(projectId, {
+            videoSettings: {
+              videoEngine: 'kling',
+              klingAspectRatio,
+              klingDuration,
+              klingTier,
+              klingElementBinding,
+              klingCustomInstructions,
+              klingUseMultiPrompt: false,
+              characterProfile: characterProfile ? { description: characterProfile.description, wardrobe: characterProfile.wardrobe } : undefined,
+              colorPalette,
+              cinematography,
+              klingVisualPrompt: visualPrompt,
+              klingClips,
+              klingStitchingStatus: 'pending',
+              klingEstimatedCost: estimatedCost,
+            },
+            status: 'video_generating',
+          });
+
+          // Submit clips 2 at a time
+          for (let i = 0; i < finalSegments.length; i += 2) {
+            const batch = finalSegments.slice(i, i + 2);
+            const results = await Promise.all(batch.map(async (segment, batchIdx) => {
+              try {
+                const result = await generateKlingClip({
+                  prompt: shotPrompts[i + batchIdx],
+                  clipNumber: segment.clipNumber,
+                  aspectRatio: klingAspectRatio as "16:9" | "9:16" | "1:1",
+                  duration: klingDuration,
+                  referenceImage: klingReferenceImage,
+                  tier: klingTier as any,
+                });
+                return { clipNumber: segment.clipNumber, ...result, prompt: shotPrompts[i + batchIdx], error: '' };
+              } catch (err) {
+                console.error(`[Kling] Clip ${segment.clipNumber} submission failed:`, err);
+                return { clipNumber: segment.clipNumber, requestId: '', modelId: '', statusUrl: '', responseUrl: '', prompt: shotPrompts[i + batchIdx], error: err instanceof Error ? err.message : 'Submission failed' };
+              }
+            }));
+
+            for (const result of results) {
+              const clipIdx = result.clipNumber - 1;
+              klingClips[clipIdx].requestId = result.requestId;
+              klingClips[clipIdx].modelId = result.modelId || '';
+              (klingClips[clipIdx] as any).statusUrl = result.statusUrl || '';
+              (klingClips[clipIdx] as any).responseUrl = result.responseUrl || '';
+              klingClips[clipIdx].prompt = result.prompt;
+              (klingClips[clipIdx] as any).status = result.error ? 'failed' : 'generating';
+              klingClips[clipIdx].error = result.error;
+            }
+
+            await storage.updateVspProject(projectId, {
+              videoSettings: {
+                ...((await storage.getVspProject(projectId))?.videoSettings || {}),
+                klingClips,
+              },
+            });
+          }
+
+          const project2 = await storage.getVspProject(projectId);
+          res.json(project2);
+        }
+
+      } else if (videoEngine === 'omnihuman') {
+        // === OMNIHUMAN 1.5 TALKING HEAD VIDEO ===
+        const omniReferenceImage = parsedBody.omniReferenceImage;
+        let omniAudioUrl = parsedBody.omniAudioUrl;
+        const omniResolution = parsedBody.omniResolution || '1080p';
+        const omniVoiceId = parsedBody.omniVoiceId;
+
+        if (!omniReferenceImage) {
+          return res.status(400).json({ error: "OmniHuman requires a reference image" });
+        }
+
+        console.log(`[OmniHuman] Starting generation for project ${projectId}`);
+
+        // If voice ID is set but no audio URL, generate TTS first
+        if (omniVoiceId && !omniAudioUrl) {
+          console.log(`[OmniHuman] Generating TTS audio with voice ${omniVoiceId}...`);
+          omniAudioUrl = await generateAndUploadTTS(
+            project.script.content,
+            omniVoiceId,
+            projectId
+          );
+          console.log(`[OmniHuman] TTS audio uploaded: ${omniAudioUrl}`);
+        }
+
+        if (!omniAudioUrl) {
+          return res.status(400).json({ error: "OmniHuman requires audio. Either upload an audio file or select a TTS voice." });
+        }
+
+        // Save settings immediately
+        await storage.updateVspProject(projectId, {
+          videoSettings: {
+            videoEngine: 'omnihuman',
+            omniResolution,
+            omniVoiceId,
+            omniAudioUrl,
+            omniRequestId: '',
+            omniModelId: '',
+            omniStatus: 'generating',
+          },
+          status: 'video_generating',
+        });
+
+        try {
+          const result = await generateOmniHumanVideo({
+            referenceImage: omniReferenceImage,
+            audioUrl: omniAudioUrl,
+            resolution: omniResolution as "720p" | "1080p",
+          });
+
+          await storage.updateVspProject(projectId, {
+            videoSettings: {
+              videoEngine: 'omnihuman',
+              omniResolution,
+              omniVoiceId,
+              omniAudioUrl,
+              omniRequestId: result.requestId,
+              omniModelId: result.modelId,
+              omniStatus: 'generating',
+            },
+            falRequestId: result.requestId,
+          });
+
+          const updatedProject = await storage.getVspProject(projectId);
+          res.json(updatedProject);
+        } catch (err) {
+          console.error(`[OmniHuman] Generation failed:`, err);
+          await storage.updateVspProject(projectId, {
+            videoSettings: {
+              videoEngine: 'omnihuman',
+              omniResolution,
+              omniVoiceId,
+              omniAudioUrl,
+              omniStatus: 'failed',
+              omniError: err instanceof Error ? err.message : 'Generation failed',
+            },
+            status: 'video_failed',
+          });
+          throw err;
+        }
+
       } else {
         // Handle Revid video generation (existing logic)
         if (!style || !voice) {
@@ -979,6 +1169,15 @@ export function registerVspRoutes(app: Express) {
       }
     } catch (error) {
       console.error("Video generation error:", error);
+
+      // Reset project status if it was set to video_generating
+      const failedProjectId = req.body?.projectId;
+      if (failedProjectId) {
+        try {
+          await storage.updateVspProject(failedProjectId, { status: 'video_failed' });
+        } catch {}
+      }
+
       res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to generate video"
       });
@@ -986,64 +1185,7 @@ export function registerVspRoutes(app: Express) {
   });
 
   // Regenerate a single Sora clip
-  router.post("/projects/:projectId/sora-clips/:clipNumber/regenerate", async (req, res) => {
-    try {
-      const { projectId, clipNumber } = req.params;
-      const clipIndex = parseInt(clipNumber) - 1; // Convert to 0-based index
-
-      const project = await storage.getVspProject(projectId);
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
-      }
-
-      if (!project.videoSettings?.soraClips || clipIndex < 0 || clipIndex >= project.videoSettings.soraClips.length) {
-        return res.status(400).json({ error: "Invalid clip number" });
-      }
-
-      const clips = project.videoSettings.soraClips;
-      const clip = clips[clipIndex];
-
-      // Check attempt limit (max 3 attempts)
-      const MAX_ATTEMPTS = 3;
-      if ((clip.attempts || 0) >= MAX_ATTEMPTS) {
-        return res.status(400).json({ error: `Maximum regeneration attempts (${MAX_ATTEMPTS}) reached for this clip` });
-      }
-
-      console.log(`Regenerating Sora clip ${clipNumber} (attempt ${(clip.attempts || 0) + 1})...`);
-
-      // Regenerate the clip using existing metadata
-      const result = await generateSoraClip({
-        prompt: clip.prompt,
-        model: project.videoSettings.soraModel as 'sora-2' | 'sora-2-pro',
-        size: project.videoSettings.soraSize as '1280x720' | '720x1280' | '1080x1080',
-        seconds: clip.duration,
-        clipNumber: clip.clipNumber,
-        referenceImage: project.videoSettings.soraReferenceImage
-      });
-
-      // Update clip with new job ID and reset status
-      clip.jobId = result.jobId;
-      clip.status = 'generating';
-      clip.attempts = (clip.attempts || 0) + 1;
-      delete clip.error; // Clear previous error
-      delete clip.videoUrl; // Clear old video URL
-
-      // Save updated project
-      const updatedProject = await storage.updateVspProject(projectId, {
-        videoSettings: project.videoSettings
-      });
-
-      console.log(`Clip ${clipNumber} regeneration started with job ID: ${result.jobId}`);
-      res.json(updatedProject);
-    } catch (error) {
-      console.error("Clip regeneration error:", error);
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to regenerate clip"
-      });
-    }
-  });
-
-  // Mark a single Sora clip as failed manually
+  // Mark a single clip as failed manually
   router.post("/projects/:projectId/sora-clips/:clipNumber/mark-failed", async (req, res) => {
     try {
       const { projectId, clipNumber } = req.params;
@@ -1054,18 +1196,34 @@ export function registerVspRoutes(app: Express) {
         return res.status(404).json({ error: "Project not found" });
       }
 
-      if (!project.videoSettings?.soraClips || clipIndex < 0 || clipIndex >= project.videoSettings.soraClips.length) {
+      // Support both Sora and Veo clips based on active engine
+      const engine = project.videoSettings?.videoEngine;
+      const clipsArray = engine === 'veo' ? project.videoSettings?.veoClips : project.videoSettings?.soraClips;
+
+      if (!clipsArray || clipIndex < 0 || clipIndex >= clipsArray.length) {
         return res.status(400).json({ error: "Invalid clip number" });
       }
 
-      const clips = project.videoSettings.soraClips;
+      const clips = clipsArray;
       const clip = clips[clipIndex];
 
-      console.log(`Manually marking Sora clip ${clipNumber} as failed`);
+      console.log(`Manually marking ${engine || 'sora'} clip ${clipNumber} as failed`);
 
       // Update clip status to failed
       clip.status = 'failed';
       clip.error = 'Manually marked as failed due to download timeout';
+
+      // Check if all clips are now failed — update project status
+      const allFailed = clips.every((c: any) => c.status === 'failed');
+      if (allFailed) {
+        if (engine === 'veo' && project.videoSettings) {
+          project.videoSettings.veoStitchingStatus = 'cancelled';
+        }
+        await storage.updateVspProject(projectId, {
+          videoSettings: project.videoSettings,
+          status: 'video_failed'
+        });
+      }
 
       // Save updated project
       const updatedProject = await storage.updateVspProject(projectId, {
@@ -1078,6 +1236,146 @@ export function registerVspRoutes(app: Express) {
       console.error("Mark clip failed error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to mark clip as failed"
+      });
+    }
+  });
+
+  // Regenerate a single clip
+  router.post("/projects/:projectId/sora-clips/:clipNumber/regenerate", async (req, res) => {
+    try {
+      const { projectId, clipNumber } = req.params;
+      const clipIndex = parseInt(clipNumber) - 1;
+
+      const project = await storage.getVspProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      const engine = project.videoSettings?.videoEngine;
+      const clipsArray = engine === 'veo' ? project.videoSettings?.veoClips : null;
+
+      if (!clipsArray || clipIndex < 0 || clipIndex >= clipsArray.length) {
+        return res.status(400).json({ error: "Invalid clip number" });
+      }
+
+      const clip = clipsArray[clipIndex];
+
+      if ((clip.attempts || 0) >= 3) {
+        return res.status(400).json({ error: "Maximum regeneration attempts (3) reached for this clip" });
+      }
+
+      console.log(`Regenerating Veo clip ${clipNumber} (attempt ${(clip.attempts || 0) + 1})...`);
+
+      // Find previous clip's video for scene extension
+      let extendVideo: { uri: string } | undefined;
+      if (clipIndex > 0) {
+        const prevClip = clipsArray[clipIndex - 1];
+        if (prevClip.status === 'completed' && prevClip.videoFileId) {
+          extendVideo = { uri: prevClip.videoFileId };
+        }
+      }
+
+      // Scene extension requires 720p — don't pass higher resolution when extending
+      const regenResolution = extendVideo ? '720p' : project.videoSettings?.veoResolution;
+
+      const result = await generateVeoClip({
+        prompt: clip.prompt,
+        clipNumber: parseInt(clipNumber),
+        aspectRatio: project.videoSettings?.veoAspectRatio as '9:16' | '16:9' | undefined,
+        resolution: regenResolution as any,
+        durationSeconds: clip.duration,
+        extendVideo,
+      });
+
+      // Update clip
+      clip.operationName = result.operationName;
+      clip.status = 'generating';
+      clip.error = undefined;
+      clip.progress = 0;
+      clip.attempts = (clip.attempts || 0) + 1;
+
+      // Reset stitching status if it was completed/failed
+      if (project.videoSettings) {
+        if (engine === 'veo' && project.videoSettings.veoStitchingStatus !== 'pending') {
+          project.videoSettings.veoStitchingStatus = 'pending';
+        }
+      }
+
+      const updatedProject = await storage.updateVspProject(projectId, {
+        videoSettings: project.videoSettings,
+        status: 'video_generating'
+      });
+
+      console.log(`Veo clip ${clipNumber} regeneration submitted: ${result.operationName}`);
+      res.json(updatedProject);
+    } catch (error) {
+      console.error("Regenerate clip error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to regenerate clip"
+      });
+    }
+  });
+
+  // Cancel video generation
+  router.post("/projects/:projectId/cancel-video", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const project = await storage.getVspProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      console.log(`Cancelling video generation for project ${projectId}`);
+
+      // Mark all generating clips as cancelled
+      const engine = project.videoSettings?.videoEngine;
+      if (engine === 'veo' && project.videoSettings?.veoClips) {
+        for (const clip of project.videoSettings.veoClips) {
+          if (clip.status === 'generating' || clip.status === 'pending') {
+            clip.status = 'failed';
+            clip.error = 'Cancelled by user';
+          }
+        }
+        project.videoSettings.veoStitchingStatus = 'cancelled';
+      }
+
+      const updatedProject = await storage.updateVspProject(projectId, {
+        videoSettings: project.videoSettings,
+        status: 'video_failed'
+      });
+
+      res.json(updatedProject);
+    } catch (error) {
+      console.error("Cancel video error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to cancel video"
+      });
+    }
+  });
+
+  // Reset video — go back to script stage
+  router.post("/projects/:projectId/reset-video", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const project = await storage.getVspProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      console.log(`Resetting video for project ${projectId}`);
+
+      const updatedProject = await storage.updateVspProject(projectId, {
+        videoSettings: null,
+        videoUrl: null,
+        veoOperationName: null,
+        status: project.script ? 'script_ready' : 'draft'
+      });
+
+      res.json(updatedProject);
+    } catch (error) {
+      console.error("Reset video error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to reset video"
       });
     }
   });
@@ -1110,12 +1408,11 @@ export function registerVspRoutes(app: Express) {
       }
 
       // Determine which engine was used based on stored IDs
-      const isSoraMultiClip = project.videoSettings?.soraClips && project.videoSettings.soraClips.length > 0;
       const isVeoMultiClip = project.videoSettings?.veoClips && project.videoSettings.veoClips.length > 0;
 
       if (isVeoMultiClip) {
         // VEO MULTI-CLIP STATUS CHECK
-        const { stitchVideoClips } = await import('./services/video-stitching');
+        const { stitchVideoClips } = await import('./services/vsp-video-stitching');
 
         const clips = project.videoSettings!.veoClips!;
         let allCompleted = true;
@@ -1140,6 +1437,19 @@ export function registerVspRoutes(app: Express) {
               clip.status = 'completed';
               clip.progress = 100;
               console.log(`Veo clip ${clip.clipNumber} completed`);
+
+              // Upload individual clip to S3 if not already done
+              if (!clip.videoUrl && clip.operationName) {
+                try {
+                  const { buffer: clipBuffer } = await downloadVeoVideo(clip.operationName);
+                  const clipS3Url = (await uploadVideoToS3(clipBuffer, `${req.params.id}/veo-clip-${clip.clipNumber}`, 'video/mp4')).url;
+                  clip.videoUrl = clipS3Url;
+                  console.log(`Veo clip ${clip.clipNumber} uploaded to S3`);
+                } catch (uploadErr) {
+                  console.warn(`Failed to upload clip ${clip.clipNumber} to S3:`, uploadErr);
+                  // Non-fatal — clip is still completed, just not in S3
+                }
+              }
             } else if (statusResult.error) {
               clip.status = 'failed';
               clip.error = statusResult.error;
@@ -1174,7 +1484,7 @@ export function registerVspRoutes(app: Express) {
             }
 
             const { buffer: videoBuffer } = await downloadVeoVideo(lastClip.operationName);
-            const s3Url = await uploadVideoToS3(videoBuffer, req.params.id, 'veo-final');
+            const s3Url = (await uploadVideoToS3(videoBuffer, req.params.id, 'veo-final')).url;
 
             const finalSettings = { ...project.videoSettings, veoStitchingStatus: 'completed' as const };
             const updatedProject = await storage.updateVspProject(req.params.id, {
@@ -1211,7 +1521,7 @@ export function registerVspRoutes(app: Express) {
           try {
             console.log('Downloading Veo video:', project.veoOperationName);
             const { buffer: videoBuffer } = await downloadVeoVideo(project.veoOperationName);
-            const s3Url = await uploadVideoToS3(videoBuffer, req.params.id, 'veo-single');
+            const s3Url = (await uploadVideoToS3(videoBuffer, req.params.id, 'veo-single')).url;
             const updatedProject = await storage.updateVspProject(req.params.id, {
               videoUrl: s3Url,
               status: 'completed'
@@ -1228,210 +1538,203 @@ export function registerVspRoutes(app: Express) {
         }
 
         res.json({ ...project, videoStatus: { status: statusResult.done ? 'completed' : 'generating' } });
-      } else if (isSoraMultiClip) {
-        // MULTI-CLIP SORA STATUS CHECK
-        const { stitchVideoClips } = await import('./services/video-stitching');
+      }
 
-        const clips = project.videoSettings!.soraClips!;
-        let allCompleted = true;
+      // --- fal.ai Kling multi-prompt (single job) polling ---
+      const isKlingMultiShot = project.videoSettings?.videoEngine === 'kling' && project.videoSettings?.klingMultiShot;
+      if (isKlingMultiShot) {
+        const requestId = project.videoSettings.klingRequestId;
+
+        // If no requestId, the submission failed — mark as failed
+        if (!requestId) {
+          if (project.status === 'video_generating') {
+            await storage.updateVspProject(req.params.id, {
+              videoSettings: { ...project.videoSettings, klingStatus: 'failed', klingError: 'Job submission failed' },
+              status: 'video_failed',
+            });
+          }
+          const updated = await storage.getVspProject(req.params.id);
+          return res.json({ status: updated?.status, videoUrl: updated?.videoUrl, videoSettings: updated?.videoSettings });
+        }
+        const modelId = project.videoSettings.klingModelId;
+        const statusUrl = project.videoSettings.klingStatusUrl;
+        const responseUrl = project.videoSettings.klingResponseUrl;
+
+        try {
+          const status = await pollKlingJob(requestId, modelId, statusUrl, responseUrl);
+
+          if (status.done) {
+            if (status.videoUrl) {
+              // Multi-prompt returns a single stitched video — download and upload to S3
+              const { downloadFalVideo } = await import("./services/vsp-fal");
+              const videoBuffer = await downloadFalVideo(status.videoUrl);
+              const s3Result = await uploadVideoToS3(videoBuffer, `vsp/${req.params.id}/kling-multishot-final.mp4`);
+
+              await storage.updateVspProject(req.params.id, {
+                videoUrl: s3Result.url,
+                videoSettings: { ...project.videoSettings, klingStatus: 'completed' },
+                status: 'completed',
+              });
+              console.log(`[Kling] Multi-shot video completed and uploaded to S3`);
+            } else if (status.error) {
+              await storage.updateVspProject(req.params.id, {
+                videoSettings: { ...project.videoSettings, klingStatus: 'failed', klingError: status.error },
+                status: 'video_failed',
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[Kling] Multi-shot polling error:', err);
+        }
+
+        const updated = await storage.getVspProject(req.params.id);
+        return res.json({
+          status: updated?.status,
+          videoUrl: updated?.videoUrl,
+          videoSettings: updated?.videoSettings,
+        });
+      }
+
+      // --- fal.ai Kling multi-clip polling (legacy separate clips) ---
+      const isKlingMultiClip = project.videoSettings?.videoEngine === 'kling' && project.videoSettings?.klingClips?.length > 0;
+      if (isKlingMultiClip) {
+        const clips = project.videoSettings.klingClips;
+        let allDone = true;
         let anyFailed = false;
 
-        // Check status of each clip
         for (const clip of clips) {
-          // Also check 'failed' clips that have download errors - give them a retry
-          const hasDownloadError = clip.error && (
-            clip.error.includes('Video is not ready yet') ||
-            clip.error.includes('Failed to download video')
-          );
-
-          const shouldCheck = clip.jobId && (
-            clip.status === 'generating' ||
-            (clip.status === 'failed' && hasDownloadError)
-          );
-
-          if (shouldCheck) {
-            // Reset status to generating for retries
-            if (clip.status === 'failed') {
-              console.log(`Retrying clip ${clip.clipNumber} (was failed with: ${clip.error?.substring(0, 100)}...)`);
-              clip.status = 'generating';
-              delete clip.error; // Clear the error so it can retry fresh
-            }
-
-            const statusResult = await getSoraVideoStatus(clip.jobId!);
-
-            // Store progress for UI display
-            clip.progress = statusResult.progress || 0;
-
-            // IMPORTANT: Treat progress=100 as completed, even if status says "in_progress"
-            // OpenAI Sora API sometimes gets stuck at 100% without updating status field
-            const isCompleted = statusResult.status === 'completed' || statusResult.progress === 100;
-
-            if (isCompleted && !clip.videoUrl && clip.jobId) {
-              try {
-                console.log(`Downloading clip ${clip.clipNumber} (status: ${statusResult.status}, progress: ${statusResult.progress})`);
-                const videoDataUrl = await downloadAndConvertSoraVideo(clip.jobId);
-                const s3Url = await uploadVideoToS3(videoDataUrl, req.params.id, `sora-clip-${clip.clipNumber}`);
-                clip.videoUrl = s3Url;
-                clip.status = 'completed';
-                console.log(`Clip ${clip.clipNumber} downloaded and uploaded to S3`);
-              } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Download failed';
-
-                // If video is not ready yet, keep status as 'generating' so we can retry
-                if (errorMessage.includes('Video is not ready yet')) {
-                  console.log(`Clip ${clip.clipNumber} not ready yet, will retry...`);
-                  // Keep status as 'generating' - don't mark as failed
-                } else {
-                  // Real failure - mark as failed
-                  console.error(`Failed to download clip ${clip.clipNumber}:`, error);
+          if (clip.status === 'generating' && clip.requestId && clip.modelId) {
+            const status = await pollKlingJob(clip.requestId, clip.modelId, clip.statusUrl, clip.responseUrl);
+            if (status.done) {
+              if (status.videoUrl) {
+                // Download and upload to S3
+                try {
+                  const { downloadFalVideo } = await import("./services/vsp-fal");
+                  const videoBuffer = await downloadFalVideo(status.videoUrl);
+                  const s3Result = await uploadVideoToS3(videoBuffer, `vsp/${req.params.id}/kling-clip-${clip.clipNumber}.mp4`);
+                  clip.videoUrl = s3Result.url;
+                  clip.status = 'completed';
+                } catch (err) {
                   clip.status = 'failed';
-                  clip.error = errorMessage;
-                  anyFailed = true;
+                  clip.error = err instanceof Error ? err.message : 'Download failed';
                 }
+              } else if (status.error) {
+                clip.status = 'failed';
+                clip.error = status.error;
               }
-            } else if (statusResult.status === 'failed') {
-              clip.status = 'failed';
-              clip.error = statusResult.error || 'Generation failed';
-              anyFailed = true;
+            } else {
+              allDone = false;
             }
+          } else if (clip.status === 'pending' || clip.status === 'generating') {
+            allDone = false;
           }
-
-          if (clip.status !== 'completed') {
-            allCompleted = false;
-          }
+          if (clip.status === 'failed') anyFailed = true;
         }
 
-        // Check if all clips have failed (no successful clips)
-        const allFailed = clips.every(c => c.status === 'failed');
-        if (allFailed && project.videoSettings && project.videoSettings.soraStitchingStatus === 'pending') {
-          console.log('All clips failed, cancelling stitching');
-          const failedSettings = {
-            ...project.videoSettings,
-            soraStitchingStatus: 'cancelled' as const
-          };
-          await storage.updateVspProject(req.params.id, {
-            videoSettings: failedSettings,
-            status: 'video_failed'
-          });
-
-          return res.json({
-            ...project,
-            videoSettings: failedSettings,
-            status: 'video_failed',
-            clipProgress: {
-              total: clips.length,
-              completed: 0,
-              failed: clips.length
-            }
-          });
-        }
-
-        // If all clips are completed and we haven't stitched yet, stitch them
-        if (allCompleted && project.videoSettings && project.videoSettings.soraStitchingStatus === 'pending') {
-          console.log('All clips completed, starting stitching...');
-
-          try {
-            const updatedSettings = { ...project.videoSettings, soraStitchingStatus: 'stitching' as const };
-            await storage.updateVspProject(req.params.id, { videoSettings: updatedSettings });
-
-            const videoClipsForStitching = clips.map(clip => ({
-              clipNumber: clip.clipNumber,
-              videoData: clip.videoUrl!,
-              duration: clip.duration
-            }));
-
-            const stitchedVideoDataUrl = await stitchVideoClips(videoClipsForStitching);
-            const s3Url = await uploadVideoToS3(stitchedVideoDataUrl, req.params.id, 'sora-stitched');
-
-            const finalSettings = { ...updatedSettings, soraStitchingStatus: 'completed' as const };
-            const updatedProject = await storage.updateVspProject(req.params.id, {
-              videoUrl: s3Url,
-              videoSettings: finalSettings,
-              status: 'completed'
-            });
-
-            console.log('Video stitching completed successfully');
-            return res.json(updatedProject);
-          } catch (error) {
-            console.error('Video stitching failed:', error);
-            const failedSettings = { ...project.videoSettings!, soraStitchingStatus: 'failed' as const };
-            await storage.updateVspProject(req.params.id, {
-              videoSettings: failedSettings,
-              status: 'video_failed'
-            });
-            return res.status(500).json({
-              error: `Stitching failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-            });
-          }
-        }
-
-        // Update clip statuses in database
-        if (project.videoSettings) {
-          await storage.updateVspProject(req.params.id, { videoSettings: project.videoSettings });
-        }
-
-        // Return project with clip progress
-        res.json({
-          ...project,
-          videoSettings: project.videoSettings,
-          clipProgress: {
-            total: clips.length,
-            completed: clips.filter(c => c.status === 'completed').length,
-            failed: clips.filter(c => c.status === 'failed').length
-          }
+        // Save updated clip statuses
+        await storage.updateVspProject(req.params.id, {
+          videoSettings: { ...project.videoSettings, klingClips: clips },
         });
-      } else if (project.soraJobId) {
-        // SINGLE-CLIP SORA STATUS CHECK (existing logic)
-        const statusResult = await getSoraVideoStatus(project.soraJobId);
 
-        // If video is completed and we haven't set the URL yet, download and save it
-        if (statusResult.status === 'completed' && !project.videoUrl) {
-          console.log('Downloading Sora video before expiration:', project.soraJobId);
+        if (allDone && !anyFailed) {
+          // All clips done — stitch them together
+          const completedClips = clips.filter((c: any) => c.status === 'completed' && c.videoUrl).sort((a: any, b: any) => a.clipNumber - b.clipNumber);
 
-          try {
-            // Download the video from OpenAI
-            const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-            const OPENAI_API_BASE = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+          if (completedClips.length > 1) {
+            try {
+              console.log(`[Kling] Stitching ${completedClips.length} clips...`);
+              await storage.updateVspProject(req.params.id, {
+                videoSettings: { ...project.videoSettings, klingClips: clips, klingStitchingStatus: 'stitching' },
+              });
 
-            const videoResponse = await fetch(`${OPENAI_API_BASE}/videos/${project.soraJobId}/content`, {
-              headers: {
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
-              }
-            });
+              const { stitchVideoClips } = await import("./services/vsp-video-stitching");
+              const videoClips = completedClips.map((c: any) => ({
+                clipNumber: c.clipNumber,
+                videoData: c.videoUrl, // S3 URL — stitcher will download it
+                duration: c.duration,
+              }));
 
-            if (!videoResponse.ok) {
-              const errorText = await videoResponse.text();
-              console.error('Failed to download Sora video:', errorText);
-              throw new Error(`Failed to download video: ${videoResponse.statusText}`);
+              const stitchedDataUrl = await stitchVideoClips(videoClips);
+              // Upload stitched video to S3
+              const stitchedBuffer = Buffer.from(stitchedDataUrl.split(',')[1], 'base64');
+              const s3Result = await uploadVideoToS3(stitchedBuffer, `vsp/${req.params.id}/kling-final-stitched.mp4`);
+
+              await storage.updateVspProject(req.params.id, {
+                videoUrl: s3Result.url,
+                videoSettings: { ...project.videoSettings, klingClips: clips, klingStitchingStatus: 'completed' },
+                status: 'completed',
+              });
+              console.log(`[Kling] Stitching complete!`);
+            } catch (err) {
+              console.error(`[Kling] Stitching failed:`, err);
+              // Fall back to last clip
+              const lastClip = completedClips[completedClips.length - 1];
+              await storage.updateVspProject(req.params.id, {
+                videoUrl: lastClip.videoUrl,
+                videoSettings: { ...project.videoSettings, klingClips: clips, klingStitchingStatus: 'failed' },
+                status: 'completed',
+              });
             }
-
-            const videoBuffer = await videoResponse.arrayBuffer();
-            const buffer = Buffer.from(videoBuffer);
-
-            const s3Url = await uploadVideoToS3(buffer, req.params.id, 'sora-single');
-
-            console.log(`Sora video downloaded and uploaded to S3 (${Math.round(videoBuffer.byteLength / 1024)}KB)`);
-
-            const updatedProject = await storage.updateVspProject(req.params.id, {
-              videoUrl: s3Url,
-              status: "completed"
-            });
-
-            return res.json(updatedProject);
-          } catch (error) {
-            console.error('Failed to download and save Sora video:', error);
-            // Mark as failed so user knows there was an issue
-            const updatedProject = await storage.updateVspProject(req.params.id, {
-              status: "video_failed"
-            });
-            return res.status(500).json({
-              error: `Failed to download video: ${error instanceof Error ? error.message : 'Unknown error'}`
+          } else if (completedClips.length === 1) {
+            await storage.updateVspProject(req.params.id, {
+              videoUrl: completedClips[0].videoUrl,
+              videoSettings: { ...project.videoSettings, klingClips: clips, klingStitchingStatus: 'completed' },
+              status: 'completed',
             });
           }
         }
 
-        res.json({ ...project, videoStatus: statusResult });
-      } else if (project.revidProjectId) {
+        const updated = await storage.getVspProject(req.params.id);
+        return res.json({
+          status: updated?.status,
+          videoUrl: updated?.videoUrl,
+          videoSettings: updated?.videoSettings,
+        });
+      }
+
+      // --- fal.ai OmniHuman single-job polling ---
+      const isOmniHuman = project.videoSettings?.videoEngine === 'omnihuman' && project.videoSettings?.omniRequestId;
+      if (isOmniHuman) {
+        const { pollFalJob, getFalResult, downloadFalVideo } = await import("./services/vsp-fal");
+        const modelId = project.videoSettings.omniModelId || 'fal-ai/bytedance/omnihuman/v1.5';
+        const requestId = project.videoSettings.omniRequestId;
+
+        try {
+          const status = await pollFalJob(modelId, requestId);
+
+          if (status.status === 'COMPLETED') {
+            const result = await getFalResult(modelId, requestId);
+            const videoUrl = result?.video?.url || result?.data?.video?.url || result?.output?.video?.url;
+
+            if (videoUrl) {
+              const videoBuffer = await downloadFalVideo(videoUrl);
+              const s3Result = await uploadVideoToS3(videoBuffer, `vsp/${req.params.id}/omnihuman-final.mp4`);
+
+              await storage.updateVspProject(req.params.id, {
+                videoUrl: s3Result.url,
+                videoSettings: { ...project.videoSettings, omniStatus: 'completed' },
+                status: 'completed',
+              });
+            }
+          } else if (status.status === 'FAILED') {
+            await storage.updateVspProject(req.params.id, {
+              videoSettings: { ...project.videoSettings, omniStatus: 'failed', omniError: 'Generation failed' },
+              status: 'video_failed',
+            });
+          }
+        } catch (err) {
+          console.error('[OmniHuman] Polling error:', err);
+        }
+
+        const updated = await storage.getVspProject(req.params.id);
+        return res.json({
+          status: updated?.status,
+          videoUrl: updated?.videoUrl,
+          videoSettings: updated?.videoSettings,
+        });
+      }
+
+      if (project.revidProjectId) {
         // Check Revid video status
         const statusResult = await getVideoStatus(project.revidProjectId);
 
@@ -1455,6 +1758,16 @@ export function registerVspRoutes(app: Express) {
     }
   });
 
+  // List available TTS voices for OmniHuman
+  router.get("/tts/voices", async (req, res) => {
+    try {
+      const voices = await listTTSVoices();
+      res.json(voices);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list voices" });
+    }
+  });
+
   // Delete project
   router.delete("/projects/:id", async (req, res) => {
     try {
@@ -1469,18 +1782,76 @@ export function registerVspRoutes(app: Express) {
   });
 
   // =================== VIDEO PROXY ROUTE ===================
+  router.get("/video-proxy-key", async (req, res) => {
+    try {
+      const key = req.query.key as string;
+      if (!key) {
+        return res.status(400).json({ error: "Missing key parameter" });
+      }
+      const freshUrl = await getSignedVideoUrl(key);
+      return res.redirect(freshUrl);
+    } catch (error) {
+      console.error("Video proxy key error:", error);
+      res.status(500).json({ error: "Failed to generate video URL" });
+    }
+  });
+
+  // Proxy for Gemini/Veo clip videos (requires API key)
+  router.get("/veo-clip-proxy", async (req, res) => {
+    try {
+      const uri = req.query.uri as string;
+      if (!uri || !uri.includes('generativelanguage.googleapis.com')) {
+        return res.status(400).json({ error: "Invalid Veo video URI" });
+      }
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+      }
+      const separator = uri.includes('?') ? '&' : '?';
+      const downloadUrl = `${uri}${separator}key=${apiKey}`;
+      const videoResponse = await fetch(downloadUrl);
+      if (!videoResponse.ok) {
+        return res.status(videoResponse.status).json({ error: "Failed to fetch video from Gemini" });
+      }
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      const buffer = Buffer.from(await videoResponse.arrayBuffer());
+      res.send(buffer);
+    } catch (error) {
+      console.error("Veo clip proxy error:", error);
+      res.status(500).json({ error: "Failed to proxy video" });
+    }
+  });
+
   router.get("/video-proxy", async (req, res) => {
     try {
-      const url = req.query.url as string;
+      let url = req.query.url as string;
       if (!url) {
         return res.status(400).json({ error: "Missing url parameter" });
+      }
+
+      // Handle JSON-encoded videoUrl: {"key":"...","url":"..."}
+      if (url.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(url);
+          if (parsed.key) {
+            // Use key directly for a fresh presigned URL
+            const freshUrl = await getSignedVideoUrl(parsed.key);
+            return res.redirect(freshUrl);
+          }
+          url = parsed.url || url;
+        } catch {
+          // not JSON, use as-is
+        }
       }
 
       if (!url.includes('.s3.') || !url.includes('amazonaws.com')) {
         return res.status(400).json({ error: "Invalid video URL" });
       }
 
-      const presignedUrl = await getPresignedUrl(url);
+      // Strip query params from expired presigned URLs before re-signing
+      const cleanUrl = url.split('?')[0];
+      const presignedUrl = await getPresignedUrl(cleanUrl);
       return res.redirect(presignedUrl);
     } catch (error) {
       console.error("Video proxy error:", error);
@@ -2543,43 +2914,6 @@ Respond with JSON in this exact format:
     } catch (error) {
       console.error("Migration error:", error);
       res.status(500).json({ error: "Migration failed", details: error instanceof Error ? error.message : "Unknown error" });
-    }
-  });
-
-  // Sora video download proxy
-  router.get("/sora/videos/:videoId/download", async (req, res) => {
-    try {
-      const { videoId } = req.params;
-      const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-      const OPENAI_API_BASE = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
-
-      console.log('Proxying Sora video download:', videoId);
-
-      const response = await fetch(`${OPENAI_API_BASE}/videos/${videoId}/content`, {
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        }
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Sora video download failed:', error);
-        return res.status(response.status).json({ error: 'Failed to download video' });
-      }
-
-      // Stream the video to the client
-      res.setHeader('Content-Type', 'video/mp4');
-      res.setHeader('Content-Disposition', `attachment; filename="sora-${videoId}.mp4"`);
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      res.send(buffer);
-
-      console.log('Sora video downloaded successfully');
-    } catch (error) {
-      console.error("Sora video download error:", error);
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to download video"
-      });
     }
   });
 
