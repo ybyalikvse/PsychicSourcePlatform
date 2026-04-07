@@ -127,6 +127,11 @@ export default function CiDashboard() {
     } catch (err: any) {
       toast({ title: "scripts failed", description: err.message, variant: "destructive" });
     }
+    // Auto-convert scripts to video requests
+    setRunningStep("convert");
+    try {
+      await runStepMutation.mutateAsync("convert");
+    } catch {}
     setRunningStep(null);
     queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
   };

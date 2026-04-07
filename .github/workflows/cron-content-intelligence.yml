@@ -20,6 +20,7 @@ on:
           - analyze
           - brief
           - scripts
+          - convert
           - performance
 
 env:
@@ -244,3 +245,23 @@ jobs:
             echo "  ✗ Failed (HTTP $HTTP_CODE)"
           fi
           sleep 3
+
+  # Step 7: Auto-convert scripts to video requests
+  convert:
+    needs: scripts
+    if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'convert' || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Convert scripts to video requests
+        run: |
+          echo "Auto-converting scripts to video requests..."
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
+            -X POST "${APP_URL}/api/ci/pipeline/auto-convert" \
+            -H "Content-Type: application/json" \
+            -H "${AUTH}")
+          if [ "$HTTP_CODE" = "200" ]; then
+            CONVERTED=$(cat /tmp/response.json | jq '.converted' 2>/dev/null || echo 0)
+            echo "  ✓ Converted $CONVERTED scripts to video requests"
+          else
+            echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json | head -c 200)"
+          fi

@@ -633,7 +633,7 @@ export function registerCiRoutes(app: Express) {
   // Get last-run timestamps for all pipeline steps
   router.get("/pipeline/status", async (_req, res) => {
     try {
-      const steps = ["scrape", "transcripts", "analyze", "brief", "scripts", "performance"];
+      const steps = ["scrape", "transcripts", "analyze", "brief", "scripts", "convert", "performance"];
       const status: Record<string, string | null> = {};
       for (const step of steps) {
         const setting = await storage.getCiSetting(`pipeline_last_run_${step}`);
@@ -649,7 +649,7 @@ export function registerCiRoutes(app: Express) {
   router.post("/pipeline/run-step", async (req, res) => {
     try {
       const { step } = req.body;
-      if (!["scrape", "transcripts", "analyze", "brief", "scripts", "performance"].includes(step)) {
+      if (!["scrape", "transcripts", "analyze", "brief", "scripts", "convert", "performance"].includes(step)) {
         return res.status(400).json({ error: "Invalid step" });
       }
 
@@ -1030,6 +1030,75 @@ export function registerCiRoutes(app: Express) {
         return res.json({ success: true, step, generated, total: items.length, errors: errors.length > 0 ? errors : undefined });
       }
 
+      // For convert: auto-convert all unconverted scripts to video requests
+      if (step === "convert") {
+        const allScripts = await storage.getCiBriefScripts();
+        const unconverted = allScripts.filter(s => s.status === "draft" && !s.videoRequestId);
+
+        if (unconverted.length === 0) {
+          await storage.upsertCiSetting("pipeline_last_run_convert", new Date().toISOString());
+          return res.json({ success: true, step, converted: 0, message: "No scripts to convert" });
+        }
+
+        const byBrief: Record<string, typeof unconverted> = {};
+        for (const s of unconverted) {
+          if (!byBrief[s.briefId]) byBrief[s.briefId] = [];
+          byBrief[s.briefId].push(s);
+        }
+
+        let converted = 0;
+        for (const [briefId, briefScripts] of Object.entries(byBrief)) {
+          const brief = await storage.getCiContentBrief(briefId);
+          if (!brief) continue;
+
+          const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+          const updatedItems = [...items];
+
+          for (const script of briefScripts) {
+            const itemIndex = script.briefItemIndex ?? 0;
+            const item = items[itemIndex];
+            if (!item || item.videoRequestId) continue;
+
+            const structuredDescription = JSON.stringify({
+              _type: "ci_brief",
+              topic_description: item.topic_description || null,
+              hook_options: item.hook_options || [],
+              talking_points: item.talking_points || [],
+              emotional_journey: item.emotional_journey || null,
+              suggested_cta: item.suggested_cta || null,
+              format_suggestion: item.format_suggestion || null,
+              estimated_length: item.estimated_length || null,
+              difficulty: item.difficulty || null,
+              notes_for_creator: item.notes_for_creator || null,
+              script: {
+                hook: script.hook || null,
+                body: script.body || null,
+                closeCta: script.closeCta || null,
+                full: (script.rawScript as any)?.full || null,
+              },
+            });
+
+            const videoRequest = await storage.createVideoRequest({
+              title: item.title || script.title || `Script ${script.id}`,
+              topic: item.topic_category || item.title || script.title,
+              hook: item.hook_options?.[0] || script.hook || undefined,
+              videoDuration: item.estimated_length || script.duration || "60s",
+              description: structuredDescription,
+              status: "draft",
+            });
+
+            updatedItems[itemIndex] = { ...item, videoRequestId: videoRequest.id };
+            await storage.updateCiBriefScript(script.id, { videoRequestId: videoRequest.id, status: "converted" });
+            converted++;
+          }
+
+          await storage.updateCiContentBrief(briefId, { briefData: updatedItems });
+        }
+
+        await storage.upsertCiSetting("pipeline_last_run_convert", new Date().toISOString());
+        return res.json({ success: true, step, converted });
+      }
+
       // For performance
       if (step === "performance") {
         const perfSystemPrompt = await storage.getCiSetting("performance_system_prompt");
@@ -1322,6 +1391,146 @@ export function registerCiRoutes(app: Express) {
     } catch (error) {
       console.error("[CI] Error converting script:", error);
       res.status(500).json({ error: "Failed to convert script to video request" });
+    }
+  });
+
+  // Bulk convert multiple brief items to video requests
+  router.post("/briefs/:id/bulk-convert", async (req, res) => {
+    try {
+      const brief = await storage.getCiContentBrief(req.params.id);
+      if (!brief) return res.status(404).json({ error: "Brief not found" });
+
+      const { itemIndices } = req.body as { itemIndices: number[] };
+      if (!Array.isArray(itemIndices) || itemIndices.length === 0) {
+        return res.status(400).json({ error: "itemIndices must be a non-empty array" });
+      }
+
+      const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+      const scripts = await storage.getCiBriefScripts(brief.id);
+      const videoRequestIds: string[] = [];
+      const updatedItems = [...items];
+
+      for (const itemIndex of itemIndices) {
+        const item = items[itemIndex];
+        if (!item || item.videoRequestId) continue; // skip missing or already converted
+
+        const script = scripts.find(s => s.briefItemIndex === itemIndex);
+        const structuredDescription = JSON.stringify({
+          _type: "ci_brief",
+          topic_description: item.topic_description || null,
+          hook_options: item.hook_options || [],
+          talking_points: item.talking_points || [],
+          emotional_journey: item.emotional_journey || null,
+          suggested_cta: item.suggested_cta || null,
+          format_suggestion: item.format_suggestion || null,
+          estimated_length: item.estimated_length || null,
+          difficulty: item.difficulty || null,
+          notes_for_creator: item.notes_for_creator || null,
+          script: script ? {
+            hook: script.hook || null,
+            body: script.body || null,
+            closeCta: script.closeCta || null,
+            full: (script.rawScript as any)?.full || null,
+          } : null,
+        });
+
+        const videoRequest = await storage.createVideoRequest({
+          title: item.title || `Brief ${brief.weekLabel} Item ${itemIndex + 1}`,
+          topic: item.topic_category || item.title,
+          hook: item.hook_options?.[0] || undefined,
+          videoDuration: item.estimated_length || "60s",
+          description: structuredDescription,
+          status: "draft",
+        });
+
+        updatedItems[itemIndex] = { ...item, videoRequestId: videoRequest.id };
+        videoRequestIds.push(videoRequest.id);
+
+        if (script) {
+          await storage.updateCiBriefScript(script.id, { videoRequestId: videoRequest.id, status: "converted" });
+        }
+      }
+
+      await storage.updateCiContentBrief(brief.id, { briefData: updatedItems });
+      res.json({ success: true, converted: videoRequestIds.length, videoRequestIds });
+    } catch (error: any) {
+      console.error("[CI] Error bulk converting brief:", error);
+      res.status(500).json({ error: "Failed to bulk convert brief items" });
+    }
+  });
+
+  // Auto-convert all unconverted scripts to video requests (used by pipeline)
+  router.post("/pipeline/auto-convert", requireCronSecret, async (req, res) => {
+    try {
+      const allScripts = await storage.getCiBriefScripts();
+      const unconverted = allScripts.filter(s => s.status === "draft" && !s.videoRequestId);
+
+      if (unconverted.length === 0) {
+        await storage.upsertCiSetting("pipeline_last_run_convert", new Date().toISOString());
+        return res.json({ success: true, converted: 0, message: "No scripts to convert" });
+      }
+
+      // Group scripts by briefId to do brief-level updates
+      const byBrief: Record<string, typeof unconverted> = {};
+      for (const s of unconverted) {
+        if (!byBrief[s.briefId]) byBrief[s.briefId] = [];
+        byBrief[s.briefId].push(s);
+      }
+
+      let converted = 0;
+      for (const [briefId, briefScripts] of Object.entries(byBrief)) {
+        const brief = await storage.getCiContentBrief(briefId);
+        if (!brief) continue;
+
+        const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
+        const updatedItems = [...items];
+
+        for (const script of briefScripts) {
+          const itemIndex = script.briefItemIndex ?? 0;
+          const item = items[itemIndex];
+          if (!item || item.videoRequestId) continue;
+
+          const structuredDescription = JSON.stringify({
+            _type: "ci_brief",
+            topic_description: item.topic_description || null,
+            hook_options: item.hook_options || [],
+            talking_points: item.talking_points || [],
+            emotional_journey: item.emotional_journey || null,
+            suggested_cta: item.suggested_cta || null,
+            format_suggestion: item.format_suggestion || null,
+            estimated_length: item.estimated_length || null,
+            difficulty: item.difficulty || null,
+            notes_for_creator: item.notes_for_creator || null,
+            script: {
+              hook: script.hook || null,
+              body: script.body || null,
+              closeCta: script.closeCta || null,
+              full: (script.rawScript as any)?.full || null,
+            },
+          });
+
+          const videoRequest = await storage.createVideoRequest({
+            title: item.title || script.title || `Script ${script.id}`,
+            topic: item.topic_category || item.title || script.title,
+            hook: item.hook_options?.[0] || script.hook || undefined,
+            videoDuration: item.estimated_length || script.duration || "60s",
+            description: structuredDescription,
+            status: "draft",
+          });
+
+          updatedItems[itemIndex] = { ...item, videoRequestId: videoRequest.id };
+          await storage.updateCiBriefScript(script.id, { videoRequestId: videoRequest.id, status: "converted" });
+          converted++;
+        }
+
+        await storage.updateCiContentBrief(briefId, { briefData: updatedItems });
+      }
+
+      await storage.upsertCiSetting("pipeline_last_run_convert", new Date().toISOString());
+      res.json({ success: true, converted });
+    } catch (error: any) {
+      console.error("[CI] Auto-convert error:", error);
+      res.status(500).json({ error: "Auto-convert failed: " + (error?.message || "Unknown error") });
     }
   });
 

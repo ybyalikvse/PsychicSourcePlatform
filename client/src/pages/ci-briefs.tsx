@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/collapsible";
 import {
   ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Loader2,
-  ArrowRightCircle, ScrollText, Video, Play, CheckCircle, Clock, Trash2,
+  ArrowRightCircle, ScrollText, Video, Play, CheckCircle, Clock, Trash2, CheckSquare,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "wouter";
 import { formatDate, formatRelativeTime, getStatusBadgeVariant } from "@/lib/format-utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -64,6 +65,7 @@ export default function CiBriefs() {
   const [expandedBriefs, setExpandedBriefs] = useState<Set<number>>(new Set());
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
   const [runningStep, setRunningStep] = useState<string | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Record<string, Set<number>>>({});
 
   const { data: pipelineStatus } = useQuery<Record<string, string | null>>({
     queryKey: ["/api/ci/pipeline/status"],
@@ -179,6 +181,54 @@ export default function CiBriefs() {
       toast({ title: "Failed to create video request", description: err.message, variant: "destructive" });
     },
   });
+
+  const bulkConvertMutation = useMutation({
+    mutationFn: async ({ briefId, itemIndices }: { briefId: string; itemIndices: number[] }) => {
+      const res = await apiRequest("POST", `/api/ci/briefs/${briefId}/bulk-convert`, { itemIndices });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ci"] });
+      setSelectedItems({});
+      toast({ title: "Bulk conversion complete", description: `${data.converted} video request(s) created.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Bulk conversion failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function toggleItemSelection(briefId: string, index: number) {
+    setSelectedItems(prev => {
+      const next = { ...prev };
+      const set = new Set(prev[briefId] || []);
+      if (set.has(index)) set.delete(index); else set.add(index);
+      if (set.size === 0) delete next[briefId]; else next[briefId] = set;
+      return next;
+    });
+  }
+
+  function toggleSelectAll(brief: Brief) {
+    const briefId = String(brief.id);
+    const unconvertedIndices = brief.briefData
+      .map((item, i) => (!item.videoRequestId ? i : -1))
+      .filter(i => i >= 0);
+    const currentSelected = selectedItems[briefId] || new Set();
+    const allSelected = unconvertedIndices.every(i => currentSelected.has(i));
+
+    setSelectedItems(prev => {
+      const next = { ...prev };
+      if (allSelected) {
+        delete next[briefId];
+      } else {
+        next[briefId] = new Set(unconvertedIndices);
+      }
+      return next;
+    });
+  }
+
+  function getSelectedCount(briefId: string): number {
+    return selectedItems[briefId]?.size || 0;
+  }
 
   function toggleBrief(id: number) {
     setExpandedBriefs((prev) => {
@@ -344,15 +394,54 @@ export default function CiBriefs() {
                     {/* Brief Items */}
                     {brief.briefData && brief.briefData.length > 0 ? (
                       <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                          Brief Items ({brief.briefData.length})
-                        </h3>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Checkbox
+                              checked={
+                                brief.briefData.some(item => !item.videoRequestId) &&
+                                brief.briefData
+                                  .map((item, i) => (!item.videoRequestId ? i : -1))
+                                  .filter(i => i >= 0)
+                                  .every(i => (selectedItems[String(brief.id)] || new Set()).has(i))
+                              }
+                              onCheckedChange={() => toggleSelectAll(brief)}
+                            />
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                              Brief Items ({brief.briefData.length})
+                            </h3>
+                          </div>
+                          {getSelectedCount(String(brief.id)) > 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                const briefId = String(brief.id);
+                                const indices = Array.from(selectedItems[briefId] || []);
+                                bulkConvertMutation.mutate({ briefId, itemIndices: indices });
+                              }}
+                              disabled={bulkConvertMutation.isPending}
+                            >
+                              {bulkConvertMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                              ) : (
+                                <Video className="h-4 w-4 mr-1" />
+                              )}
+                              Convert Selected ({getSelectedCount(String(brief.id))})
+                            </Button>
+                          )}
+                        </div>
                         {brief.briefData.map((item, index) => {
                           const existingScript = getScriptForItem(brief.id, index);
                           return (
                             <Card key={index} className={item.videoRequestId ? "border-green-200 bg-green-50/30" : "border-dashed"}>
                               <CardContent className="pt-4 space-y-3">
                                 <div className="flex items-start justify-between gap-3">
+                                  {!item.videoRequestId && (
+                                    <Checkbox
+                                      className="mt-1"
+                                      checked={(selectedItems[String(brief.id)] || new Set()).has(index)}
+                                      onCheckedChange={() => toggleItemSelection(String(brief.id), index)}
+                                    />
+                                  )}
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                       <h4 className="font-semibold">{item.title}</h4>
