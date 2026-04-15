@@ -4,7 +4,6 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendEmailVerification,
   sendPasswordResetEmail,
   signOut,
   type User,
@@ -44,15 +43,7 @@ export function FirebaseAuthProvider({ children }: { children: React.ReactNode }
   };
 
   const signUpWithEmail = async (email: string, password: string) => {
-    const result = await createUserWithEmailAndPassword(auth, email, password);
-    try {
-      await sendEmailVerification(result.user, {
-        url: `${window.location.origin}/`,
-      });
-    } catch (err) {
-      console.warn("Failed to send verification email:", err);
-    }
-    return result;
+    return createUserWithEmailAndPassword(auth, email, password);
   };
 
   const resetPassword = async (email: string) => {
