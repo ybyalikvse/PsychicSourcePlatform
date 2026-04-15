@@ -13,12 +13,18 @@ import {
 } from "./services/content-intelligence";
 
 function requireCronSecret(req: any, res: any, next: any) {
+  // Fail closed: in production the secret must be configured AND the caller must
+  // present it. Only bypass when running locally in dev without a configured
+  // secret (so local dev doesn't require one).
+  const expected = process.env.CRON_SECRET;
   const auth = req.headers.authorization;
-  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    // Allow if no CRON_SECRET is set (local dev) or if it matches
-    if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+  if (!expected) {
+    if (process.env.NODE_ENV !== "production") return next(); // dev-mode bypass
+    console.error("[Auth] CRON_SECRET not set in production — refusing request");
+    return res.status(500).json({ error: "Server misconfigured" });
+  }
+  if (auth !== `Bearer ${expected}`) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
   next();
 }
@@ -406,9 +412,34 @@ export function registerCiRoutes(app: Express) {
       }
 
       const createdBriefs: any[] = [];
+      const skippedTopics: string[] = [];
       let totalVideosProcessed = 0;
 
+      // Load existing briefs once so we can dedupe by (weekLabel, topicCategory).
+      // Without this, overlapping manual + cron triggers produce duplicate briefs
+      // for the same week and topic.
+      const existingBriefs = await storage.getCiContentBriefs();
+      const existingTopicsThisWeek = new Set<string>();
+      for (const b of existingBriefs) {
+        if (b.weekLabel !== weekLabel) continue;
+        const tt = b.topTopics as any;
+        const primary = Array.isArray(tt) && tt.length > 0
+          ? (Array.isArray(tt[0]) ? tt[0][0] : tt[0])
+          : null;
+        if (primary) existingTopicsThisWeek.add(String(primary));
+      }
+
       for (const [topicCategory, topicAnalyses] of Object.entries(topicGroups)) {
+        // Skip if a brief for this (week, topic) already exists. Mark the pending
+        // analyses as briefed so they don't keep triggering this branch forever.
+        if (existingTopicsThisWeek.has(topicCategory)) {
+          console.log(`[CI] Brief for ${weekLabel} / ${topicCategory} already exists — skipping, marking analyses as briefed`);
+          for (const a of topicAnalyses) {
+            await storage.markVideoAsBriefed(a.scrapedVideoId);
+          }
+          skippedTopics.push(topicCategory);
+          continue;
+        }
         try {
           const dynamicCount = Math.min(getDynamicBriefCount(topicAnalyses.length), maxBriefCount);
           const topicUserPrompt = userPromptTemplate.replace(/{BRIEF_COUNT}/g, String(dynamicCount));

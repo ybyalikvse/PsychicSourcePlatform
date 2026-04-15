@@ -19,10 +19,33 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const ALLOWED_VIDEO_TYPES = [
+    "video/mp4", "video/quicktime", "video/webm", "video/x-m4v", "video/x-matroska",
+  ];
+  const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB
+
   const handleUpload = async (file: File) => {
     setUploading(true);
     setProgress(0);
     setError(null);
+
+    // Client-side validation so the user gets a fast, clear error instead of
+    // waiting for the S3 upload to fail or the server to reject the presign.
+    const fileType = file.type || "video/mp4";
+    if (!ALLOWED_VIDEO_TYPES.includes(fileType)) {
+      setUploading(false);
+      const msg = `Unsupported file type "${fileType || "unknown"}". Please upload an MP4, MOV, WebM, M4V, or MKV file.`;
+      setError(msg);
+      toast({ title: "Can't upload that file", description: msg, variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      setUploading(false);
+      const msg = `Video is ${(file.size / 1024 / 1024).toFixed(0)} MB. Maximum allowed is ${MAX_VIDEO_BYTES / 1024 / 1024} MB — please compress and try again.`;
+      setError(msg);
+      toast({ title: "File too large", description: msg, variant: "destructive" });
+      return;
+    }
 
     try {
       const user = auth.currentUser;
@@ -34,7 +57,7 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
       const presignRes = await fetch(`/api/portal/video-requests/${requestId}/presign-upload`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ filename: file.name, contentType: file.type || "video/mp4" }),
+        body: JSON.stringify({ filename: file.name, contentType: fileType, fileSize: file.size }),
       });
 
       if (!presignRes.ok) {

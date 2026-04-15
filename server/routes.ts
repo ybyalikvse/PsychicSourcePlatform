@@ -4632,6 +4632,22 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
   app.patch("/api/video-requests/:id", async (req, res) => {
     try {
+      const current = await storage.getVideoRequest(req.params.id);
+      if (!current) return res.status(404).json({ error: "Video request not found" });
+
+      // Once work is submitted, content fields are locked. Only payment/scheduling
+      // fields stay editable. Status changes go through the dedicated /status endpoint.
+      const LOCKED_STATUSES = ["submitted", "revision_requested", "approved", "paid"];
+      const EDITABLE_WHEN_LOCKED = new Set(["payAmount", "paidAt", "postBridgeScheduledAt"]);
+      if (LOCKED_STATUSES.includes(current.status || "")) {
+        const forbidden = Object.keys(req.body).filter(k => !EDITABLE_WHEN_LOCKED.has(k));
+        if (forbidden.length > 0) {
+          return res.status(409).json({
+            error: `Cannot edit ${forbidden.join(", ")} while request is ${current.status}. Move it back to draft/available first.`,
+          });
+        }
+      }
+
       const request = await storage.updateVideoRequest(req.params.id, req.body);
       if (!request) return res.status(404).json({ error: "Video request not found" });
       res.json(request);
@@ -4642,6 +4658,19 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
   app.delete("/api/video-requests/:id", async (req, res) => {
     try {
+      const current = await storage.getVideoRequest(req.params.id);
+      if (!current) return res.status(404).json({ error: "Video request not found" });
+
+      // Block deletion of requests with active work unless caller explicitly passes
+      // ?force=true (client shows a stronger confirm dialog in that case).
+      const ACTIVE_STATUSES = ["claimed", "submitted", "revision_requested", "approved", "paid"];
+      if (ACTIVE_STATUSES.includes(current.status || "") && req.query.force !== "true") {
+        return res.status(409).json({
+          error: `Request is ${current.status} — a psychic may be working on it. Pass ?force=true to override.`,
+          status: current.status,
+        });
+      }
+
       await storage.deleteVideoRequest(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -4657,6 +4686,14 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         return res.status(400).json({ error: "Invalid status" });
       }
 
+      const current = await storage.getVideoRequest(req.params.id);
+      if (!current) return res.status(404).json({ error: "Video request not found" });
+
+      const STATUS_ORDER = ["draft", "available", "claimed", "submitted", "revision_requested", "approved", "paid"];
+      const fromIdx = STATUS_ORDER.indexOf(current.status || "");
+      const toIdx = STATUS_ORDER.indexOf(status);
+      const isBackward = fromIdx > toIdx;
+
       const updates: any = { status };
       if (status === "approved") updates.approvedAt = new Date().toISOString();
       if (status === "available") {
@@ -4667,6 +4704,15 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         updates.watermarkedVideoUrl = null;
       }
       if (status === "revision_requested") {
+        // Clear both the previous video AND watermark so the psychic must upload
+        // a new version; otherwise they could re-submit the same file and claim
+        // the revision was addressed.
+        updates.watermarkedVideoUrl = null;
+        updates.videoUrl = null;
+      }
+      // Any backward move out of approved/paid invalidates the cached watermark —
+      // content may change before the next approval, so don't reuse a stale one.
+      if (isBackward && (current.status === "approved" || current.status === "paid")) {
         updates.watermarkedVideoUrl = null;
       }
 
@@ -4674,6 +4720,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       if (!request) return res.status(404).json({ error: "Video request not found" });
 
       // Auto-watermark when approved (awaited so it completes before Vercel kills the function)
+      let watermarkError: string | null = null;
       if (status === "approved" && request.videoUrl) {
         try {
           console.log(`[Watermark] Starting watermark for request ${req.params.id}`);
@@ -4686,13 +4733,14 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
             request = (await storage.updateVideoRequest(req.params.id, { watermarkedVideoUrl: watermarkedKey }))!;
             console.log(`[Watermark] Completed for request ${req.params.id}: ${watermarkedKey}`);
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`[Watermark] Failed for request ${req.params.id}:`, error);
-          // Don't fail the approval — watermark can be retried manually
+          watermarkError = error?.message || "Watermarking failed — retry from the video details page.";
         }
       }
 
-      res.json(await resolveVideoUrls(request));
+      const resolved = await resolveVideoUrls(request);
+      res.json(watermarkError ? { ...resolved, watermarkError } : resolved);
     } catch (error) {
       res.status(500).json({ error: "Failed to update video request status" });
     }
@@ -4891,6 +4939,16 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       });
 
       const result = JSON.parse(response.choices[0]?.message?.content || '{"caption":"","hashtags":""}');
+
+      // Dedupe: delete any existing captions for this (request, platform) first so
+      // repeated approvals / regenerations don't accumulate duplicate captions.
+      const existing = await storage.getVideoCaptions(req.params.id);
+      for (const c of existing) {
+        if (c.platform === platform) {
+          await storage.deleteVideoCaption(c.id);
+        }
+      }
+
       const caption = await storage.createVideoCaption({
         videoRequestId: req.params.id,
         caption: result.caption || "",
@@ -5169,14 +5227,14 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
   app.post("/api/portal/video-requests/:id/claim", verifyPortalAuth, async (req: any, res) => {
     try {
       const psychic = req.portalPsychic;
-      const request = await storage.getVideoRequest(req.params.id);
-      if (!request) return res.status(404).json({ error: "Video request not found" });
-      if (request.status !== "available") {
-        return res.status(400).json({ error: "This video request is no longer available" });
+      const existing = await storage.getVideoRequest(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Video request not found" });
+      if (existing.status !== "available") {
+        return res.status(409).json({ error: "This video request is no longer available" });
       }
 
       // Auto-set required date if not already set
-      let requiredDate = request.requiredDate;
+      let requiredDate = existing.requiredDate;
       if (!requiredDate) {
         try {
           const deadlineSetting = await storage.getCiSetting("claim_deadline_days");
@@ -5191,12 +5249,12 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
         }
       }
 
-      const updated = await storage.updateVideoRequest(req.params.id, {
-        status: "claimed",
-        claimedBy: psychic.id,
-        claimedAt: new Date().toISOString(),
-        requiredDate,
-      });
+      // Atomic: only succeeds if status is still "available". Prevents two psychics
+      // racing to claim the same request.
+      const updated = await storage.claimVideoRequest(req.params.id, psychic.id, { requiredDate });
+      if (!updated) {
+        return res.status(409).json({ error: "Someone else just claimed this request — please refresh." });
+      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to claim video request" });
@@ -5210,6 +5268,14 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       if (!request) return res.status(404).json({ error: "Video request not found" });
       if (request.claimedBy !== psychic.id) {
         return res.status(403).json({ error: "You can only release your own claimed requests" });
+      }
+      // Only allow release while work is still in progress (claimed or awaiting revision).
+      // Once submitted/approved/paid, releasing would silently discard the submitted
+      // video and reset the request — require the admin to intervene instead.
+      if (request.status !== "claimed" && request.status !== "revision_requested") {
+        return res.status(409).json({
+          error: `Can't release a request that's ${request.status}. Ask an admin if you need to undo a submission.`,
+        });
       }
 
       const updated = await storage.updateVideoRequest(req.params.id, {
@@ -5244,8 +5310,27 @@ Return JSON: { "caption": "...", "hashtags": "..." }`
       const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
       const { PutObjectCommand } = await import("@aws-sdk/client-s3");
 
-      const ext = (req.body.filename || "video.mp4").split('.').pop() || "mp4";
+      // Validate content-type and (reported) size before handing out a signed URL.
+      // Not a hard guarantee — client can still upload junk — but catches honest mistakes
+      // and prevents non-video uploads to the video-submissions bucket path.
+      const ALLOWED_VIDEO_TYPES = new Set([
+        "video/mp4", "video/quicktime", "video/webm", "video/x-m4v", "video/x-matroska",
+      ]);
+      const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB
       const contentType = req.body.contentType || "video/mp4";
+      if (!ALLOWED_VIDEO_TYPES.has(contentType)) {
+        return res.status(400).json({
+          error: `Unsupported file type "${contentType}". Allowed: ${Array.from(ALLOWED_VIDEO_TYPES).join(", ")}.`,
+        });
+      }
+      const reportedSize = Number(req.body.fileSize || 0);
+      if (reportedSize && reportedSize > MAX_VIDEO_BYTES) {
+        return res.status(400).json({
+          error: `File is ${(reportedSize / 1024 / 1024).toFixed(0)} MB. Maximum allowed is ${MAX_VIDEO_BYTES / 1024 / 1024} MB.`,
+        });
+      }
+
+      const ext = (req.body.filename || "video.mp4").split('.').pop() || "mp4";
       const s3Key = `video-submissions/${req.params.id}_${Date.now()}.${ext}`;
 
       const { S3Client: S3ClientClass } = await import("@aws-sdk/client-s3");

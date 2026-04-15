@@ -1111,18 +1111,25 @@ export default function VideoRequests() {
               </Button>
               <Button
                 disabled={!revisionNotes.trim() || statusMutation.isPending || sendMessageMutation.isPending}
-                onClick={() => {
+                onClick={async () => {
                   if (!selectedRequest || !revisionNotes.trim()) return;
-                  sendMessageMutation.mutate(
-                    { id: selectedRequest.id, message: `🔄 Revision Requested: ${revisionNotes.trim()}` },
-                    {
-                      onSuccess: () => {
-                        statusMutation.mutate({ id: selectedRequest.id, status: "revision_requested" });
-                        setShowRevisionDialog(false);
-                        setRevisionNotes("");
-                      },
-                    }
-                  );
+                  const id = selectedRequest.id;
+                  const notes = revisionNotes.trim();
+                  try {
+                    // Sequence message → status so a status flip is never committed
+                    // without the revision message being delivered. If either step
+                    // fails, the dialog stays open so the admin can retry.
+                    await sendMessageMutation.mutateAsync({ id, message: `🔄 Revision Requested: ${notes}` });
+                    await statusMutation.mutateAsync({ id, status: "revision_requested" });
+                    setShowRevisionDialog(false);
+                    setRevisionNotes("");
+                  } catch (err: any) {
+                    toast({
+                      title: "Failed to request revision",
+                      description: err?.message || "The message or status change didn't go through. Please try again.",
+                      variant: "destructive",
+                    });
+                  }
                 }}
                 data-testid="button-submit-revision"
               >

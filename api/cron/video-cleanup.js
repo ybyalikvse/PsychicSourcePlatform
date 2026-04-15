@@ -17526,6 +17526,22 @@ var DatabaseStorage = class {
     const [updated] = await db.update(videoRequests).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(videoRequests.id, id)).returning();
     return updated;
   }
+  /**
+   * Atomically claim a video request only if it is currently `available`. Returns the
+   * updated row on success, or undefined if the request was not available (e.g. already
+   * claimed by someone else in a race). Use this instead of read-then-update in the claim
+   * endpoint to avoid two psychics both succeeding on the same request.
+   */
+  async claimVideoRequest(id, psychicId, extras = {}) {
+    const [updated] = await db.update(videoRequests).set({
+      status: "claimed",
+      claimedBy: psychicId,
+      claimedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ...extras,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }).where(and(eq(videoRequests.id, id), eq(videoRequests.status, "available"))).returning();
+    return updated;
+  }
   async deleteVideoRequest(id) {
     await db.delete(videoRequests).where(eq(videoRequests.id, id));
     return true;

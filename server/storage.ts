@@ -174,6 +174,7 @@ export interface IStorage {
   getVideoRequestsByPsychic(psychicId: string): Promise<VideoRequest[]>;
   createVideoRequest(request: InsertVideoRequest): Promise<VideoRequest>;
   updateVideoRequest(id: string, updates: Partial<VideoRequest>): Promise<VideoRequest | undefined>;
+  claimVideoRequest(id: string, psychicId: string, extras?: Partial<VideoRequest>): Promise<VideoRequest | undefined>;
   deleteVideoRequest(id: string): Promise<boolean>;
 
   // Video Messages
@@ -594,6 +595,7 @@ export class MemStorage implements IStorage {
   async getVideoRequestsByPsychic(_psychicId: string): Promise<VideoRequest[]> { return []; }
   async createVideoRequest(_request: InsertVideoRequest): Promise<VideoRequest> { throw new Error("Not implemented"); }
   async updateVideoRequest(_id: string, _updates: Partial<VideoRequest>): Promise<VideoRequest | undefined> { return undefined; }
+  async claimVideoRequest(_id: string, _psychicId: string, _extras?: Partial<VideoRequest>): Promise<VideoRequest | undefined> { return undefined; }
   async deleteVideoRequest(_id: string): Promise<boolean> { return false; }
   async getVideoMessages(_videoRequestId: string): Promise<VideoMessage[]> { return []; }
   async createVideoMessage(_message: InsertVideoMessage): Promise<VideoMessage> { throw new Error("Not implemented"); }
@@ -1208,6 +1210,30 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(videoRequests)
       .set({ ...updates, updatedAt: new Date().toISOString() })
       .where(eq(videoRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  /**
+   * Atomically claim a video request only if it is currently `available`. Returns the
+   * updated row on success, or undefined if the request was not available (e.g. already
+   * claimed by someone else in a race). Use this instead of read-then-update in the claim
+   * endpoint to avoid two psychics both succeeding on the same request.
+   */
+  async claimVideoRequest(
+    id: string,
+    psychicId: string,
+    extras: Partial<VideoRequest> = {},
+  ): Promise<VideoRequest | undefined> {
+    const [updated] = await db.update(videoRequests)
+      .set({
+        status: "claimed",
+        claimedBy: psychicId,
+        claimedAt: new Date().toISOString(),
+        ...extras,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(and(eq(videoRequests.id, id), eq(videoRequests.status, "available")))
       .returning();
     return updated;
   }
