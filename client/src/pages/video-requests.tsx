@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -111,7 +111,7 @@ export default function VideoRequests() {
   const { data: pbAccounts = [] } = useQuery<any[]>({
     queryKey: ["/api/postbridge/accounts"],
     queryFn: async () => {
-      const res = await fetch("/api/postbridge/accounts");
+      const res = await authFetch("/api/postbridge/accounts");
       if (!res.ok) return [];
       const data = await res.json();
       return Array.isArray(data) ? data : (data.data ?? []);
@@ -130,7 +130,7 @@ export default function VideoRequests() {
     queryKey: ["/api/video-requests", selectedRequest?.id, "messages"],
     queryFn: async () => {
       if (!selectedRequest) return [];
-      const res = await fetch(`/api/video-requests/${selectedRequest.id}/messages`);
+      const res = await authFetch(`/api/video-requests/${selectedRequest.id}/messages`);
       if (!res.ok) return [];
       return res.json();
     },
@@ -141,7 +141,7 @@ export default function VideoRequests() {
     queryKey: ["/api/video-requests", selectedRequest?.id, "captions"],
     queryFn: async () => {
       if (!selectedRequest) return [];
-      const res = await fetch(`/api/video-requests/${selectedRequest.id}/captions`);
+      const res = await authFetch(`/api/video-requests/${selectedRequest.id}/captions`);
       if (!res.ok) return [];
       return res.json();
     },

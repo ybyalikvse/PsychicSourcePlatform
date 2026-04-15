@@ -42,7 +42,7 @@ import {
   Plus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import { TiptapEditor } from "@/components/tiptap-editor";
 import type { WritingStyle, SeoSettings, ImageStyle, Article, TargetAudience } from "@shared/schema";
 
@@ -303,7 +303,7 @@ export default function CreateWithAI() {
       const parsed = parseKeywordsInput(recommendedKeywords);
       const keywordsArray = parsed.keywords;
 
-      const response = await fetch("/api/content/generate", {
+      const response = await authFetch("/api/content/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

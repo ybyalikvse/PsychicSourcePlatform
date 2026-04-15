@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import type { WritingStyle, SeoSettings } from "@shared/schema";
 
 interface ArticleQueueItem {
@@ -291,7 +291,7 @@ export default function BulkCreate() {
       try {
         const parsed = parseKeywordsInput(itemRecommendedKeywords);
         
-        const response = await fetch("/api/content/generate", {
+        const response = await authFetch("/api/content/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -350,7 +350,7 @@ export default function BulkCreate() {
         const titleMatch = fullContent.match(/<h1[^>]*>(.*?)<\/h1>/i);
         const title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '') : itemKeyword;
         
-        const metaResponse = await fetch("/api/content/meta-suggestions", {
+        const metaResponse = await authFetch("/api/content/meta-suggestions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title, content: fullContent, targetKeyword: itemKeyword }),
@@ -379,7 +379,7 @@ export default function BulkCreate() {
         const slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
         const wordCountNum = fullContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean).length;
         
-        const saveResponse = await fetch("/api/articles", {
+        const saveResponse = await authFetch("/api/articles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -350,19 +350,21 @@ export async function registerRoutes(
   // (vsp/ci/social-posts) already have their own auth and never reach this
   // middleware. Portal, auth, cron, and horoscope routes (registered below)
   // are skipped so they can use their own auth or remain public.
+  //
+  // NOTE: when middleware is mounted with `app.use("/api", ...)`, req.path is
+  // RELATIVE to the mount point — so /api/auth/login arrives here as
+  // /auth/login. Skip-list paths must be expressed accordingly (without the
+  // /api prefix) and we double-check req.originalUrl as a safety net.
   const ADMIN_GUARD_SKIP_PREFIXES = [
-    "/api/auth/",           // Firebase login/register — pre-auth flows
-    "/api/portal/",         // psychic portal — uses verifyPortalAuth
-    "/api/cron/",           // scheduled jobs — use requireCronSecret
-    "/api/horoscope",       // kept public for now (per product decision)
-    "/api/horoscope-entries",
-    "/api/horoscope-prompts",
-    "/api/horoscope-tones",
-    "/api/public-horoscope-entries",
+    "/auth/",           // Firebase login/register — pre-auth flows
+    "/portal/",         // psychic portal — uses verifyPortalAuth
+    "/cron/",           // scheduled jobs — use requireCronSecret
+    "/horoscope",       // kept public for now (covers horoscope, horoscopes, horoscope-entries, etc.)
+    "/public-horoscope-entries",
   ];
   app.use("/api", (req: any, res: any, next: any) => {
-    const path = req.path;
-    if (ADMIN_GUARD_SKIP_PREFIXES.some(p => path.startsWith(p))) return next();
+    const relPath = req.path; // relative to /api mount
+    if (ADMIN_GUARD_SKIP_PREFIXES.some(p => relPath.startsWith(p))) return next();
     return verifyAdminAuth(req, res, next);
   });
 
