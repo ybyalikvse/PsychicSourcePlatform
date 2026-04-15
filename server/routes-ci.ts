@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Express } from "express";
+import OpenAI from "openai";
 import { storage } from "./storage";
 import { insertCiCompetitorSchema } from "../shared/schema";
 import {
@@ -1335,6 +1336,119 @@ export function registerCiRoutes(app: Express) {
     } catch (error: any) {
       console.error("[CI] Error converting brief to video request:", error);
       res.status(500).json({ error: "Failed to convert brief to video request" });
+    }
+  });
+
+  // ============================================================
+  // One-off: clean analytics leakage from existing video request notes.
+  // Dry-run by default. POST with ?apply=true to actually save.
+  // Safe to delete once run.
+  // ============================================================
+  router.post("/cleanup-creator-notes", async (req, res) => {
+    try {
+      const apply = req.query.apply === "true";
+
+      const LEAK_PATTERNS = [
+        /#\d+\b/,
+        /\b\d+[km]\+?\s*views?\b/i,
+        /\b(highest|top|best)[\s-]?performing\b/i,
+        /\bhighest[\s-]?performer\b/i,
+        /\btop[\s-]?performer\b/i,
+        /\breplication[\s-]?score\b/i,
+        /\bview count\b/i,
+        /\bour analytics\b/i,
+      ];
+      const detectLeakage = (text: string | null | undefined): boolean => {
+        if (!text) return false;
+        return LEAK_PATTERNS.some(p => p.test(text));
+      };
+
+      const modelSetting = await storage.getCiSetting("ai_model");
+      const model = modelSetting?.value || "anthropic/claude-sonnet-4-5";
+
+      const openai = new OpenAI({
+        baseURL: "https://openrouter.ai/api/v1",
+        apiKey: process.env.OPENROUTER_API_KEY,
+      });
+
+      const rewrite = async (notes: string, title?: string, topic?: string): Promise<string> => {
+        const systemPrompt = "You rewrite creator-facing notes that accidentally leaked internal performance analytics. Keep any concrete production guidance (tone, pacing, things to avoid, style tips, creative direction). REMOVE anything that references view counts, video rankings (#1, #2, etc.), \"top-performing videos\", \"highest performer\", replication scores, performance data, or any reference to internal analytics. If the notes contain nothing useful beyond analytics, return an empty string. Output only the cleaned plain text — no preamble, no markdown, no quotes.";
+        const userPrompt = `Title: ${title || "(none)"}\nTopic: ${topic || "(none)"}\n\nNotes to clean:\n${notes}`;
+        const response = await openai.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        });
+        return (response.choices[0]?.message?.content || "").trim();
+      };
+
+      const requests = await storage.getVideoRequests();
+      const results: Array<{
+        id: string;
+        title: string;
+        before: string;
+        after: string;
+        updated: boolean;
+        error?: string;
+      }> = [];
+
+      for (const vr of requests) {
+        if (!vr.description) continue;
+        let parsed: any;
+        try {
+          parsed = JSON.parse(vr.description);
+        } catch {
+          continue; // non-JSON description — skip
+        }
+        if (parsed?._type !== "ci_brief") continue;
+
+        const originalNotes: string | null = parsed.notes_for_creator;
+        if (!originalNotes || !detectLeakage(originalNotes)) continue;
+
+        try {
+          const cleaned = await rewrite(originalNotes, vr.title, vr.topic || undefined);
+          const entry = {
+            id: vr.id,
+            title: vr.title,
+            before: originalNotes,
+            after: cleaned,
+            updated: false,
+          };
+          results.push(entry);
+
+          if (apply) {
+            const newDescription = JSON.stringify({
+              ...parsed,
+              notes_for_creator: cleaned || null,
+            });
+            await storage.updateVideoRequest(vr.id, { description: newDescription });
+            entry.updated = true;
+          }
+        } catch (err: any) {
+          results.push({
+            id: vr.id,
+            title: vr.title,
+            before: originalNotes,
+            after: "",
+            updated: false,
+            error: err?.message || String(err),
+          });
+        }
+      }
+
+      res.json({
+        dryRun: !apply,
+        totalScanned: requests.length,
+        leakyFound: results.length,
+        updated: results.filter(r => r.updated).length,
+        errors: results.filter(r => r.error).length,
+        results,
+      });
+    } catch (error: any) {
+      console.error("[CI] Cleanup creator notes error:", error);
+      res.status(500).json({ error: "Cleanup failed: " + (error?.message || "Unknown") });
     }
   });
 
