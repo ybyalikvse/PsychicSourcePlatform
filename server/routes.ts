@@ -9,6 +9,8 @@ import OpenAI from "openai";
 import { registerVspRoutes } from "./routes-vsp";
 import { registerCiRoutes } from "./routes-ci";
 import { registerSocialPostsRoutes } from "./routes-social-posts";
+import { verifyAdminAuth } from "./auth-middleware";
+import { expensiveApiLimiter } from "./rate-limiters";
 import FirecrawlAppModule from "@mendable/firecrawl-js";
 const FirecrawlApp = (FirecrawlAppModule as any).default || FirecrawlAppModule;
 
@@ -318,10 +320,51 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // ============ RATE LIMITING (expensive operations) ============
+  // Apply BEFORE registerXxxRoutes so the limiter sees these paths first.
+  // Caps per-IP volume on endpoints that trigger LLM/video-gen/scrape calls.
+  app.use(
+    [
+      "/api/vsp/generate",          // VSP video/script/caption generation
+      "/api/vsp/projects/:id/generate",
+      "/api/social-posts/bulk-generate",
+      "/api/ci/pipeline",           // pipeline steps (already cron-gated, defense in depth)
+      "/api/content/generate",
+      "/api/content/meta-suggestions",
+      "/api/content/audit/refresh",
+      "/api/images/generate",
+      "/api/video-requests/:id/generate-captions",
+      "/api/video-requests/:id/watermark",
+    ],
+    expensiveApiLimiter,
+  );
+
   // ============ VIRAL SCRIPT PRO ============
   registerVspRoutes(app);
   registerCiRoutes(app);
   registerSocialPostsRoutes(app);
+
+  // ============ ADMIN AUTH GUARD ============
+  // Every /api/* route registered AFTER this point is assumed to be an admin
+  // operation and requires a Firebase admin token. The routers mounted above
+  // (vsp/ci/social-posts) already have their own auth and never reach this
+  // middleware. Portal, auth, cron, and horoscope routes (registered below)
+  // are skipped so they can use their own auth or remain public.
+  const ADMIN_GUARD_SKIP_PREFIXES = [
+    "/api/auth/",           // Firebase login/register — pre-auth flows
+    "/api/portal/",         // psychic portal — uses verifyPortalAuth
+    "/api/cron/",           // scheduled jobs — use requireCronSecret
+    "/api/horoscope",       // kept public for now (per product decision)
+    "/api/horoscope-entries",
+    "/api/horoscope-prompts",
+    "/api/horoscope-tones",
+    "/api/public-horoscope-entries",
+  ];
+  app.use("/api", (req: any, res: any, next: any) => {
+    const path = req.path;
+    if (ADMIN_GUARD_SKIP_PREFIXES.some(p => path.startsWith(p))) return next();
+    return verifyAdminAuth(req, res, next);
+  });
 
   // ============ STATS ============
   app.get("/api/stats", async (req, res) => {

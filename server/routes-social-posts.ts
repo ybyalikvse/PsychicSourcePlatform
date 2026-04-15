@@ -38,7 +38,7 @@ export function registerSocialPostsRoutes(app: Express) {
       res.json(postsWithSlides);
     } catch (error: any) {
       console.error("Error fetching social posts:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -50,7 +50,7 @@ export function registerSocialPostsRoutes(app: Express) {
       const slides = await storage.getSocialPostSlides(post.id);
       res.json({ ...post, slides });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -74,7 +74,7 @@ export function registerSocialPostsRoutes(app: Express) {
       res.json({ ...post, slides: createdSlides });
     } catch (error: any) {
       console.error("Error creating social post:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -103,7 +103,7 @@ export function registerSocialPostsRoutes(app: Express) {
       }
     } catch (error: any) {
       console.error("Error updating social post:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -114,7 +114,7 @@ export function registerSocialPostsRoutes(app: Express) {
       if (!deleted) return res.status(404).json({ error: "Post not found" });
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -152,7 +152,7 @@ export function registerSocialPostsRoutes(app: Express) {
       res.json({ topics });
     } catch (error: any) {
       console.error("Error generating topics:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -217,7 +217,7 @@ Keep text concise - titles under 8 words, body text under 25 words per slide.`;
       res.json(parsed);
     } catch (error: any) {
       console.error("Error generating content:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -272,7 +272,7 @@ Keep text concise - titles under 8 words, body text under 25 words per slide.`;
       res.json({ imageUrl, prompt: imagePrompt });
     } catch (error: any) {
       console.error("Error generating image:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -372,7 +372,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       res.json({ posts: createdPosts, count: createdPosts.length });
     } catch (error: any) {
       console.error("Error in bulk generate:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -438,7 +438,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       res.json({ imageUrl, platform });
     } catch (error: any) {
       console.error("Error rendering slide:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -511,7 +511,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       res.json({ results });
     } catch (error: any) {
       console.error("Error rendering all slides:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -567,15 +567,16 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
 
         res.json({ success: true, result });
       } catch (publishError: any) {
+        console.error("[SocialPosts] Publish error:", publishError);
         await storage.updateSocialPost(postId, {
           status: "failed",
-          error: publishError.message,
+          error: publishError?.message || "Publish failed",
         });
-        res.status(500).json({ error: publishError.message });
+        res.status(500).json({ error: "Failed to publish post" });
       }
     } catch (error: any) {
       console.error("Error publishing:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -585,7 +586,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const accounts = await getSocialAccounts();
       res.json(accounts);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -596,7 +597,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const types = await storage.getSocialCarouselTypes();
       res.json(types);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -606,7 +607,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!type) return res.status(404).json({ error: "Carousel type not found" });
       res.json(type);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -615,7 +616,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const type = await storage.createSocialCarouselType(req.body);
       res.json(type);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -625,7 +626,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!type) return res.status(404).json({ error: "Carousel type not found" });
       res.json(type);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -635,7 +636,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!deleted) return res.status(404).json({ error: "Carousel type not found" });
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -646,7 +647,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const sets = await storage.getSocialTemplateSets();
       res.json(sets);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -658,7 +659,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const slideTemplates = await storage.getSocialSlideTemplates(set.name);
       res.json({ ...set, slideTemplates });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -667,7 +668,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const set = await storage.createSocialTemplateSet(req.body);
       res.json(set);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -677,7 +678,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!set) return res.status(404).json({ error: "Template set not found" });
       res.json(set);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -687,7 +688,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!deleted) return res.status(404).json({ error: "Template set not found" });
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -702,7 +703,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       );
       res.json({ url: imageUrl });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -714,7 +715,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const templates = await storage.getSocialSlideTemplates(setName);
       res.json(templates);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -723,7 +724,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const template = await storage.createSocialSlideTemplate(req.body);
       res.json(template);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -733,7 +734,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!template) return res.status(404).json({ error: "Slide template not found" });
       res.json(template);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -743,7 +744,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!deleted) return res.status(404).json({ error: "Slide template not found" });
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -755,7 +756,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const items = await storage.getSocialMediaLibrary(tag);
       res.json(items);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -764,7 +765,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       const item = await storage.createSocialMediaLibraryItem(req.body);
       res.json(item);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -784,7 +785,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       });
       res.json(item);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -794,7 +795,7 @@ For carousel: first=cover, last=cta, middle=content. Keep text concise.`;
       if (!deleted) return res.status(404).json({ error: "Media item not found" });
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -834,7 +835,7 @@ Return JSON: { "caption": "refined caption", "hashtags": "refined #hashtags" }`;
       const content = JSON.parse(response.choices[0]?.message?.content || "{}");
       res.json(content);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

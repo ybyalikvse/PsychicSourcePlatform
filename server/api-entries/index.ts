@@ -5,6 +5,10 @@ import { createServer } from "http";
 
 const app = express();
 
+// On Vercel the function runs behind their proxy; tell express to trust the
+// first hop so req.ip reflects the actual client (needed for rate limiting).
+app.set("trust proxy", 1);
+
 app.use(
   express.json({
     limit: "4mb",

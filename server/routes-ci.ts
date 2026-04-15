@@ -227,12 +227,22 @@ export function registerCiRoutes(app: Express) {
           transcript,
           transcriptStatus: "completed",
         });
-        res.json({ success: true, transcriptLength: transcript.length });
+        return res.json({ success: true, transcriptLength: transcript.length });
+      }
+
+      // Transient failures (rate limit, temporary outages) shouldn't permanently
+      // shelve the video. Leave it "pending" so the next cron pass retries —
+      // unless it has been pending for >7 days, in which case we accept the
+      // transcript is genuinely unavailable and mark it permanently failed so
+      // it doesn't keep clogging the daily 50-video transcript budget.
+      const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+      const ageMs = video.createdAt ? Date.now() - new Date(video.createdAt).getTime() : 0;
+      if (ageMs > SEVEN_DAYS_MS) {
+        await storage.updateCiScrapedVideo(video.id, { transcriptStatus: "permanent_failure" });
+        res.json({ success: false, message: "Transcript permanently unavailable after 7 days of retries" });
       } else {
-        await storage.updateCiScrapedVideo(video.id, {
-          transcriptStatus: "failed",
-        });
-        res.json({ success: false, message: "Transcript unavailable" });
+        await storage.updateCiScrapedVideo(video.id, { transcriptStatus: "pending" });
+        res.json({ success: false, message: "Transcript unavailable — will retry on next pipeline run" });
       }
     } catch (error) {
       console.error("[CI] Pipeline transcript error:", error);

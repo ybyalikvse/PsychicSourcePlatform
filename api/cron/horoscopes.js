@@ -25410,7 +25410,7 @@ async function handler(req, res) {
     res.json({ success: true, type });
   } catch (error) {
     console.error(`[Cron] Horoscope generation error:`, error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 }
 export {

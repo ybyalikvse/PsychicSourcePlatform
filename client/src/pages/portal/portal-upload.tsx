@@ -79,15 +79,19 @@ export default function PortalUpload({ requestId, existingUrl, onUploadComplete 
         xhr.addEventListener("load", () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
+          } else if (xhr.status === 403) {
+            // S3 returns 403 when the presigned URL has expired (default 1h
+            // window) — give the user clear guidance instead of a generic error.
+            reject(new Error("Your upload link expired. Please click \"Upload Video\" again to start a fresh upload."));
           } else {
-            reject(new Error("Upload to storage failed"));
+            reject(new Error(`Upload to storage failed (HTTP ${xhr.status})`));
           }
         });
-        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+        xhr.addEventListener("error", () => reject(new Error("Network error during upload — check your connection and try again.")));
         xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
 
         xhr.open("PUT", presignedUrl);
-        xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+        xhr.setRequestHeader("Content-Type", fileType);
         xhr.send(file);
       });
 

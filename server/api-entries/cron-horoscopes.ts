@@ -19,6 +19,6 @@ export default async function handler(req: any, res: any) {
     res.json({ success: true, type });
   } catch (error: any) {
     console.error(`[Cron] Horoscope generation error:`, error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 }

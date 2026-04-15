@@ -18481,6 +18481,8 @@ async function releaseExpiredClaims() {
     console.log("[Video Cron] No expired claims found");
   }
 }
+var STUCK_THRESHOLD_MS = 2 * 60 * 60 * 1e3;
+var ORPHAN_GRACE_MS = 24 * 60 * 60 * 1e3;
 
 // server/api-entries/cron-video-cleanup.ts
 async function handler(req, res) {
@@ -18494,7 +18496,7 @@ async function handler(req, res) {
     res.json({ success: true });
   } catch (error) {
     console.error("[Cron] Video cleanup error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 }
 export {

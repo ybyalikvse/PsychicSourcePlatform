@@ -236,6 +236,15 @@ export default function VideoRequests() {
       queryClient.invalidateQueries({ queryKey: ["/api/video-requests"] });
       setSelectedRequest(updatedRequest);
       toast({ title: `Status changed to ${getStatusLabel(updatedRequest.status)}` });
+      // Surface watermarking failures (response includes watermarkError when the
+      // background ffmpeg step failed during approval).
+      if (updatedRequest.watermarkError) {
+        toast({
+          title: "Watermarking failed",
+          description: `${updatedRequest.watermarkError} You can retry from the video details page.`,
+          variant: "destructive",
+        });
+      }
       // Auto-generate captions when approved — fire sequentially in background
       if (updatedRequest.status === "approved") {
         const gen = (platform: string) =>
