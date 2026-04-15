@@ -361,6 +361,238 @@ export default function VideoRequests() {
     return p ? p.name : psychicId;
   }
 
+  // Shared edit dialog — mounted in both detail and list views so clicking
+  // Edit from either one opens the dialog immediately.
+  const renderEditDialog = () => (
+    <Dialog open={!!editingRequest} onOpenChange={open => { if (!open) { setEditingRequest(null); setEditBriefFields(null); } }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>Edit Video Request</DialogTitle>
+          <DialogDescription>Update the request details before publishing to psychics.</DialogDescription>
+        </DialogHeader>
+        <Form {...editForm}>
+          <form
+            className="flex flex-col flex-1 min-h-0"
+            onSubmit={editForm.handleSubmit(data => {
+              if (!editingRequest) return;
+              if (editBriefFields) {
+                const hasAnyBriefContent = editBriefFields.topic_description ||
+                  editBriefFields.hook_options.some(h => h) ||
+                  editBriefFields.talking_points.some(p => p);
+                if (hasAnyBriefContent) {
+                  let existing: Record<string, unknown> = { _type: "ci_brief" };
+                  try { existing = JSON.parse(editingRequest.description || "{}"); } catch {}
+                  data.description = JSON.stringify({ ...existing, ...editBriefFields });
+                }
+              }
+              updateMutation.mutate({ id: editingRequest.id, data });
+            })}
+          >
+            <Tabs defaultValue="request" className="flex flex-col flex-1 min-h-0">
+              <TabsList className="shrink-0 w-full">
+                <TabsTrigger value="request" className="flex-1">Request Settings</TabsTrigger>
+                <TabsTrigger value="brief" className="flex-1">Brief Content</TabsTrigger>
+              </TabsList>
+              <TabsContent value="request" className="flex-1 overflow-y-auto mt-0 pt-4 space-y-4 pr-1">
+                <FormField control={editForm.control} name="title" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-edit-title" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={editForm.control} name="topic" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Topic</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-edit-topic" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={editForm.control} name="hook" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Hook <span className="text-muted-foreground font-normal text-xs">(opening line shown to psychics)</span></FormLabel>
+                    <FormControl><Input {...field} data-testid="input-edit-hook" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={editForm.control} name="videoDuration" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Duration</FormLabel>
+                      <FormControl><Input {...field} placeholder="e.g. 60-90 seconds" data-testid="input-edit-duration" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  {showPayAmount && <FormField control={editForm.control} name="payAmount" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Pay Amount ($)</FormLabel>
+                      <FormControl><Input {...field} type="text" data-testid="input-edit-pay" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />}
+                </div>
+                <FormField control={editForm.control} name="requiredDate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Required Date</FormLabel>
+                    <FormControl><Input {...field} type="date" data-testid="input-edit-required-date" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={editForm.control} name="status" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-edit-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft (hidden from psychics)</SelectItem>
+                        <SelectItem value="available">Available (visible to psychics)</SelectItem>
+                        <SelectItem value="claimed">Claimed</SelectItem>
+                        <SelectItem value="submitted">Submitted</SelectItem>
+                        <SelectItem value="revision_requested">Revision Requested</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                {!editBriefFields && (
+                  <FormField control={editForm.control} name="description" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl><Textarea {...field} rows={4} data-testid="input-edit-description" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
+              </TabsContent>
+              {editBriefFields && (
+                <TabsContent value="brief" className="flex-1 overflow-y-auto mt-0 pt-4 space-y-4 pr-1">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Topic Description</label>
+                    <Textarea
+                      value={editBriefFields.topic_description}
+                      onChange={e => setEditBriefFields(f => f && ({ ...f, topic_description: e.target.value }))}
+                      rows={3}
+                      placeholder="What this video should cover..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Hook Options</label>
+                    {editBriefFields.hook_options.map((h, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}.</span>
+                        <Input
+                          value={h}
+                          onChange={e => setEditBriefFields(f => {
+                            if (!f) return f;
+                            const opts = [...f.hook_options];
+                            opts[i] = e.target.value;
+                            return { ...f, hook_options: opts };
+                          })}
+                          placeholder={`Hook option ${i + 1}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Talking Points</label>
+                    {editBriefFields.talking_points.map((p, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-4 shrink-0">•</span>
+                        <Input
+                          value={p}
+                          onChange={e => setEditBriefFields(f => {
+                            if (!f) return f;
+                            const pts = [...f.talking_points];
+                            pts[i] = e.target.value;
+                            return { ...f, talking_points: pts };
+                          })}
+                          placeholder={`Talking point ${i + 1}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 h-8 w-8 text-muted-foreground"
+                          onClick={() => setEditBriefFields(f => f && ({ ...f, talking_points: f.talking_points.filter((_, j) => j !== i) }))}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditBriefFields(f => f && ({ ...f, talking_points: [...f.talking_points, ""] }))}
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Add Point
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Suggested CTA</label>
+                    <Input
+                      value={editBriefFields.suggested_cta}
+                      onChange={e => setEditBriefFields(f => f && ({ ...f, suggested_cta: e.target.value }))}
+                      placeholder="What to ask viewers to do at the end"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Notes for Creator</label>
+                    <Textarea
+                      value={editBriefFields.notes_for_creator}
+                      onChange={e => setEditBriefFields(f => f && ({ ...f, notes_for_creator: e.target.value }))}
+                      rows={2}
+                      placeholder="Tone guidance, things to avoid..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Format Suggestion</label>
+                      <Input
+                        value={editBriefFields.format_suggestion}
+                        onChange={e => setEditBriefFields(f => f && ({ ...f, format_suggestion: e.target.value }))}
+                        placeholder="e.g. Direct-to-camera"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Est. Length</label>
+                      <Input
+                        value={editBriefFields.estimated_length}
+                        onChange={e => setEditBriefFields(f => f && ({ ...f, estimated_length: e.target.value }))}
+                        placeholder="e.g. 60-90 seconds"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Difficulty</label>
+                      <Input
+                        value={editBriefFields.difficulty}
+                        onChange={e => setEditBriefFields(f => f && ({ ...f, difficulty: e.target.value }))}
+                        placeholder="easy / medium / advanced"
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+              )}
+            </Tabs>
+            <div className="shrink-0 flex justify-end gap-2 pt-4 border-t mt-2">
+              <Button type="button" variant="outline" onClick={() => { setEditingRequest(null); setEditBriefFields(null); }} data-testid="button-cancel-edit">Cancel</Button>
+              <Button type="submit" disabled={updateMutation.isPending} data-testid="button-submit-edit">
+                {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (match && !selectedRequest && !isLoading) {
     return (
       <div className="space-y-6" data-testid="page-video-request-not-found">
@@ -900,6 +1132,7 @@ export default function VideoRequests() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {renderEditDialog()}
       </div>
     );
   }
@@ -1246,240 +1479,7 @@ export default function VideoRequests() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editingRequest} onOpenChange={open => { if (!open) { setEditingRequest(null); setEditBriefFields(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>Edit Video Request</DialogTitle>
-            <DialogDescription>Update the request details before publishing to psychics.</DialogDescription>
-          </DialogHeader>
-          <Form {...editForm}>
-            <form
-              className="flex flex-col flex-1 min-h-0"
-              onSubmit={editForm.handleSubmit(data => {
-                if (!editingRequest) return;
-                // Merge brief fields into description JSON
-                if (editBriefFields) {
-                  const hasAnyBriefContent = editBriefFields.topic_description ||
-                    editBriefFields.hook_options.some(h => h) ||
-                    editBriefFields.talking_points.some(p => p);
-                  if (hasAnyBriefContent) {
-                    let existing: Record<string, unknown> = { _type: "ci_brief" };
-                    try { existing = JSON.parse(editingRequest.description || "{}"); } catch {}
-                    data.description = JSON.stringify({ ...existing, ...editBriefFields });
-                  }
-                }
-                updateMutation.mutate({ id: editingRequest.id, data });
-              })}
-            >
-              <Tabs defaultValue="request" className="flex flex-col flex-1 min-h-0">
-                <TabsList className="shrink-0 w-full">
-                  <TabsTrigger value="request" className="flex-1">Request Settings</TabsTrigger>
-                  <TabsTrigger value="brief" className="flex-1">Brief Content</TabsTrigger>
-                </TabsList>
-
-                {/* ── Request Settings tab ── */}
-                <TabsContent value="request" className="flex-1 overflow-y-auto mt-0 pt-4 space-y-4 pr-1">
-                  <FormField control={editForm.control} name="title" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Title</FormLabel>
-                      <FormControl><Input {...field} data-testid="input-edit-title" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="topic" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Topic</FormLabel>
-                      <FormControl><Input {...field} data-testid="input-edit-topic" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="hook" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Hook <span className="text-muted-foreground font-normal text-xs">(opening line shown to psychics)</span></FormLabel>
-                      <FormControl><Input {...field} data-testid="input-edit-hook" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={editForm.control} name="videoDuration" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Duration</FormLabel>
-                        <FormControl><Input {...field} placeholder="e.g. 60-90 seconds" data-testid="input-edit-duration" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    {showPayAmount && <FormField control={editForm.control} name="payAmount" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Pay Amount ($)</FormLabel>
-                        <FormControl><Input {...field} type="text" data-testid="input-edit-pay" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />}
-                  </div>
-                  <FormField control={editForm.control} name="requiredDate" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Required Date</FormLabel>
-                      <FormControl><Input {...field} type="date" data-testid="input-edit-required-date" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="status" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-edit-status">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="draft">Draft (hidden from psychics)</SelectItem>
-                          <SelectItem value="available">Available (visible to psychics)</SelectItem>
-                          <SelectItem value="claimed">Claimed</SelectItem>
-                          <SelectItem value="submitted">Submitted</SelectItem>
-                          <SelectItem value="revision_requested">Revision Requested</SelectItem>
-                          <SelectItem value="approved">Approved</SelectItem>
-                          <SelectItem value="paid">Paid</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  {!editBriefFields && (
-                    <FormField control={editForm.control} name="description" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl><Textarea {...field} rows={4} data-testid="input-edit-description" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  )}
-                </TabsContent>
-
-                {/* ── Brief Content tab ── */}
-                {editBriefFields && (
-                  <TabsContent value="brief" className="flex-1 overflow-y-auto mt-0 pt-4 space-y-4 pr-1">
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium">Topic Description</label>
-                      <Textarea
-                        value={editBriefFields.topic_description}
-                        onChange={e => setEditBriefFields(f => f && ({ ...f, topic_description: e.target.value }))}
-                        rows={3}
-                        placeholder="What this video should cover..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Hook Options</label>
-                      {editBriefFields.hook_options.map((h, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}.</span>
-                          <Input
-                            value={h}
-                            onChange={e => setEditBriefFields(f => {
-                              if (!f) return f;
-                              const opts = [...f.hook_options];
-                              opts[i] = e.target.value;
-                              return { ...f, hook_options: opts };
-                            })}
-                            placeholder={`Hook option ${i + 1}`}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Talking Points</label>
-                      {editBriefFields.talking_points.map((p, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground w-4 shrink-0">•</span>
-                          <Input
-                            value={p}
-                            onChange={e => setEditBriefFields(f => {
-                              if (!f) return f;
-                              const pts = [...f.talking_points];
-                              pts[i] = e.target.value;
-                              return { ...f, talking_points: pts };
-                            })}
-                            placeholder={`Talking point ${i + 1}`}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="shrink-0 h-8 w-8 text-muted-foreground"
-                            onClick={() => setEditBriefFields(f => f && ({ ...f, talking_points: f.talking_points.filter((_, j) => j !== i) }))}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setEditBriefFields(f => f && ({ ...f, talking_points: [...f.talking_points, ""] }))}
-                      >
-                        <Plus className="h-3 w-3 mr-1" /> Add Point
-                      </Button>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium">Suggested CTA</label>
-                      <Input
-                        value={editBriefFields.suggested_cta}
-                        onChange={e => setEditBriefFields(f => f && ({ ...f, suggested_cta: e.target.value }))}
-                        placeholder="What to ask viewers to do at the end"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium">Notes for Creator</label>
-                      <Textarea
-                        value={editBriefFields.notes_for_creator}
-                        onChange={e => setEditBriefFields(f => f && ({ ...f, notes_for_creator: e.target.value }))}
-                        rows={2}
-                        placeholder="Tone guidance, things to avoid..."
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-sm font-medium">Format Suggestion</label>
-                        <Input
-                          value={editBriefFields.format_suggestion}
-                          onChange={e => setEditBriefFields(f => f && ({ ...f, format_suggestion: e.target.value }))}
-                          placeholder="e.g. Direct-to-camera"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-sm font-medium">Est. Length</label>
-                        <Input
-                          value={editBriefFields.estimated_length}
-                          onChange={e => setEditBriefFields(f => f && ({ ...f, estimated_length: e.target.value }))}
-                          placeholder="e.g. 60-90 seconds"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-sm font-medium">Difficulty</label>
-                        <Input
-                          value={editBriefFields.difficulty}
-                          onChange={e => setEditBriefFields(f => f && ({ ...f, difficulty: e.target.value }))}
-                          placeholder="easy / medium / advanced"
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
-                )}
-              </Tabs>
-
-              <div className="shrink-0 flex justify-end gap-2 pt-4 border-t mt-2">
-                <Button type="button" variant="outline" onClick={() => { setEditingRequest(null); setEditBriefFields(null); }} data-testid="button-cancel-edit">Cancel</Button>
-                <Button type="submit" disabled={updateMutation.isPending} data-testid="button-submit-edit">
-                  {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Save Changes
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      {renderEditDialog()}
     </div>
   );
 }

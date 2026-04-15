@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChevronDown, ChevronRight, FileText, Smartphone } from "lucide-react";
 
 interface StructuredBrief {
@@ -23,6 +23,19 @@ interface StructuredBrief {
     closeCta: string | null;
     full: string | null;
   } | null;
+}
+
+function humanize(value: string): string {
+  const specialCases: Record<string, string> = {
+    "POV_scenario": "POV Scenario",
+    "short_form_talking_head": "Short-Form Talking Head",
+  };
+  if (specialCases[value]) return specialCases[value];
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function cleanScript(text: string, stripDirections: boolean = false): string {
@@ -123,33 +136,29 @@ export function VideoRequestDescription({ description }: { description: string }
         {(structured.format_suggestion || structured.estimated_length || structured.difficulty) && (
           <>
           {structured.format_suggestion && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="outline" className="cursor-help">
-                    <span className="text-muted-foreground mr-1">Format:</span>{structured.format_suggestion}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs">
-                  Suggested shooting style and energy for this video, based on what performed well in competitor content for this topic.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="cursor-help">
+                  <span className="text-muted-foreground mr-1">Format:</span>{humanize(structured.format_suggestion)}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                Suggested shooting style and energy for this video, based on what performed well in competitor content for this topic.
+              </TooltipContent>
+            </Tooltip>
           )}
           {structured.estimated_length && <Badge variant="secondary">{structured.estimated_length}</Badge>}
           {structured.difficulty && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="cursor-help">
-                    <span className="text-muted-foreground mr-1">Difficulty:</span>{structured.difficulty}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs">
-                  How complex this topic is to deliver well on camera. Easy = conversational, anyone can do it. Medium = requires some explanation or nuance. Advanced = requires deep expertise.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="cursor-help">
+                  <span className="text-muted-foreground mr-1">Difficulty:</span>{humanize(structured.difficulty)}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                How complex this topic is to deliver well on camera. Easy = conversational, anyone can do it. Medium = requires some explanation or nuance. Advanced = requires deep expertise.
+              </TooltipContent>
+            </Tooltip>
           )}
           </>
         )}
