@@ -516,6 +516,16 @@ export function registerCiRoutes(app: Express) {
         return res.status(400).json({ error: `Brief item at index ${itemIndex} not found` });
       }
 
+      // Idempotency: if a script already exists for (briefId, itemIndex), return it
+      // rather than creating a duplicate. Callers like the daily GitHub cron fire this
+      // endpoint repeatedly for the same brief, so without this check we grow scripts
+      // linearly with cron invocations.
+      const existingForItem = await storage.getCiBriefScripts(brief.id);
+      const already = existingForItem.find(s => (s.briefItemIndex ?? 0) === itemIndex);
+      if (already) {
+        return res.json({ success: true, script: already, reused: true });
+      }
+
       // Get script prompts from settings — use script-specific model if available (faster)
       const systemPromptSetting = await storage.getCiSetting("script_system_prompt");
       const userPromptSetting = await storage.getCiSetting("script_user_prompt");
@@ -1004,8 +1014,10 @@ export function registerCiRoutes(app: Express) {
 
           for (const { item, index: i } of items) {
             if (!item) continue;
-            // Skip items that already have scripts
-            if (briefExistingScripts.some(s => s.briefItemIndex === i)) continue;
+            // Skip items that already have scripts (re-fetch inside the loop so we also
+            // catch scripts created by sibling requests racing against this one).
+            const freshScripts = await storage.getCiBriefScripts(brief.id);
+            if (freshScripts.some(s => (s.briefItemIndex ?? 0) === i)) continue;
             totalItems++;
             try {
               console.log(`[CI] Generating script for brief ${brief.id} item ${i}: "${item.title}"`);
@@ -1072,9 +1084,22 @@ export function registerCiRoutes(app: Express) {
           const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
           const updatedItems = [...items];
 
-          for (const script of briefScripts) {
+          // Dedupe: at most one script per briefItemIndex (prefer newest).
+          // Without this, multiple scripts for the same item produce duplicate video
+          // requests because the freshness check below reads stale state.
+          const scriptByIndex = new Map<number, typeof briefScripts[number]>();
+          for (const s of briefScripts) {
+            const idx = s.briefItemIndex ?? 0;
+            const prior = scriptByIndex.get(idx);
+            if (!prior || (s.createdAt || "") > (prior.createdAt || "")) {
+              scriptByIndex.set(idx, s);
+            }
+          }
+
+          for (const script of Array.from(scriptByIndex.values())) {
             const itemIndex = script.briefItemIndex ?? 0;
-            const item = items[itemIndex];
+            // Read from updatedItems so in-flight conversions in this loop are visible.
+            const item = updatedItems[itemIndex];
             if (!item || item.videoRequestId) continue;
 
             const structuredDescription = JSON.stringify({
@@ -1338,6 +1363,142 @@ export function registerCiRoutes(app: Express) {
     }
   });
 
+  // ============================================================
+  // One-off: delete duplicate CI brief scripts and video requests
+  // created before the idempotency fix. Dry-run by default; pass
+  // ?apply=true to actually delete. Safe to remove once run.
+  // ============================================================
+  router.post("/cleanup-duplicates", async (req, res) => {
+    try {
+      const apply = req.query.apply === "true";
+
+      // --- Phase 1: duplicate scripts, grouped by (briefId, briefItemIndex) ---
+      const allScripts = await storage.getCiBriefScripts();
+      const scriptGroups = new Map<string, typeof allScripts>();
+      for (const s of allScripts) {
+        const k = `${s.briefId}::${s.briefItemIndex ?? 0}`;
+        if (!scriptGroups.has(k)) scriptGroups.set(k, []);
+        scriptGroups.get(k)!.push(s);
+      }
+
+      const scriptsToDelete: { id: string; briefId: string; itemIndex: number; createdAt: string | null }[] = [];
+      const scriptSummary: any[] = [];
+      for (const [key, group] of Array.from(scriptGroups.entries())) {
+        if (group.length <= 1) continue;
+        // Keep one: prefer scripts already converted to a video request (they're "in use"),
+        // otherwise prefer the newest.
+        const sorted = [...group].sort((a, b) => {
+          const aConv = a.videoRequestId ? 1 : 0;
+          const bConv = b.videoRequestId ? 1 : 0;
+          if (aConv !== bConv) return bConv - aConv;
+          return (b.createdAt || "").localeCompare(a.createdAt || "");
+        });
+        const keep = sorted[0];
+        const drop = sorted.slice(1);
+        for (const d of drop) {
+          scriptsToDelete.push({
+            id: d.id,
+            briefId: d.briefId,
+            itemIndex: d.briefItemIndex ?? 0,
+            createdAt: d.createdAt ?? null,
+          });
+        }
+        scriptSummary.push({
+          briefId: keep.briefId,
+          itemIndex: keep.briefItemIndex ?? 0,
+          total: group.length,
+          keptId: keep.id,
+          deleting: drop.length,
+        });
+      }
+
+      // --- Phase 2: duplicate video requests, grouped by title + topic_description ---
+      const allVRs = await storage.getVideoRequests();
+      const vrGroups = new Map<string, typeof allVRs>();
+      for (const vr of allVRs) {
+        let topicDesc = "";
+        let isCiBrief = false;
+        try {
+          const parsed = JSON.parse(vr.description || "{}");
+          if (parsed?._type === "ci_brief") {
+            isCiBrief = true;
+            topicDesc = parsed.topic_description || "";
+          }
+        } catch {}
+        if (!isCiBrief) continue;
+        const k = `${vr.title}::${topicDesc}`;
+        if (!vrGroups.has(k)) vrGroups.set(k, []);
+        vrGroups.get(k)!.push(vr);
+      }
+
+      const vrsToDelete: { id: string; title: string; status: string; createdAt: string | null }[] = [];
+      const vrSummary: any[] = [];
+      for (const [key, group] of Array.from(vrGroups.entries())) {
+        if (group.length <= 1) continue;
+        // Keep one: prefer non-draft status (claimed/submitted/approved/etc are in use),
+        // otherwise newest.
+        const sorted = [...group].sort((a, b) => {
+          const aActive = (a.status && a.status !== "draft") ? 1 : 0;
+          const bActive = (b.status && b.status !== "draft") ? 1 : 0;
+          if (aActive !== bActive) return bActive - aActive;
+          return (b.createdAt || "").localeCompare(a.createdAt || "");
+        });
+        const keep = sorted[0];
+        const drop = sorted.slice(1);
+        for (const d of drop) {
+          vrsToDelete.push({
+            id: d.id,
+            title: d.title,
+            status: d.status || "",
+            createdAt: d.createdAt ?? null,
+          });
+        }
+        vrSummary.push({
+          title: keep.title,
+          total: group.length,
+          keptId: keep.id,
+          keptStatus: keep.status,
+          deleting: drop.length,
+        });
+      }
+
+      // --- Phase 3: apply if requested ---
+      let deletedScripts = 0;
+      let deletedVRs = 0;
+      if (apply) {
+        for (const s of scriptsToDelete) {
+          const ok = await storage.deleteCiBriefScript(s.id);
+          if (ok) deletedScripts++;
+        }
+        for (const v of vrsToDelete) {
+          const ok = await storage.deleteVideoRequest(v.id);
+          if (ok) deletedVRs++;
+        }
+      }
+
+      res.json({
+        dryRun: !apply,
+        scripts: {
+          groupsWithDupes: scriptSummary.length,
+          totalToDelete: scriptsToDelete.length,
+          deleted: deletedScripts,
+          summary: scriptSummary,
+          toDelete: scriptsToDelete,
+        },
+        videoRequests: {
+          groupsWithDupes: vrSummary.length,
+          totalToDelete: vrsToDelete.length,
+          deleted: deletedVRs,
+          summary: vrSummary,
+          toDelete: vrsToDelete,
+        },
+      });
+    } catch (error: any) {
+      console.error("[CI] Cleanup duplicates error:", error);
+      res.status(500).json({ error: "Cleanup failed: " + (error?.message || "Unknown") });
+    }
+  });
+
   router.delete("/briefs/:id", async (req, res) => {
     try {
       await storage.deleteCiContentBrief(req.params.id);
@@ -1478,9 +1639,21 @@ export function registerCiRoutes(app: Express) {
         const items = Array.isArray(brief.briefData) ? brief.briefData as any[] : [];
         const updatedItems = [...items];
 
-        for (const script of briefScripts) {
+        // Dedupe: at most one script per briefItemIndex (prefer newest). Multiple
+        // scripts per item otherwise cause duplicate video requests.
+        const scriptByIndex = new Map<number, typeof briefScripts[number]>();
+        for (const s of briefScripts) {
+          const idx = s.briefItemIndex ?? 0;
+          const prior = scriptByIndex.get(idx);
+          if (!prior || (s.createdAt || "") > (prior.createdAt || "")) {
+            scriptByIndex.set(idx, s);
+          }
+        }
+
+        for (const script of Array.from(scriptByIndex.values())) {
           const itemIndex = script.briefItemIndex ?? 0;
-          const item = items[itemIndex];
+          // Read from updatedItems so in-flight conversions are visible.
+          const item = updatedItems[itemIndex];
           if (!item || item.videoRequestId) continue;
 
           const structuredDescription = JSON.stringify({
