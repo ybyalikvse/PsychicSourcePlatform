@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, authFetch } from "@/lib/queryClient";
 import { Plus, Trash2, Loader2, Wand2, Upload, Image as ImageIcon } from "lucide-react";
 
 interface MediaItem {
@@ -74,7 +74,7 @@ export default function SocialPostsMedia() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/social-posts/media-library/upload", {
+      const res = await authFetch("/api/social-posts/media-library/upload", {
         method: "POST",
         body: formData,
         credentials: "include",

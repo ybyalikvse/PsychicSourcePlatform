@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,7 +98,7 @@ export default function CiBriefs() {
   const { data: scripts = [], isLoading: scriptsLoading } = useQuery<Script[]>({
     queryKey: ["/api/ci/scripts"],
     queryFn: async () => {
-      const res = await fetch("/api/ci/scripts", { credentials: "include" });
+      const res = await authFetch("/api/ci/scripts", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch scripts");
       return res.json();
     },

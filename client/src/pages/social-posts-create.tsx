@@ -36,7 +36,7 @@ import {
   Trash2,
   Sparkles,
 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, authFetch } from "@/lib/queryClient";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -225,7 +225,7 @@ export default function SocialPostsCreate() {
   // Load existing post for edit mode
   const { data: existingPost } = useQuery({
     queryKey: ["/api/social-posts", editId],
-    queryFn: () => fetch(`/api/social-posts/${editId}`).then((r) => r.json()),
+    queryFn: () => authFetch(`/api/social-posts/${editId}`).then((r) => r.json()),
     enabled: isEditMode,
   });
 
@@ -233,20 +233,20 @@ export default function SocialPostsCreate() {
   const { data: carouselTypes } = useQuery<CarouselType[]>({
     queryKey: ["/api/social-posts/carousel-types"],
     queryFn: () =>
-      fetch("/api/social-posts/carousel-types").then((r) => r.json()),
+      authFetch("/api/social-posts/carousel-types").then((r) => r.json()),
   });
 
   // Template sets
   const { data: templateSets } = useQuery<TemplateSet[]>({
     queryKey: ["/api/social-posts/templates"],
-    queryFn: () => fetch("/api/social-posts/templates").then((r) => r.json()),
+    queryFn: () => authFetch("/api/social-posts/templates").then((r) => r.json()),
   });
 
   // Media library
   const { data: mediaLibrary } = useQuery<MediaItem[]>({
     queryKey: ["/api/social-posts/media-library"],
     queryFn: () =>
-      fetch("/api/social-posts/media-library").then((r) => r.json()),
+      authFetch("/api/social-posts/media-library").then((r) => r.json()),
     enabled: mediaLibraryOpen,
   });
 
@@ -254,7 +254,7 @@ export default function SocialPostsCreate() {
   const { data: socialAccounts } = useQuery<SocialAccount[]>({
     queryKey: ["/api/social-posts/social-accounts"],
     queryFn: () =>
-      fetch("/api/social-posts/social-accounts").then((r) => r.json()),
+      authFetch("/api/social-posts/social-accounts").then((r) => r.json()),
     enabled: publishDialogOpen,
   });
 

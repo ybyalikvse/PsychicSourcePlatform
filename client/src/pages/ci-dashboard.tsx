@@ -13,7 +13,7 @@ import {
   Loader2, CheckCircle, Clock, AlertCircle, Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, authFetch } from "@/lib/queryClient";
 
 interface CiStats {
   competitors: number;
@@ -48,7 +48,7 @@ export default function CiDashboard() {
   const { data: recentAnalyses = [] } = useQuery<any[]>({
     queryKey: ["/api/ci/analyses"],
     queryFn: async () => {
-      const res = await fetch("/api/ci/analyses", { credentials: "include" });
+      const res = await authFetch("/api/ci/analyses", { credentials: "include" });
       if (!res.ok) return [];
       const data = await res.json();
       return data.slice(0, 10);
@@ -58,7 +58,7 @@ export default function CiDashboard() {
   const { data: latestBrief } = useQuery<any>({
     queryKey: ["/api/ci/briefs", "latest"],
     queryFn: async () => {
-      const res = await fetch("/api/ci/briefs", { credentials: "include" });
+      const res = await authFetch("/api/ci/briefs", { credentials: "include" });
       if (!res.ok) return null;
       const briefs = await res.json();
       return Array.isArray(briefs) && briefs.length > 0 ? briefs[0] : null;
@@ -89,7 +89,7 @@ export default function CiDashboard() {
 
   const runScriptsParallel = async () => {
     // Get latest brief to find how many items to generate
-    const briefsRes = await fetch("/api/ci/briefs", { credentials: "include" });
+    const briefsRes = await authFetch("/api/ci/briefs", { credentials: "include" });
     if (!briefsRes.ok) throw new Error("Failed to fetch briefs");
     const briefs = await briefsRes.json();
     const brief = Array.isArray(briefs) && briefs.length > 0 ? briefs[0] : null;

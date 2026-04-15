@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { authFetch } from "@/lib/queryClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -75,12 +76,12 @@ export default function SocialPosts() {
 
   const { data: posts = [], isLoading } = useQuery<SocialPost[]>({
     queryKey: ["/api/social-posts"],
-    queryFn: () => fetch("/api/social-posts").then((r) => r.json()),
+    queryFn: () => authFetch("/api/social-posts").then((r) => r.json()),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      fetch(`/api/social-posts/${id}`, { method: "DELETE" }).then((r) => r.json()),
+      authFetch(`/api/social-posts/${id}`, { method: "DELETE" }).then((r) => r.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
       toast({ title: "Post deleted" });
@@ -92,7 +93,7 @@ export default function SocialPosts() {
 
   const publishMutation = useMutation({
     mutationFn: (id: string) =>
-      fetch(`/api/social-posts/${id}/publish`, { method: "POST" }).then((r) => r.json()),
+      authFetch(`/api/social-posts/${id}/publish`, { method: "POST" }).then((r) => r.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/social-posts"] });
       toast({ title: "Post published" });
@@ -104,7 +105,7 @@ export default function SocialPosts() {
 
   const bulkGenerateMutation = useMutation({
     mutationFn: () =>
-      fetch("/api/social-posts/bulk-generate", {
+      authFetch("/api/social-posts/bulk-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

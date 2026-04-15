@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Express } from "express";
 import { storage } from "./storage";
+import { verifyAdminAuth } from "./auth-middleware";
 import OpenAI from "openai";
 import { uploadImageToS3, uploadImageFromUrl } from "./s3";
 import { renderSlide } from "./services/social-slide-renderer";
@@ -11,6 +12,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 export function registerSocialPostsRoutes(app: Express) {
   const router = Router();
+
+  // All social-posts endpoints are admin-only. Includes file uploads and
+  // third-party publishing which should never be open to the public.
+  router.use(verifyAdminAuth);
 
   const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",

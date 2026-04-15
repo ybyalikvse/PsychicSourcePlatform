@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Copy, Edit, Download, RefreshCw, CheckCircle, Clock, Loader2, Save, X, Share2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, authFetch } from "@/lib/queryClient";
 import type { VspContentProject as ContentProject } from "@shared/schema";
 import { PublishModal } from "./publish-modal";
 
@@ -71,7 +71,7 @@ export function ContentDisplay({ project, onProjectUpdate }: ContentDisplayProps
     queryKey: ['/api/vsp/projects', project?.id, 'video-status'],
     queryFn: async () => {
       if (!project?.id) return null;
-      const response = await fetch(`/api/vsp/projects/${project.id}/video-status`);
+      const response = await authFetch(`/api/vsp/projects/${project.id}/video-status`);
       if (!response.ok) throw new Error('Failed to check video status');
       return response.json();
     },

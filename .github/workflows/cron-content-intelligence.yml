@@ -57,7 +57,7 @@ jobs:
         run: |
           # Retry up to 3 times with warm-up, fail loudly if empty
           for attempt in 1 2 3; do
-            RESPONSE=$(curl -s -L --max-time 60 "${APP_URL}/api/ci/competitors?active=true")
+            RESPONSE=$(curl -s -L --max-time 60 -H "${AUTH}" "${APP_URL}/api/ci/competitors?active=true")
             COMPETITORS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo 'ERROR')
             if [ "$COMPETITORS" != "ERROR" ] && [ "$COMPETITORS" != "[]" ] && [ -n "$COMPETITORS" ]; then
               echo "competitors=$COMPETITORS" >> $GITHUB_OUTPUT
@@ -104,7 +104,7 @@ jobs:
       - name: Fetch videos needing transcripts
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?transcriptStatus=pending&fields=id")
+          RESPONSE=$(curl -s -L -H "${AUTH}" "${APP_URL}/api/ci/videos?transcriptStatus=pending&fields=id")
           VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           # Limit to 50 per run to avoid excessive API usage
           VIDEOS=$(echo "$VIDEOS" | jq -c '.[0:50]')
@@ -149,7 +149,7 @@ jobs:
       - name: Fetch videos needing analysis
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=completed&fields=id")
+          RESPONSE=$(curl -s -L -H "${AUTH}" "${APP_URL}/api/ci/videos?analysisStatus=pending&transcriptStatus=completed&fields=id")
           VIDEOS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
           echo "videos=$VIDEOS" >> $GITHUB_OUTPUT
           echo "Found $(echo "$VIDEOS" | jq length) videos needing analysis"
@@ -237,7 +237,7 @@ jobs:
       - name: Generate script for brief item ${{ matrix.itemIndex }}
         run: |
           # Get the latest brief ID
-          BRIEFS=$(curl -s -L "${APP_URL}/api/ci/briefs")
+          BRIEFS=$(curl -s -L -H "${AUTH}" "${APP_URL}/api/ci/briefs")
           BRIEF_ID=$(echo "$BRIEFS" | jq -r '.[0].id // empty' 2>/dev/null)
           if [ -z "$BRIEF_ID" ]; then
             echo "No brief found, skipping"

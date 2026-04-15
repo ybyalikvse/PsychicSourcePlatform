@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Express } from "express";
 import { storage } from "./storage";
+import { verifyAdminOrCron } from "./auth-middleware";
 import { insertCiCompetitorSchema } from "../shared/schema";
 import {
   scrapeCompetitorVideos,
@@ -39,6 +40,11 @@ function getDynamicBriefCount(videoCount: number): number {
 
 export function registerCiRoutes(app: Express) {
   const router = Router();
+
+  // All /api/ci/* endpoints require either an admin Firebase token or the
+  // CRON_SECRET. Individual pipeline routes below additionally use
+  // requireCronSecret for strict cron-only gating where appropriate.
+  router.use(verifyAdminOrCron);
 
   // ============================================================
   // COMPETITORS CRUD

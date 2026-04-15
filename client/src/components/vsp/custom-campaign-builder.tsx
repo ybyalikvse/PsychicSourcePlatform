@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from "@/lib/queryClient";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
@@ -241,7 +242,7 @@ export function CustomCampaignBuilder({ open, onOpenChange, onSuccess }: CustomC
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-          const generatorResponse = await fetch(`/api/vsp/campaigns/${campaign.id}/generate-from-template`, {
+          const generatorResponse = await authFetch(`/api/vsp/campaigns/${campaign.id}/generate-from-template`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,

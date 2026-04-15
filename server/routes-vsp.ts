@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Express } from "express";
 import { storage } from "./storage";
+import { verifyAdminAuth } from "./auth-middleware";
 import { z, ZodError } from "zod";
 import {
   vspScriptGenerationSchema,
@@ -129,6 +130,10 @@ function segmentScriptForVeo(
 
 export function registerVspRoutes(app: Express) {
   const router = Router();
+
+  // All VSP endpoints are admin-only. Cost-bomb surface (LLM + video-gen APIs)
+  // and no legitimate unauthenticated consumer exists.
+  router.use(verifyAdminAuth);
 
   // Get all content projects
   router.get("/projects", async (req, res) => {

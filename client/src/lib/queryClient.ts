@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { auth } from "./firebase";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -7,14 +8,53 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+/**
+ * Build the Authorization header for the current user, if any. The admin UI
+ * talks to admin-only endpoints that now require `Bearer <firebase-idToken>`;
+ * attaching the header here makes every call through apiRequest / getQueryFn
+ * / authFetch authenticated without each caller needing to wire it up.
+ */
+export async function buildAuthHeaders(): Promise<Record<string, string>> {
+  const user = auth.currentUser;
+  if (!user) return {};
+  try {
+    const token = await user.getIdToken();
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Drop-in replacement for window.fetch that attaches the current user's
+ * Firebase ID token as a Bearer Authorization header. Use this anywhere you'd
+ * otherwise do `fetch("/api/...")` directly so admin-only endpoints are
+ * reachable.
+ */
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const authHeaders = await buildAuthHeaders();
+  return fetch(input, {
+    ...init,
+    credentials: init.credentials ?? "include",
+    headers: {
+      ...authHeaders,
+      ...(init.headers || {}),
+    },
+  });
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const authHeaders = await buildAuthHeaders();
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      ...authHeaders,
+      ...(data ? { "Content-Type": "application/json" } : {}),
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -29,8 +69,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const authHeaders = await buildAuthHeaders();
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
+      headers: authHeaders,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

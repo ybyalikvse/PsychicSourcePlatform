@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, BarChart3, Target, Users, ArrowLeft, Home, Edit, Trash2, MoreHorizontal, Zap, Bot } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import type { VspCampaign as Campaign, VspContentCalendar as ContentCalendar, VspContentProject as ContentProject } from "@shared/schema";
@@ -47,7 +47,7 @@ export default function CalendarPage() {
   const { data: calendarData, isLoading } = useQuery({
     queryKey: ['/api/vsp/calendar', startDate, endDate],
     queryFn: async () => {
-      const response = await fetch(`/api/vsp/calendar?startDate=${startDate}&endDate=${endDate}`);
+      const response = await authFetch(`/api/vsp/calendar?startDate=${startDate}&endDate=${endDate}`);
       if (!response.ok) throw new Error('Failed to fetch calendar data');
       return response.json() as Promise<{ events: ContentCalendar[], projects: ContentProject[] }>;
     },
