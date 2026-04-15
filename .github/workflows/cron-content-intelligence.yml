@@ -55,10 +55,20 @@ jobs:
       - name: Fetch active competitors
         id: fetch
         run: |
-          RESPONSE=$(curl -s -L "${APP_URL}/api/ci/competitors?active=true")
-          COMPETITORS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo '[]')
-          echo "competitors=$COMPETITORS" >> $GITHUB_OUTPUT
-          echo "Found competitors: $COMPETITORS"
+          # Retry up to 3 times with warm-up, fail loudly if empty
+          for attempt in 1 2 3; do
+            RESPONSE=$(curl -s -L --max-time 60 "${APP_URL}/api/ci/competitors?active=true")
+            COMPETITORS=$(echo "$RESPONSE" | jq -c '[.[].id]' 2>/dev/null || echo 'ERROR')
+            if [ "$COMPETITORS" != "ERROR" ] && [ "$COMPETITORS" != "[]" ] && [ -n "$COMPETITORS" ]; then
+              echo "competitors=$COMPETITORS" >> $GITHUB_OUTPUT
+              echo "Found competitors (attempt $attempt): $COMPETITORS"
+              exit 0
+            fi
+            echo "Attempt $attempt failed. Response was: $RESPONSE"
+            sleep 10
+          done
+          echo "FATAL: Could not fetch active competitors after 3 attempts."
+          exit 1
 
   scrape:
     needs: setup-scrape
