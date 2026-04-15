@@ -4,6 +4,8 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signOut,
   type User,
 } from "firebase/auth";
@@ -15,6 +17,7 @@ interface FirebaseAuthContext {
   loginWithGoogle: () => Promise<any>;
   loginWithEmail: (email: string, password: string) => Promise<any>;
   signUpWithEmail: (email: string, password: string) => Promise<any>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -41,7 +44,21 @@ export function FirebaseAuthProvider({ children }: { children: React.ReactNode }
   };
 
   const signUpWithEmail = async (email: string, password: string) => {
-    return createUserWithEmailAndPassword(auth, email, password);
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    try {
+      await sendEmailVerification(result.user, {
+        url: `${window.location.origin}/`,
+      });
+    } catch (err) {
+      console.warn("Failed to send verification email:", err);
+    }
+    return result;
+  };
+
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email, {
+      url: `${window.location.origin}/`,
+    });
   };
 
   const logout = async () => {
@@ -49,7 +66,7 @@ export function FirebaseAuthProvider({ children }: { children: React.ReactNode }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginWithEmail, signUpWithEmail, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginWithEmail, signUpWithEmail, resetPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

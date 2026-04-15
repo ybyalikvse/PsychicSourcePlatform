@@ -29,6 +29,7 @@ import Horoscopes from "@/pages/horoscopes";
 import Psychics from "@/pages/psychics";
 import VideoRequests from "@/pages/video-requests";
 import LoginPage from "@/pages/login";
+import ForgotPasswordPage from "@/pages/forgot-password";
 import PortalRequestsPage from "@/pages/portal/portal-requests";
 import PortalMyRequestsPage from "@/pages/portal/portal-my-requests";
 import PortalRequestDetailPage from "@/pages/portal/portal-request-detail";
@@ -309,6 +310,9 @@ function UnifiedAuthGate() {
   }
 
   if (!user || (!authInfo && !needsRegistration)) {
+    if (location === "/forgot-password") {
+      return <ForgotPasswordPage />;
+    }
     return (
       <LoginPage
         description="Sign in to continue"
