@@ -72,7 +72,7 @@ jobs:
 
   scrape:
     needs: setup-scrape
-    if: ${{ needs.setup-scrape.outputs.competitors != '[]' && needs.setup-scrape.outputs.competitors != '' }}
+    if: ${{ always() && needs.setup-scrape.outputs.competitors != '[]' && needs.setup-scrape.outputs.competitors != '' }}
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
