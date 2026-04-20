@@ -215,7 +215,7 @@ jobs:
             -X POST "${APP_URL}/api/ci/pipeline/generate-brief" \
             -H "Content-Type: application/json" \
             -H "${AUTH}" \
-            -d "{\"topicCategory\": $(echo '${{ matrix.topic }}' | jq -Rs .)}")
+            -d "{\"topicCategory\": $(echo -n '${{ matrix.topic }}' | jq -Rs .)}")
           if [ "$HTTP_CODE" = "200" ]; then
             BRIEFS=$(cat /tmp/response.json | jq '.briefs | length' 2>/dev/null || echo 0)
             VIDEOS=$(cat /tmp/response.json | jq '.videosProcessed' 2>/dev/null || echo 0)
