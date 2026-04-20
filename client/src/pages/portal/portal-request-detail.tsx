@@ -388,7 +388,7 @@ export default function PortalRequestDetail({ requestId, psychic }: PortalReques
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
-                  Messages
+                  Ask Psychic Source a Question
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
