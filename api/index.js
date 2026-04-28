@@ -312197,21 +312197,26 @@ Keep text concise - titles under 8 words, body text under 25 words per slide.`;
           imagePrompt = templateSet.imagePromptTemplate.replace("{topic}", topic || "").replace("{slide_text}", slideText || "").replace("{title}", title || "").replace("{slide_number}", String(slideNumber || 1));
         }
       }
-      const response = await openai2.images.generate({
-        model: "gpt-image-1",
-        prompt: imagePrompt,
-        n: 1,
-        size: "1024x1024"
+      const response = await openai2.chat.completions.create({
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content: imagePrompt }],
+        modalities: ["image", "text"]
       });
-      const imageData = response.data?.[0]?.b64_json;
-      if (!imageData) {
+      const message = response.choices?.[0]?.message;
+      const imageDataUrl = message?.images?.[0]?.image_url?.url;
+      const match = imageDataUrl?.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) {
+        console.error("[Social Image] No image in OpenRouter response:", JSON.stringify(message)?.slice(0, 500));
         return res.status(500).json({ error: "No image data returned" });
       }
+      const mimeType = match[1];
+      const imageData = match[2];
+      const ext = mimeType.includes("jpeg") ? "jpg" : "png";
       let imageUrl;
       try {
-        imageUrl = await uploadImageToS3(imageData, `social-bg-${Date.now()}.png`);
+        imageUrl = await uploadImageToS3(imageData, `social-bg-${Date.now()}.${ext}`, mimeType);
       } catch {
-        imageUrl = `data:image/png;base64,${imageData}`;
+        imageUrl = `data:${mimeType};base64,${imageData}`;
       }
       await storage.createSocialMediaLibraryItem({
         url: imageUrl,
@@ -321681,26 +321686,24 @@ Respond in JSON format:
           apiKey: process.env.OPENROUTER_API_KEY,
           baseURL: "https://openrouter.ai/api/v1"
         });
-        let size = "1024x1024";
-        if (aspectRatio === "16:9") {
-          size = "1536x1024";
-        } else if (aspectRatio === "9:16") {
-          size = "1024x1536";
-        }
-        const response = await openaiDefault.images.generate({
-          model: "gpt-image-1",
-          prompt: fullPrompt,
-          n: 1,
-          size
+        const response = await openaiDefault.chat.completions.create({
+          model: "google/gemini-2.5-flash-image",
+          messages: [{ role: "user", content: fullPrompt }],
+          modalities: ["image", "text"]
         });
-        const imageData = response.data?.[0]?.b64_json;
-        if (!imageData) {
+        const message = response.choices?.[0]?.message;
+        const imageDataUrl = message?.images?.[0]?.image_url?.url;
+        const match = imageDataUrl?.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) {
+          console.error("[Image Generation] No image in OpenRouter response:", JSON.stringify(message)?.slice(0, 500));
           return res.status(500).json({ error: "No image data in response" });
         }
+        const mimeType = match[1];
+        const imageData = match[2];
         if (s3Configured) {
           try {
             const { uploadImageToS3: uploadImageToS32 } = await Promise.resolve().then(() => (init_s3(), s3_exports));
-            const s3Url = await uploadImageToS32(imageData, void 0, "image/png");
+            const s3Url = await uploadImageToS32(imageData, void 0, mimeType);
             console.log("[Image Generation] Uploaded to S3:", s3Url);
             return res.json({
               imageData: s3Url,
@@ -321714,7 +321717,7 @@ Respond in JSON format:
           }
         }
         res.json({
-          imageData: `data:image/png;base64,${imageData}`,
+          imageData: `data:${mimeType};base64,${imageData}`,
           imageType: imageType || "featured",
           provider: "openrouter",
           storage: "base64"

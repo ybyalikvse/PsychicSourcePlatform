@@ -240,25 +240,32 @@ Keep text concise - titles under 8 words, body text under 25 words per slide.`;
         }
       }
 
-      const response = await openai.images.generate({
-        model: "gpt-image-1",
-        prompt: imagePrompt,
-        n: 1,
-        size: "1024x1024",
-      });
+      // OpenRouter exposes image generation via chat.completions with
+      // modalities:["image","text"], NOT via /v1/images/generations.
+      const response = await openai.chat.completions.create({
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content: imagePrompt }],
+        modalities: ["image", "text"],
+      } as any);
 
-      const imageData = response.data?.[0]?.b64_json;
-      if (!imageData) {
+      const message = response.choices?.[0]?.message as any;
+      const imageDataUrl: string | undefined = message?.images?.[0]?.image_url?.url;
+      const match = imageDataUrl?.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) {
+        console.error("[Social Image] No image in OpenRouter response:", JSON.stringify(message)?.slice(0, 500));
         return res.status(500).json({ error: "No image data returned" });
       }
+      const mimeType = match[1];
+      const imageData = match[2];
+      const ext = mimeType.includes("jpeg") ? "jpg" : "png";
 
       // Upload to S3
       let imageUrl: string;
       try {
-        imageUrl = await uploadImageToS3(imageData, `social-bg-${Date.now()}.png`);
+        imageUrl = await uploadImageToS3(imageData, `social-bg-${Date.now()}.${ext}`, mimeType);
       } catch {
         // Fallback to base64 data URL
-        imageUrl = `data:image/png;base64,${imageData}`;
+        imageUrl = `data:${mimeType};base64,${imageData}`;
       }
 
       // Save to media library

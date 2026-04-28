@@ -2355,36 +2355,34 @@ Respond in JSON format:
           storage: "base64",
         });
       } else {
-        // Use OpenRouter for image generation (default)
+        // OpenRouter does NOT implement /v1/images/generations — image-output
+        // models are exposed via /v1/chat/completions with modalities:["image","text"].
         const openaiDefault = new OpenAI({
           apiKey: process.env.OPENROUTER_API_KEY,
           baseURL: "https://openrouter.ai/api/v1",
         });
 
-        let size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
-        if (aspectRatio === "16:9") {
-          size = "1536x1024";
-        } else if (aspectRatio === "9:16") {
-          size = "1024x1536";
-        }
+        const response = await openaiDefault.chat.completions.create({
+          model: "google/gemini-2.5-flash-image",
+          messages: [{ role: "user", content: fullPrompt }],
+          modalities: ["image", "text"],
+        } as any);
 
-        const response = await openaiDefault.images.generate({
-          model: "gpt-image-1",
-          prompt: fullPrompt,
-          n: 1,
-          size: size,
-        });
-
-        const imageData = response.data?.[0]?.b64_json;
-        if (!imageData) {
+        const message = response.choices?.[0]?.message as any;
+        const imageDataUrl: string | undefined = message?.images?.[0]?.image_url?.url;
+        const match = imageDataUrl?.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) {
+          console.error("[Image Generation] No image in OpenRouter response:", JSON.stringify(message)?.slice(0, 500));
           return res.status(500).json({ error: "No image data in response" });
         }
+        const mimeType = match[1];
+        const imageData = match[2];
 
         // Upload to S3 if configured
         if (s3Configured) {
           try {
             const { uploadImageToS3 } = await import("./s3");
-            const s3Url = await uploadImageToS3(imageData, undefined, "image/png");
+            const s3Url = await uploadImageToS3(imageData, undefined, mimeType);
             console.log("[Image Generation] Uploaded to S3:", s3Url);
             return res.json({
               imageData: s3Url,
@@ -2399,7 +2397,7 @@ Respond in JSON format:
         }
 
         res.json({
-          imageData: `data:image/png;base64,${imageData}`,
+          imageData: `data:${mimeType};base64,${imageData}`,
           imageType: imageType || "featured",
           provider: "openrouter",
           storage: "base64",
