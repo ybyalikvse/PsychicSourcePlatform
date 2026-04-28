@@ -321689,7 +321689,8 @@ Respond in JSON format:
         const response = await openaiDefault.chat.completions.create({
           model: "google/gemini-2.5-flash-image",
           messages: [{ role: "user", content: fullPrompt }],
-          modalities: ["image", "text"]
+          modalities: ["image", "text"],
+          image_config: { aspect_ratio: aspectRatio }
         });
         const message = response.choices?.[0]?.message;
         const imageDataUrl = message?.images?.[0]?.image_url?.url;

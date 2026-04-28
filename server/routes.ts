@@ -2366,6 +2366,7 @@ Respond in JSON format:
           model: "google/gemini-2.5-flash-image",
           messages: [{ role: "user", content: fullPrompt }],
           modalities: ["image", "text"],
+          image_config: { aspect_ratio: aspectRatio },
         } as any);
 
         const message = response.choices?.[0]?.message as any;
