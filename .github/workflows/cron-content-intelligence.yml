@@ -224,53 +224,44 @@ jobs:
             echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json | head -c 200)"
           fi
 
-  # Step 6a: Discover the latest brief and how many items it has, so the
-  # scripts step doesn't fan out to indices that don't exist (which would
-  # noisily 404 on every run for a 3-item brief).
+  # Step 6a: Build a matrix of every (briefId, itemIndex) pair across ALL
+  # briefs that still have unconverted items. Previously this only fetched
+  # `.[0]` (latest brief), so a week with multiple briefs would silently
+  # leave all but the newest unprocessed.
   setup-scripts:
     needs: brief
     if: always() && (github.event.inputs.step == 'full' || github.event.inputs.step == 'scripts' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     outputs:
-      briefId: ${{ steps.fetch.outputs.briefId }}
-      indices: ${{ steps.fetch.outputs.indices }}
+      pairs: ${{ steps.fetch.outputs.pairs }}
     steps:
-      - name: Fetch latest brief and item count
+      - name: Fetch all briefs with unconverted items
         id: fetch
         run: |
           BRIEFS=$(curl -s -L -H "${AUTH}" "${APP_URL}/api/ci/briefs")
-          BRIEF_ID=$(echo "$BRIEFS" | jq -r '.[0].id // empty' 2>/dev/null)
-          ITEM_COUNT=$(echo "$BRIEFS" | jq -r '.[0].briefData | length' 2>/dev/null || echo 0)
-          if [ -z "$BRIEF_ID" ] || [ "$ITEM_COUNT" = "null" ] || [ "$ITEM_COUNT" -lt 1 ]; then
-            echo "No brief or empty briefData — emitting empty matrix"
-            echo "briefId=" >> $GITHUB_OUTPUT
-            echo "indices=[]" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          INDICES=$(seq 0 $((ITEM_COUNT - 1)) | jq -Rs -c 'split("\n") | map(select(length>0) | tonumber)')
-          echo "Brief $BRIEF_ID has $ITEM_COUNT items → matrix: $INDICES"
-          echo "briefId=$BRIEF_ID" >> $GITHUB_OUTPUT
-          echo "indices=$INDICES" >> $GITHUB_OUTPUT
+          PAIRS=$(echo "$BRIEFS" | jq -c '[.[] | . as $b | (.briefData // [] | to_entries[]) | select(.value.videoRequestId == null) | {briefId: $b.id, itemIndex: .key}]' 2>/dev/null || echo '[]')
+          if [ -z "$PAIRS" ] || [ "$PAIRS" = "null" ]; then PAIRS='[]'; fi
+          echo "pairs=$PAIRS" >> $GITHUB_OUTPUT
+          echo "Pairs to script: $PAIRS"
 
-  # Step 6b: Generate scripts from brief, fanning out only to real items.
+  # Step 6b: Generate scripts for every pending (brief, item) pair.
   scripts:
     needs: setup-scripts
-    if: always() && needs.setup-scripts.outputs.indices != '[]' && needs.setup-scripts.outputs.indices != ''
+    if: always() && needs.setup-scripts.outputs.pairs != '[]' && needs.setup-scripts.outputs.pairs != ''
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
       matrix:
-        itemIndex: ${{ fromJson(needs.setup-scripts.outputs.indices) }}
+        pair: ${{ fromJson(needs.setup-scripts.outputs.pairs) }}
     steps:
-      - name: Generate script for brief item ${{ matrix.itemIndex }}
+      - name: Generate script for ${{ matrix.pair.briefId }} item ${{ matrix.pair.itemIndex }}
         run: |
-          BRIEF_ID="${{ needs.setup-scripts.outputs.briefId }}"
-          echo "Generating script for brief $BRIEF_ID, item ${{ matrix.itemIndex }}..."
+          echo "Generating script for brief ${{ matrix.pair.briefId }}, item ${{ matrix.pair.itemIndex }}..."
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 295 -L \
             -X POST "${APP_URL}/api/ci/pipeline/generate-script" \
             -H "Content-Type: application/json" \
             -H "${AUTH}" \
-            -d "{\"briefId\": \"$BRIEF_ID\", \"itemIndex\": ${{ matrix.itemIndex }}}")
+            -d "{\"briefId\": \"${{ matrix.pair.briefId }}\", \"briefItemIndex\": ${{ matrix.pair.itemIndex }}}")
           if [ "$HTTP_CODE" = "200" ]; then
             echo "  ✓ Script generated"
           else
