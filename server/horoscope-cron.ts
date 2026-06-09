@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import OpenAI from "openai";
+import { addHeadingIds } from "./horoscope-headings";
 
 
 const ZODIAC_SIGNS = [
@@ -42,7 +43,8 @@ async function generateHoroscopeContent(
   language: string,
   periodLabel: string,
   promptTemplate: string,
-  aiModel: string
+  aiModel: string,
+  site: string
 ): Promise<string> {
   const languageInstruction = language === "es"
     ? "Write the horoscope entirely in Spanish."
@@ -79,6 +81,9 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   // Wrap bare text lines in <p> tags if they aren't already wrapped
   content = content.replace(/^(?!<[hpo])((?!<).+)$/gm, '<p>$1</p>');
 
+  // Add stable, language-independent ids to section headings
+  content = addHeadingIds(content, site, type);
+
   return content;
 }
 
@@ -114,7 +119,7 @@ export async function runHoroscopeGeneration(type: string) {
 
           for (const sign of ZODIAC_SIGNS) {
             const content = await generateHoroscopeContent(
-              sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+              sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude", siteId
             );
 
             await storage.createHoroscopeEntry({
@@ -167,7 +172,7 @@ async function runStartupCatchup() {
             try {
               for (const sign of ZODIAC_SIGNS) {
                 const content = await generateHoroscopeContent(
-                  sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+                  sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude", siteId
                 );
                 await storage.createHoroscopeEntry({
                   type,

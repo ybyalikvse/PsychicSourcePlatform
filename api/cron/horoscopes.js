@@ -25268,6 +25268,35 @@ OpenAI.Evals = Evals;
 OpenAI.Containers = Containers;
 OpenAI.Videos = Videos;
 
+// server/horoscope-headings.ts
+var HEADING_IDS = {
+  psychicsource: {
+    daily: ["atmosphere", "inner-landscape", "relationships", "work", "money", "wellbeing", "closing"],
+    weekly: ["theme", "early-week", "midweek", "weekend", "relationships", "career", "finances", "growth"],
+    monthly: ["theme", "early-month", "midmonth", "late-month", "relationships", "career", "finances", "wellbeing", "evolution"]
+  },
+  pathforward: {
+    daily: ["current", "carrying", "connections", "work", "resources", "recovery", "lesson"],
+    weekly: ["central-choice", "mon-tue", "wed-thu", "fri-weekend", "relationships", "professional", "spending", "deeper-work"],
+    monthly: ["chapter", "opening", "turning", "closing", "relationships", "career", "finances", "body", "identity"]
+  }
+};
+function addHeadingIds(content, site, type) {
+  const ids = HEADING_IDS[site]?.[type];
+  if (!ids) return content;
+  let i = 0;
+  return content.replace(/<h2(\s[^>]*)?>/gi, (match, attrs) => {
+    if (attrs && /\bid\s*=/i.test(attrs)) {
+      i += 1;
+      return match;
+    }
+    const id = ids[i];
+    i += 1;
+    if (!id) return match;
+    return `<h2 id="${id}"${attrs || ""}>`;
+  });
+}
+
 // server/horoscope-cron.ts
 var ZODIAC_SIGNS = [
   "Aries",
@@ -25310,7 +25339,7 @@ function getHoroscopePeriod(type, date2) {
     };
   }
 }
-async function generateHoroscopeContent(sign, type, language, periodLabel, promptTemplate, aiModel) {
+async function generateHoroscopeContent(sign, type, language, periodLabel, promptTemplate, aiModel, site) {
   const languageInstruction = language === "es" ? "Write the horoscope entirely in Spanish." : "Write the horoscope in English.";
   const typeLabel = type === "daily" ? "daily" : type === "weekly" ? "weekly" : "monthly";
   const fullPrompt = `${promptTemplate}
@@ -25338,6 +25367,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   content = content.replace(/^## (.+)$/gm, "<h2>$1</h2>");
   content = content.replace(/^### (.+)$/gm, "<h3>$1</h3>");
   content = content.replace(/^(?!<[hpo])((?!<).+)$/gm, "<p>$1</p>");
+  content = addHeadingIds(content, site, type);
   return content;
 }
 var HOROSCOPE_SITES = ["psychicsource", "pathforward"];
@@ -25371,7 +25401,8 @@ async function runHoroscopeGeneration(type) {
               lang,
               period.label,
               prompt.prompt,
-              prompt.aiModel || "claude"
+              prompt.aiModel || "claude",
+              siteId
             );
             await storage.createHoroscopeEntry({
               type,

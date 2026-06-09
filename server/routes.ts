@@ -6,6 +6,7 @@ import type { ContentOptimizationResult, ContentSuggestion } from "../shared/sch
 import crypto from "crypto";
 import OpenAI from "openai";
 
+import { addHeadingIds } from "./horoscope-headings";
 import { registerVspRoutes } from "./routes-vsp";
 import { registerCiRoutes } from "./routes-ci";
 import { registerSocialPostsRoutes } from "./routes-social-posts";
@@ -4287,7 +4288,8 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
     language: string,
     periodLabel: string,
     promptTemplate: string,
-    aiModel: string
+    aiModel: string,
+    site: string
   ): Promise<string> {
     const languageInstruction = language === "es"
       ? "Write the horoscope entirely in Spanish."
@@ -4322,6 +4324,9 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     content = content.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     content = content.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     content = content.replace(/^(?!<[hpo])((?!<).+)$/gm, '<p>$1</p>');
+
+    // Add stable, language-independent ids to section headings
+    content = addHeadingIds(content, site, type);
 
     return content;
   }
@@ -4364,7 +4369,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
       console.log(`[Horoscope] Generating ${sign} (${type}/${lang}/${siteId}) for ${period.label}${daysAhead ? ` (+${daysAhead} days)` : ""}...`);
       const content = await generateHoroscopeContent(
-        sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude"
+        sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude", siteId
       );
 
       const entry = await storage.createHoroscopeEntry({
