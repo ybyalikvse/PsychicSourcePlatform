@@ -64,36 +64,64 @@ jobs:
           - Capricorn
           - Aquarius
           - Pisces
+        exclude:
+          # pathforward has no Spanish horoscopes
+          - site: pathforward
+            language: es
     env:
       HOROSCOPE_TYPE: ${{ needs.determine-type.outputs.horoscope_type }}
+      APP_URL: ${{ secrets.VERCEL_APP_URL }}
     steps:
       - name: Generate ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) - ${{ needs.determine-type.outputs.horoscope_type }}
         run: |
+          # Calls the generate-sign API with retries. The API skips entries that
+          # already exist, so re-running is always safe. HTTP 400 means a config
+          # problem (e.g. missing prompt), which retrying can't fix, so it only
+          # warns. Anything else non-200 retries up to 3 times, and if it still
+          # fails, the job goes red so the gap is visible.
+          generate() {
+            local GEN_TYPE="$1" DAYS_AHEAD="$2" LABEL="$3" ATTEMPT PAYLOAD HTTP_CODE
+            if [ -n "$DAYS_AHEAD" ]; then
+              PAYLOAD="{\"type\":\"$GEN_TYPE\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\",\"daysAhead\":$DAYS_AHEAD}"
+            else
+              PAYLOAD="{\"type\":\"$GEN_TYPE\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\"}"
+            fi
+            for ATTEMPT in 1 2 3; do
+              HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
+                -X POST "$APP_URL/api/horoscopes/generate-sign" \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD") || HTTP_CODE="000"
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "  ✓ $LABEL"
+                return 0
+              fi
+              if [ "$HTTP_CODE" = "400" ]; then
+                echo "  ⚠ $LABEL skipped (HTTP 400, config issue): $(cat /tmp/response.json 2>/dev/null || true)"
+                return 0
+              fi
+              echo "  ✗ $LABEL attempt $ATTEMPT/3 failed (HTTP $HTTP_CODE): $(cat /tmp/response.json 2>/dev/null || true)"
+              if [ "$ATTEMPT" -lt 3 ]; then sleep 15; fi
+            done
+            return 1
+          }
+
           echo "Type: $HOROSCOPE_TYPE"
+          FAILURES=0
 
           if [ "$HOROSCOPE_TYPE" = "daily" ]; then
             for DAYS_AHEAD in 0 1 2 3; do
-              echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) +${DAYS_AHEAD} days..."
-              HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
-                -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
-                -H "Content-Type: application/json" \
-                -d "{\"type\":\"daily\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\",\"daysAhead\":${DAYS_AHEAD}}")
-              if [ "$HTTP_CODE" = "200" ]; then
-                echo "  ✓ Success"
-              else
-                echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json)"
-              fi
+              generate daily "$DAYS_AHEAD" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) daily +${DAYS_AHEAD}d" || FAILURES=$((FAILURES+1))
               sleep 2
             done
+            # Self-heal: backfill any weekly/monthly entry that a past run
+            # failed to generate. No-op (skipped by the API) on healthy days.
+            generate weekly "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) weekly catchup" || FAILURES=$((FAILURES+1))
+            generate monthly "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) monthly catchup" || FAILURES=$((FAILURES+1))
           else
-            echo "Generating ${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) - $HOROSCOPE_TYPE..."
-            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" --max-time 280 -L \
-              -X POST "${{ secrets.VERCEL_APP_URL }}/api/horoscopes/generate-sign" \
-              -H "Content-Type: application/json" \
-              -d "{\"type\":\"${HOROSCOPE_TYPE}\",\"language\":\"${{ matrix.language }}\",\"sign\":\"${{ matrix.sign }}\",\"site\":\"${{ matrix.site }}\"}")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "  ✓ Success"
-            else
-              echo "  ✗ Failed (HTTP $HTTP_CODE): $(cat /tmp/response.json)"
-            fi
+            generate "$HOROSCOPE_TYPE" "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) $HOROSCOPE_TYPE" || FAILURES=$((FAILURES+1))
+          fi
+
+          if [ "$FAILURES" -gt 0 ]; then
+            echo "$FAILURES generation(s) still failing after retries"
+            exit 1
           fi
