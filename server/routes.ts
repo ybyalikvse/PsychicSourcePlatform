@@ -6,7 +6,7 @@ import type { ContentOptimizationResult, ContentSuggestion } from "../shared/sch
 import crypto from "crypto";
 import OpenAI from "openai";
 
-import { normalizeHoroscopeHeadings } from "./horoscope-headings";
+import { normalizeHoroscopeHeadings, hasAllCanonicalSections } from "./horoscope-headings";
 import { registerVspRoutes } from "./routes-vsp";
 import { registerCiRoutes } from "./routes-ci";
 import { registerSocialPostsRoutes } from "./routes-social-posts";
@@ -4368,9 +4368,19 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       }
 
       console.log(`[Horoscope] Generating ${sign} (${type}/${lang}/${siteId}) for ${period.label}${daysAhead ? ` (+${daysAhead} days)` : ""}...`);
-      const content = await generateHoroscopeContent(
-        sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude", siteId
-      );
+      let content = "";
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        content = await generateHoroscopeContent(
+          sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude", siteId
+        );
+        if (hasAllCanonicalSections(content, siteId, type)) break;
+        if (attempt === maxAttempts) {
+          console.error(`[Horoscope] ${sign} (${type}/${lang}/${siteId}) still missing sections after ${maxAttempts} attempts, refusing to save`);
+          return res.status(500).json({ error: `Generated content for ${sign} is missing required sections after ${maxAttempts} attempts` });
+        }
+        console.log(`[Horoscope] ${sign} (${type}/${lang}/${siteId}) missing sections, regenerating (attempt ${attempt}/${maxAttempts})...`);
+      }
 
       const entry = await storage.createHoroscopeEntry({
         type,

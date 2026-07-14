@@ -25341,6 +25341,11 @@ function stripTags(html) {
 function fold(s) {
   return s.toLowerCase().replace(/[’‘]/g, "'").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
+function hasAllCanonicalSections(content, site, type) {
+  const sections = SECTIONS[site]?.[type];
+  if (!sections) return true;
+  return sections.every((s) => content.includes(`<h2 id="${s.id}">`));
+}
 function normalizeHoroscopeHeadings(content, site, type, language) {
   const sections = SECTIONS[site]?.[type];
   if (!sections) return content;
@@ -25473,6 +25478,15 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   content = normalizeHoroscopeHeadings(content, site, type, language);
   return content;
 }
+async function generateValidatedContent(sign, type, language, periodLabel, promptTemplate, aiModel, site) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const content = await generateHoroscopeContent(sign, type, language, periodLabel, promptTemplate, aiModel, site);
+    if (hasAllCanonicalSections(content, site, type)) return content;
+    console.log(`[Horoscope Cron] ${sign} (${type}/${language}/${site}) missing sections, regenerating (attempt ${attempt}/${maxAttempts})...`);
+  }
+  throw new Error(`Generated content for ${sign} (${type}/${language}/${site}) is missing required sections after ${maxAttempts} attempts`);
+}
 var HOROSCOPE_SITES = ["psychicsource", "pathforward"];
 async function runHoroscopeGeneration(type) {
   const languages = ["en", "es"];
@@ -25498,7 +25512,7 @@ async function runHoroscopeGeneration(type) {
           }
           console.log(`[Horoscope Cron] Generating ${type} horoscopes in ${lang} for ${siteId} - ${period.label}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
           for (const sign of ZODIAC_SIGNS) {
-            const content = await generateHoroscopeContent(
+            const content = await generateValidatedContent(
               sign,
               type,
               lang,

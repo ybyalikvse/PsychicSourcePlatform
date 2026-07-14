@@ -101,6 +101,15 @@ function fold(s: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+// True when normalized content contains every canonical section id for the
+// site + type (vacuously true when there is no mapping). Callers use this to
+// reject and regenerate incomplete AI output instead of saving it.
+export function hasAllCanonicalSections(content: string, site: string, type: string): boolean {
+  const sections = SECTIONS[site]?.[type];
+  if (!sections) return true;
+  return sections.every(s => content.includes(`<h2 id="${s.id}">`));
+}
+
 // Rewrite the <h2> headings of horoscope content to the canonical text and
 // id for each recognized section. Unrecognized headings are left untouched.
 // Returns content unchanged when there is no mapping for the site + type.

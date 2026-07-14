@@ -289343,6 +289343,11 @@ function stripTags(html) {
 function fold(s6) {
   return s6.toLowerCase().replace(/[’‘]/g, "'").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
+function hasAllCanonicalSections(content, site, type) {
+  const sections = SECTIONS[site]?.[type];
+  if (!sections) return true;
+  return sections.every((s6) => content.includes(`<h2 id="${s6.id}">`));
+}
 function normalizeHoroscopeHeadings(content, site, type, language) {
   const sections = SECTIONS[site]?.[type];
   if (!sections) return content;
@@ -323382,15 +323387,25 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         return res.json({ success: true, entry: existingForSign, skipped: true });
       }
       console.log(`[Horoscope] Generating ${sign} (${type}/${lang}/${siteId}) for ${period.label}${daysAhead ? ` (+${daysAhead} days)` : ""}...`);
-      const content = await generateHoroscopeContent(
-        sign,
-        type,
-        lang,
-        period.label,
-        prompt.prompt,
-        prompt.aiModel || "claude",
-        siteId
-      );
+      let content = "";
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        content = await generateHoroscopeContent(
+          sign,
+          type,
+          lang,
+          period.label,
+          prompt.prompt,
+          prompt.aiModel || "claude",
+          siteId
+        );
+        if (hasAllCanonicalSections(content, siteId, type)) break;
+        if (attempt === maxAttempts) {
+          console.error(`[Horoscope] ${sign} (${type}/${lang}/${siteId}) still missing sections after ${maxAttempts} attempts, refusing to save`);
+          return res.status(500).json({ error: `Generated content for ${sign} is missing required sections after ${maxAttempts} attempts` });
+        }
+        console.log(`[Horoscope] ${sign} (${type}/${lang}/${siteId}) missing sections, regenerating (attempt ${attempt}/${maxAttempts})...`);
+      }
       const entry = await storage.createHoroscopeEntry({
         type,
         language: lang,

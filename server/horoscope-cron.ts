@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import OpenAI from "openai";
-import { normalizeHoroscopeHeadings } from "./horoscope-headings";
+import { normalizeHoroscopeHeadings, hasAllCanonicalSections } from "./horoscope-headings";
 
 
 const ZODIAC_SIGNS = [
@@ -87,6 +87,26 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   return content;
 }
 
+// Regenerate when the AI output is missing any canonical section, so
+// incomplete content never gets saved.
+async function generateValidatedContent(
+  sign: string,
+  type: string,
+  language: string,
+  periodLabel: string,
+  promptTemplate: string,
+  aiModel: string,
+  site: string
+): Promise<string> {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const content = await generateHoroscopeContent(sign, type, language, periodLabel, promptTemplate, aiModel, site);
+    if (hasAllCanonicalSections(content, site, type)) return content;
+    console.log(`[Horoscope Cron] ${sign} (${type}/${language}/${site}) missing sections, regenerating (attempt ${attempt}/${maxAttempts})...`);
+  }
+  throw new Error(`Generated content for ${sign} (${type}/${language}/${site}) is missing required sections after ${maxAttempts} attempts`);
+}
+
 const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
 
 export async function runHoroscopeGeneration(type: string) {
@@ -118,7 +138,7 @@ export async function runHoroscopeGeneration(type: string) {
           console.log(`[Horoscope Cron] Generating ${type} horoscopes in ${lang} for ${siteId} - ${period.label}${dayOffset > 0 ? ` (+${dayOffset} days)` : ""}...`);
 
           for (const sign of ZODIAC_SIGNS) {
-            const content = await generateHoroscopeContent(
+            const content = await generateValidatedContent(
               sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude", siteId
             );
 
@@ -171,7 +191,7 @@ async function runStartupCatchup() {
 
             try {
               for (const sign of ZODIAC_SIGNS) {
-                const content = await generateHoroscopeContent(
+                const content = await generateValidatedContent(
                   sign, type, lang, period.label, prompt.prompt, prompt.aiModel || "claude", siteId
                 );
                 await storage.createHoroscopeEntry({
