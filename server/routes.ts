@@ -6,7 +6,7 @@ import type { ContentOptimizationResult, ContentSuggestion } from "../shared/sch
 import crypto from "crypto";
 import OpenAI from "openai";
 
-import { addHeadingIds } from "./horoscope-headings";
+import { normalizeHoroscopeHeadings } from "./horoscope-headings";
 import { registerVspRoutes } from "./routes-vsp";
 import { registerCiRoutes } from "./routes-ci";
 import { registerSocialPostsRoutes } from "./routes-social-posts";
@@ -4325,8 +4325,8 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     content = content.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     content = content.replace(/^(?!<[hpo])((?!<).+)$/gm, '<p>$1</p>');
 
-    // Add stable, language-independent ids to section headings
-    content = addHeadingIds(content, site, type);
+    // Normalize section headings to the canonical text and ids
+    content = normalizeHoroscopeHeadings(content, site, type, language);
 
     return content;
   }

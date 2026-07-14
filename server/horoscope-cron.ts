@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import OpenAI from "openai";
-import { addHeadingIds } from "./horoscope-headings";
+import { normalizeHoroscopeHeadings } from "./horoscope-headings";
 
 
 const ZODIAC_SIGNS = [
@@ -81,8 +81,8 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   // Wrap bare text lines in <p> tags if they aren't already wrapped
   content = content.replace(/^(?!<[hpo])((?!<).+)$/gm, '<p>$1</p>');
 
-  // Add stable, language-independent ids to section headings
-  content = addHeadingIds(content, site, type);
+  // Normalize section headings to the canonical text and ids
+  content = normalizeHoroscopeHeadings(content, site, type, language);
 
   return content;
 }
