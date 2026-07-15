@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Rising Sign Calculator preview</title>
+<style>body{margin:0;font-family:Georgia,serif}</style>
+</head>
+<body>
+<div id="ps-rising-sign"></div>
+<script src="/embed/rising-sign.js"></script>
+<script>
+// ?demo=1 auto-fills the form and reveals the result (for screenshots/QA)
+if (new URLSearchParams(location.search).get("demo")) {
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      var root = document.getElementById("ps-rising-sign").shadowRoot;
+      var f = function (n) { return root.querySelector("[data-f='" + n + "']"); };
+      f("month").value = "4"; f("day").value = "21"; f("year").value = "1926";
+      f("hour").value = "2"; f("minute").value = "40"; f("ampm").value = "AM";
+      f("place").value = "London";
+      f("place").dispatchEvent(new Event("input", { bubbles: true }));
+      setTimeout(function () {
+        var opt = root.querySelector(".opt");
+        if (opt) opt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        root.querySelector(".btn").click();
+      }, 900);
+    }, 600);
+  });
+}
+</script>
+</body>
+</html>

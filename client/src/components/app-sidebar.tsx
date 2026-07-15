@@ -24,6 +24,7 @@ import {
   Palette,
   LayoutGrid,
   Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import {
   Sidebar,
@@ -74,6 +75,11 @@ const mainNavItems = [
     title: "Horoscopes",
     url: "/horoscopes",
     icon: Star,
+  },
+  {
+    title: "Calculators",
+    url: "/calculators",
+    icon: Sparkles,
   },
 ];
 

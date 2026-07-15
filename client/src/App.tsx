@@ -26,6 +26,7 @@ import Optimize from "@/pages/optimize";
 import InternalLinks from "@/pages/internal-links";
 import Settings from "@/pages/settings";
 import Horoscopes from "@/pages/horoscopes";
+import Calculators from "@/pages/calculators";
 import Psychics from "@/pages/psychics";
 import VideoRequests from "@/pages/video-requests";
 import LoginPage from "@/pages/login";
@@ -79,6 +80,7 @@ function AdminRouter() {
       <Route path="/internal-links" component={InternalLinks} />
       <Route path="/settings" component={Settings} />
       <Route path="/horoscopes" component={Horoscopes} />
+      <Route path="/calculators" component={Calculators} />
       <Route path="/psychics/:id" component={Psychics} />
       <Route path="/psychics" component={Psychics} />
       <Route path="/video-requests/:id" component={VideoRequests} />

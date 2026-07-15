@@ -9,6 +9,7 @@ import OpenAI from "openai";
 import { normalizeHoroscopeHeadings, hasAllCanonicalSections } from "./horoscope-headings";
 import { registerVspRoutes } from "./routes-vsp";
 import { registerCiRoutes } from "./routes-ci";
+import { registerCalculatorRoutes } from "./routes-calculators";
 import { registerSocialPostsRoutes } from "./routes-social-posts";
 import { verifyAdminAuth } from "./auth-middleware";
 import { expensiveApiLimiter } from "./rate-limiters";
@@ -343,6 +344,7 @@ export async function registerRoutes(
   // ============ VIRAL SCRIPT PRO ============
   registerVspRoutes(app);
   registerCiRoutes(app);
+  registerCalculatorRoutes(app);
   registerSocialPostsRoutes(app);
 
   // ============ ADMIN AUTH GUARD ============
