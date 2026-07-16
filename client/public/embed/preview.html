@@ -4,19 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Rising Sign Calculator preview</title>
+<title>Calculator preview</title>
 <style>body{margin:0;font-family:Georgia,serif}</style>
 </head>
 <body>
-<div id="ps-rising-sign"></div>
-<script src="/embed/rising-sign.js"></script>
 <script>
+// ?calc=rising-sign (default) | moon-sign — which calculator to preview
 // ?demo=1 auto-fills the form and reveals the result (for screenshots/QA)
-if (new URLSearchParams(location.search).get("demo")) {
+var params = new URLSearchParams(location.search);
+var calc = params.get("calc") || "rising-sign";
+var mountId = "ps-" + calc;
+document.write('<div id="' + mountId + '"></div>');
+var s = document.createElement("script");
+s.src = "/embed/" + calc + ".js";
+document.body.appendChild(s);
+
+if (params.get("demo")) {
   window.addEventListener("load", function () {
     setTimeout(function () {
-      var root = document.getElementById("ps-rising-sign").shadowRoot;
+      var root = document.getElementById(mountId).shadowRoot;
       var f = function (n) { return root.querySelector("[data-f='" + n + "']"); };
+      if (calc === "love-compatibility") {
+        f("am").value = "11"; f("ad").value = "1"; f("ay").value = "1984";
+        f("bm").value = "4"; f("bd").value = "2"; f("by").value = "1933";
+        root.querySelector(".btn").click();
+        return;
+      }
+      if (calc === "numerology") {
+        f("name").value = "John Smith";
+        f("month").value = "4"; f("day").value = "4"; f("year").value = "2023";
+        root.querySelector(".calc").click();
+        var hops = { lp: 0, destiny: 1, personality: 2, soul: 3, summary: 4 }[params.get("step") || "lp"] || 0;
+        var seq = ["lp", "destiny", "personality", "soul"];
+        for (var h = 0; h < hops; h++) root.querySelector(".s-" + seq[h] + " .nav-next").click();
+        return;
+      }
+      if (calc === "lunar-node") {
+        root.querySelector(".next").click();
+        f("month").value = "4"; f("day").value = "21"; f("year").value = "1926";
+        f("hour").value = "2"; f("minute").value = "40"; f("ampm").value = "AM";
+        f("place").value = "London";
+        f("place").dispatchEvent(new Event("input", { bubbles: true }));
+        setTimeout(function () {
+          var opt = root.querySelector(".opt");
+          if (opt) opt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          root.querySelector(".submit").click();
+        }, 900);
+        return;
+      }
       f("month").value = "4"; f("day").value = "21"; f("year").value = "1926";
       f("hour").value = "2"; f("minute").value = "40"; f("ampm").value = "AM";
       f("place").value = "London";

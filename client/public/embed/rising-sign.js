@@ -113,9 +113,16 @@
     ".btn:disabled{opacity:.6;cursor:default;transform:none}" +
     ".err{display:none;text-align:center;margin-top:16px;font-size:17px;color:#ffd9b0;text-shadow:0 1px 4px rgba(0,0,0,.5)}" +
     ".err.show{display:block}" +
-    ".result{display:none;margin-top:48px;border:1px solid rgba(255,255,255,.85);border-radius:26px;" +
+    ".screen-result{display:none}" +
+    ".screen-result.active{display:block;animation:fadein .6s ease}" +
+    ".screen-form.hidden{display:none}" +
+    ".result{margin-top:8px;border:1px solid rgba(255,255,255,.85);border-radius:26px;" +
     "background:rgba(48,38,24,.4);backdrop-filter:blur(2px);padding:38px 34px}" +
-    ".result.show{display:block;animation:fadein .6s ease}" +
+    ".outro{max-width:760px;margin:30px auto 0;text-align:center;font-size:18px;text-shadow:0 1px 5px rgba(0,0,0,.45)}" +
+    ".btn2{display:inline-block;font-family:Georgia,serif;font-size:18px;letter-spacing:.5px;color:#fff;" +
+    "background:rgba(148,124,88,.45);border:1px solid rgba(255,255,255,.8);border-radius:8px;" +
+    "padding:12px 36px;cursor:pointer;text-shadow:0 1px 3px rgba(0,0,0,.35);transition:background .15s ease}" +
+    ".btn2:hover{background:rgba(148,124,88,.7)}" +
     "@keyframes fadein{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}" +
     ".cols{display:flex;align-items:center;gap:30px}" +
     ".art{flex:0 0 38%;text-align:center}" +
@@ -164,6 +171,7 @@
 
     return "<div class='wrap'><div class='inner'>" +
       "<h2 class='title'>Rising Sign Calculator</h2>" +
+      "<div class='screen-form'>" +
       "<p class='intro'>You're probably familiar with your sun sign, which is your primary zodiac sign, but you may not know about your rising sign. Also known as your ascendant sign, your rising sign represents the mask that you wear for the world. This is the zodiac sign that was rising over the eastern horizon at the time of your birth. Rising signs change every two hours, so you need to know exactly when you came into the world to determine your ascendant. Fill out the information below to learn more about the outward impression that you give to the world.</p>" +
       "<div class='row'><span class='lbl'>Birth Date:</span><div class='fields'>" +
       "<select class='sel' data-f='month' aria-label='Birth month'>" + months + "</select>" +
@@ -178,11 +186,16 @@
       "<div class='drop' role='listbox'></div></div></div></div>" +
       "<div class='actions'><button class='btn' type='button'>Reveal My Rising Sign</button></div>" +
       "<div class='err' role='alert'></div>" +
-      "<div class='result' aria-live='polite'><div class='cols'>" +
+      "</div>" +
+      "<div class='screen-result' aria-live='polite'>" +
+      "<div class='result'><div class='cols'>" +
       "<div class='art'><img alt='' loading='lazy'></div>" +
       "<div class='divider'>" + DIVIDER_SVG + "</div>" +
       "<div class='meaning'><div class='rname'></div><div class='deg'></div><div class='mtext'></div></div>" +
       "</div></div>" +
+      "<p class='outro'>For a more complete picture, be sure to check out your Sun and Moon sign. Together, these 3 placements form the foundation of your personality. You can also request a psychic astrologer review your complete natal chart with you for even deeper insights.</p>" +
+      "<div class='actions'><button class='btn2' type='button'>Start Over</button></div>" +
+      "</div>" +
       "</div></div>";
   }
 
@@ -213,8 +226,9 @@
     mount.querySelectorAll("[data-f]").forEach(function (el) { fields[el.getAttribute("data-f")] = el; });
     var drop = $(".drop");
     var err = $(".err");
-    var result = $(".result");
     var btn = $(".btn");
+    var formScreen = $(".screen-form");
+    var resultScreen = $(".screen-result");
 
     var chosen = null;   // {name, region, country, timezone, lat, lon}
     var seq = 0;
@@ -303,8 +317,21 @@
       var img = $(".art img");
       img.src = ORIGIN + "/embed/img/" + r.sign.toLowerCase() + ".png";
       img.alt = r.sign + " line art illustration";
-      result.classList.add("show");
-      result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      formScreen.classList.add("hidden");
+      resultScreen.classList.add("active");
+      $(".wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    $(".btn2").addEventListener("click", function () {
+      ["month", "day", "year", "hour", "minute"].forEach(function (name) { fields[name].value = ""; });
+      fields.ampm.value = "AM";
+      fields.place.value = "";
+      chosen = null;
+      clearError();
+      closeDrop();
+      resultScreen.classList.remove("active");
+      formScreen.classList.remove("hidden");
+      $(".wrap").scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
