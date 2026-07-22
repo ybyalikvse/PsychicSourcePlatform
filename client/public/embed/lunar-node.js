@@ -265,6 +265,7 @@
     // sun
     "<circle cx='128' cy='205' r='80' fill='url(#sunglow)'/>" +
     "<circle cx='128' cy='205' r='50' fill='url(#sung)'/>" +
+    "<image x='66' y='143' width='124' height='124' href='" + ORIGIN + "/embed/img/node/sun.png'/>" +
     "<text x='108' y='138' font-family='" + FONT + "' font-size='16' fill='white'>Sun</text>" +
     // earth
     "<circle cx='390' cy='240' r='62' fill='url(#earthg)'/>" +
@@ -275,9 +276,11 @@
     "<path d='M340 234 C 360 228, 384 232, 396 244' stroke='#eef7fd' stroke-width='7' stroke-linecap='round' opacity='.55'/>" +
     "<path d='M382 282 C 398 272, 420 272, 434 282' stroke='#eef7fd' stroke-width='6' stroke-linecap='round' opacity='.5'/>" +
     "</g>" +
+    "<image x='326' y='176' width='128' height='128' href='" + ORIGIN + "/embed/img/node/earth.png'/>" +
     // moon
     "<circle cx='655' cy='102' r='52' fill='url(#moonglow)'/>" +
     "<path d='M640 70 A 34 34 0 1 0 672 128 A 27 27 0 1 1 640 70 Z' fill='#eef2f8'/>" +
+    "<image x='611' y='58' width='88' height='88' href='" + ORIGIN + "/embed/img/node/moon.png'/>" +
     "<text x='706' y='98' font-family='" + FONT + "' font-size='16' fill='white'>Moon</text>" +
     // nodes on the orbit crossings
     "<text x='300' y='145' text-anchor='end' font-family='" + FONT + "' font-size='16' fill='white'>Lunar South Node</text>" +
