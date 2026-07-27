@@ -5419,7 +5419,6 @@ __export(schema_exports, {
   insertSocialSlideTemplateSchema: () => insertSocialSlideTemplateSchema,
   insertSocialTemplateSetSchema: () => insertSocialTemplateSetSchema,
   insertTargetAudienceSchema: () => insertTargetAudienceSchema,
-  insertUserSchema: () => insertUserSchema,
   insertVideoCaptionPromptSchema: () => insertVideoCaptionPromptSchema,
   insertVideoCaptionSchema: () => insertVideoCaptionSchema,
   insertVideoMessageSchema: () => insertVideoMessageSchema,
@@ -5451,7 +5450,6 @@ __export(schema_exports, {
   socialSlideTemplates: () => socialSlideTemplates,
   socialTemplateSets: () => socialTemplateSets,
   targetAudiences: () => targetAudiences,
-  users: () => users,
   videoCaptionPrompts: () => videoCaptionPrompts,
   videoCaptions: () => videoCaptions,
   videoMessages: () => videoMessages,
@@ -16080,15 +16078,6 @@ var insertMessageSchema = createInsertSchema(messages).omit({
 });
 
 // shared/schema.ts
-var users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull()
-});
-var insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true
-});
 var articles = pgTable("articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -17168,19 +17157,6 @@ var db = drizzle(pool, { schema: schema_exports });
 
 // server/storage.ts
 var DatabaseStorage = class {
-  // Users
-  async getUser(id) {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
-  async getUserByUsername(username) {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
-  }
-  async createUser(insertUser) {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
-  }
   // Articles
   async getArticles() {
     return db.select().from(articles).orderBy(desc(articles.updatedAt));

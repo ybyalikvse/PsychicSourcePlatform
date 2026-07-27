@@ -70087,12 +70087,12 @@ var require_user_import_builder = __commonJS({
        * @param {ValidatorFunction=} userRequestValidator The user request validator function.
        * @constructor
        */
-      constructor(users2, options, userRequestValidator) {
+      constructor(users, options, userRequestValidator) {
         this.requiresHashOptions = false;
         this.validatedUsers = [];
         this.userImportResultErrors = [];
         this.indexMap = {};
-        this.validatedUsers = this.populateUsers(users2, userRequestValidator);
+        this.validatedUsers = this.populateUsers(users, userRequestValidator);
         this.validatedOptions = this.populateOptions(options, this.requiresHashOptions);
       }
       /**
@@ -70100,10 +70100,10 @@ var require_user_import_builder = __commonJS({
        * @returns {UploadAccountRequest} The constructed uploadAccount request.
        */
       buildRequest() {
-        const users2 = this.validatedUsers.map((user) => {
+        const users = this.validatedUsers.map((user) => {
           return (0, deep_copy_1.deepCopy)(user);
         });
-        return (0, deep_copy_1.deepExtend)({ users: users2 }, (0, deep_copy_1.deepCopy)(this.validatedOptions));
+        return (0, deep_copy_1.deepExtend)({ users }, (0, deep_copy_1.deepCopy)(this.validatedOptions));
       }
       /**
        * Populates the UserImportResult using the client side detected errors and the server
@@ -70262,9 +70262,9 @@ var require_user_import_builder = __commonJS({
        * @param {ValidatorFunction=} userValidator The user validator function.
        * @returns {UploadAccountUser[]} The populated uploadAccount users.
        */
-      populateUsers(users2, userValidator) {
+      populateUsers(users, userValidator) {
         const populatedUsers = [];
-        users2.forEach((user, index) => {
+        users.forEach((user, index) => {
           try {
             const result = populateUploadAccountUser(user, userValidator);
             if (typeof result.passwordHash !== "undefined") {
@@ -72487,12 +72487,12 @@ var require_auth_api_request = __commonJS({
        *     with the result of the import. This includes the number of successful imports, the number
        *     of failed uploads and their corresponding errors.
        */
-      uploadAccount(users2, options) {
-        const userImportBuilder = new user_import_builder_1.UserImportBuilder(users2, options, (userRequest) => {
+      uploadAccount(users, options) {
+        const userImportBuilder = new user_import_builder_1.UserImportBuilder(users, options, (userRequest) => {
           validateCreateEditRequest(userRequest, WriteOperationType.Upload);
         });
         const request = userImportBuilder.buildRequest();
-        if (validator.isArray(users2) && users2.length > MAX_UPLOAD_ACCOUNT_BATCH_SIZE) {
+        if (validator.isArray(users) && users.length > MAX_UPLOAD_ACCOUNT_BATCH_SIZE) {
           throw new error_1.FirebaseAuthError(error_1.AuthClientErrorCode.MAXIMUM_USER_COUNT_EXCEEDED, `A maximum of ${MAX_UPLOAD_ACCOUNT_BATCH_SIZE} users can be imported at once.`);
         }
         if (!request.users || request.users.length === 0) {
@@ -73247,13 +73247,13 @@ var require_auth_api_request = __commonJS({
        *     with the result of the import. This includes the number of successful imports, the number
        *     of failed uploads and their corresponding errors.
        */
-      uploadAccount(users2, options) {
-        users2.forEach((user, index) => {
+      uploadAccount(users, options) {
+        users.forEach((user, index) => {
           if (validator.isNonEmptyString(user.tenantId) && user.tenantId !== this.tenantId) {
             throw new error_1.FirebaseAuthError(error_1.AuthClientErrorCode.MISMATCHING_TENANT_ID, `UserRecord of index "${index}" has mismatching tenant ID "${user.tenantId}"`);
           }
         });
-        return super.uploadAccount(users2, options);
+        return super.uploadAccount(users, options);
       }
     };
     exports2.TenantAwareAuthRequestHandler = TenantAwareAuthRequestHandler;
@@ -84808,9 +84808,9 @@ var require_base_auth = __commonJS({
               }
             });
           });
-          const users2 = response.users ? response.users.map((user) => new user_record_1.UserRecord(user)) : [];
-          const notFound = identifiers.filter((id) => !isUserFound(id, users2));
-          return { users: users2, notFound };
+          const users = response.users ? response.users.map((user) => new user_record_1.UserRecord(user)) : [];
+          const notFound = identifiers.filter((id) => !isUserFound(id, users));
+          return { users, notFound };
         });
       }
       /**
@@ -84830,12 +84830,12 @@ var require_base_auth = __commonJS({
        */
       listUsers(maxResults, pageToken) {
         return this.authRequestHandler.downloadAccount(maxResults, pageToken).then((response) => {
-          const users2 = [];
+          const users = [];
           response.users.forEach((userResponse) => {
-            users2.push(new user_record_1.UserRecord(userResponse));
+            users.push(new user_record_1.UserRecord(userResponse));
           });
           const result = {
-            users: users2,
+            users,
             pageToken: response.nextPageToken
           };
           if (typeof result.pageToken === "undefined") {
@@ -85046,8 +85046,8 @@ var require_base_auth = __commonJS({
        *   number of successful imports, the number of failed imports and their
        *   corresponding errors.
       */
-      importUsers(users2, options) {
-        return this.authRequestHandler.uploadAccount(users2, options);
+      importUsers(users, options) {
+        return this.authRequestHandler.uploadAccount(users, options);
       }
       /**
        * Creates a new Firebase session cookie with the specified options. The created
@@ -269418,7 +269418,6 @@ __export(schema_exports, {
   insertSocialSlideTemplateSchema: () => insertSocialSlideTemplateSchema,
   insertSocialTemplateSetSchema: () => insertSocialTemplateSetSchema,
   insertTargetAudienceSchema: () => insertTargetAudienceSchema,
-  insertUserSchema: () => insertUserSchema,
   insertVideoCaptionPromptSchema: () => insertVideoCaptionPromptSchema,
   insertVideoCaptionSchema: () => insertVideoCaptionSchema,
   insertVideoMessageSchema: () => insertVideoMessageSchema,
@@ -269450,7 +269449,6 @@ __export(schema_exports, {
   socialSlideTemplates: () => socialSlideTemplates,
   socialTemplateSets: () => socialTemplateSets,
   targetAudiences: () => targetAudiences,
-  users: () => users,
   videoCaptionPrompts: () => videoCaptionPrompts,
   videoCaptions: () => videoCaptions,
   videoMessages: () => videoMessages,
@@ -280079,15 +280077,6 @@ var insertMessageSchema = createInsertSchema(messages).omit({
 });
 
 // shared/schema.ts
-var users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull()
-});
-var insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true
-});
 var articles = pgTable("articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -281167,19 +281156,6 @@ var db = drizzle(pool, { schema: schema_exports });
 
 // server/storage.ts
 var DatabaseStorage = class {
-  // Users
-  async getUser(id) {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
-  async getUserByUsername(username) {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
-  }
-  async createUser(insertUser) {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
-  }
   // Articles
   async getArticles() {
     return db.select().from(articles).orderBy(desc(articles.updatedAt));

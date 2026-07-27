@@ -65,6 +65,34 @@ const CALCULATORS = [
     mountId: "ps-numerology",
   },
   {
+    slug: "tarot-reading",
+    name: "Online Tarot Reading",
+    description:
+      "Vintage parchment theme, three stages: intro, a fanned deck of 22 face-down Major Arcana where the visitor selects six (with shuffle), then a card-by-card reading across the classic six positions using authentic public-domain Rider-Waite card art.",
+    mountId: "ps-tarot-reading",
+  },
+  {
+    slug: "love-tarot",
+    name: "Love Tarot Card Reading",
+    description:
+      "Romantic parchment theme with rose and candle decorations. Visitors choose seven cards from a V-shaped fan, then explore a relationship spread: the energy between you plus your side and your partner's side, clicking each card to flip it and read the love meaning in a modal.",
+    mountId: "ps-love-tarot",
+  },
+  {
+    slug: "lgbtq-tarot",
+    name: "One Card Tarot (LGBTQIA+)",
+    description:
+      "Warm pride theme: a row of 22 Progress Pride card backs, pick one and it flips in 3D to reveal an authentic Rider-Waite card with an inclusive reading written for the LGBTQIA+ community, plus Shuffle Cards and Try Another Card.",
+    mountId: "ps-lgbtq-tarot",
+  },
+  {
+    slug: "playing-cards-tarot",
+    name: "Playing Cards Tarot",
+    description:
+      "Dark cartomancy theme. Three spread categories (Past/Present/Future, Love, Career), a question prompt, then a row of all 52 playing cards drawn in SVG; pick three that pop up from the deck and get a three-panel result with position-specific readings.",
+    mountId: "ps-playing-cards-tarot",
+  },
+  {
     slug: "venus-house",
     name: "Venus House Calculator",
     description:

@@ -39,6 +39,39 @@ if (params.get("demo")) {
         for (var h = 0; h < hops; h++) root.querySelector(".s-" + seq[h] + " .nav-next").click();
         return;
       }
+      if (calc === "playing-cards-tarot") {
+        root.querySelector(".begin").click();
+        root.querySelector(".qsubmit").click();
+        if (params.get("cat")) {
+          root.querySelector(".cat[data-cat='" + params.get("cat") + "']").click();
+        }
+        var pickN = params.get("step") === "select" ? parseInt(params.get("pick") || "0", 10) : 3;
+        var pc = root.querySelectorAll(".pcard");
+        [5, 20, 40].slice(0, pickN).forEach(function (i) { pc[i].click(); });
+        return;
+      }
+      if (calc === "lgbtq-tarot") {
+        root.querySelectorAll(".card")[3].click();
+        return;
+      }
+      if (calc === "love-tarot") {
+        var lcards = root.querySelectorAll(".card");
+        [1, 4, 7, 10, 13, 16, 19].forEach(function (i) { lcards[i].click(); });
+        if (params.get("step") === "select") return;
+        root.querySelector(".getreading").click();
+        var flip = parseInt(params.get("flip") || "-1", 10);
+        if (flip >= 0) root.querySelectorAll(".scard")[flip].click();
+        return;
+      }
+      if (calc === "tarot-reading") {
+        root.querySelector(".proceed").click();
+        var cards = root.querySelectorAll(".card");
+        [2, 5, 9, 12, 16, 20].forEach(function (i) { cards[i].click(); });
+        if (params.get("step") !== "select") root.querySelector(".getreading").click();
+        var hops = parseInt(params.get("card") || "1", 10) - 1;
+        for (var h = 0; h < hops; h++) root.querySelector(".next").click();
+        return;
+      }
       if (calc === "lunar-node") {
         root.querySelector(".next").click();
         f("month").value = "4"; f("day").value = "21"; f("year").value = "1926";

@@ -1,5 +1,4 @@
 import {
-  type User, type InsertUser,
   type Article, type InsertArticle,
   type Keyword, type InsertKeyword,
   type Integration, type InsertIntegration,
@@ -43,7 +42,7 @@ import {
   type SocialTemplateSet, type InsertSocialTemplateSet,
   type SocialSlideTemplate, type InsertSocialSlideTemplate,
   type SocialMediaLibrary, type InsertSocialMediaLibrary,
-  users, articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
+  articles, keywords, integrations, contentSuggestions, analyticsSnapshots,
   writingStyles, optimizationPrompts, seoSettings, imageStyles, targetAudiences, linkTableColumns, siteUrls, optimizationAnalyses,
   horoscopePrompts, horoscopeEntries,
   psychics, videoRequests, videoMessages, videoCaptions, videoCaptionPrompts,
@@ -58,11 +57,6 @@ import { db } from "./db";
 import { eq, desc, asc, gte, lte, and, sql } from "drizzle-orm";
 
 export interface IStorage {
-  // Users
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-
   // Articles
   getArticles(): Promise<Article[]>;
   getArticle(id: string): Promise<Article | undefined>;
@@ -351,7 +345,6 @@ export interface IStorage {
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
   private articles: Map<string, Article>;
   private keywords: Map<string, Keyword>;
   private integrations: Map<string, Integration>;
@@ -359,7 +352,6 @@ export class MemStorage implements IStorage {
   private analytics: Map<string, AnalyticsSnapshot>;
 
   constructor() {
-    this.users = new Map();
     this.articles = new Map();
     this.keywords = new Map();
     this.integrations = new Map();
@@ -374,23 +366,6 @@ export class MemStorage implements IStorage {
     // Integrations will be created when users attempt to connect them
   }
 
-  // User methods
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
-  }
 
   // Article methods
   async getArticles(): Promise<Article[]> {
@@ -727,21 +702,6 @@ export class MemStorage implements IStorage {
 
 // Database storage implementation - uses PostgreSQL for persistence
 export class DatabaseStorage implements IStorage {
-  // Users
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
-  }
 
   // Articles
   async getArticles(): Promise<Article[]> {
