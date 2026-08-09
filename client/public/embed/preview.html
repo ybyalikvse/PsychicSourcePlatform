@@ -30,6 +30,43 @@ if (params.get("demo")) {
         root.querySelector(".btn").click();
         return;
       }
+      if (calc === "ai-tarot") {
+        root.querySelector(".qin").value = "What should I focus on in my career?";
+        root.querySelector(".draw").click();
+        return;
+      }
+      if (calc === "zodiac-sign") {
+        f("month").value = "8"; f("day").value = "5";
+        root.querySelector(".btn").click();
+        return;
+      }
+      if (calc === "saturn-return") {
+        f("month").value = "1"; f("day").value = "1"; f("year").value = "1990";
+        root.querySelector(".btn").click();
+        return;
+      }
+      if (calc === "love-calculator") {
+        f("a").value = "Alex"; f("b").value = "Sam";
+        root.querySelector(".btn").click();
+        return;
+      }
+      if (calc === "yes-no-tarot") {
+        root.querySelector(".qin").value = "Will things work out?";
+        root.querySelector(".btn").click();
+        return;
+      }
+      if (calc === "venus-sign" || calc === "big-three" || calc === "birth-chart") {
+        f("month").value = "4"; f("day").value = "21"; f("year").value = "1926";
+        f("hour").value = "2"; f("minute").value = "40"; f("ampm").value = "AM";
+        f("place").value = "London";
+        f("place").dispatchEvent(new Event("input", { bubbles: true }));
+        setTimeout(function () {
+          var opt = root.querySelector(".opt");
+          if (opt) opt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          root.querySelector(".btn").click();
+        }, 900);
+        return;
+      }
       if (calc === "numerology") {
         f("name").value = "John Smith";
         f("month").value = "4"; f("day").value = "4"; f("year").value = "2023";
@@ -70,6 +107,33 @@ if (params.get("demo")) {
         if (params.get("step") !== "select") root.querySelector(".getreading").click();
         var hops = parseInt(params.get("card") || "1", 10) - 1;
         for (var h = 0; h < hops; h++) root.querySelector(".next").click();
+        return;
+      }
+      if (calc === "aura-quiz" || calc === "chakra-quiz" || calc === "spirit-animal-quiz") {
+        var qstep = params.get("step");
+        root.querySelector(".start").click();
+        if (qstep === "q") return; // stop on the first question (for QA)
+        var step = function () {
+          var opt = root.querySelector(".opt");
+          if (opt) { opt.click(); setTimeout(step, 60); }
+        };
+        setTimeout(step, 80);
+        return;
+      }
+      if (calc === "angel-number") {
+        root.querySelector(".nin").value = "1111";
+        root.querySelector(".btn").click();
+        return;
+      }
+      if (calc === "birthstone") {
+        f("month").value = "9";
+        root.querySelector(".btn").click();
+        return;
+      }
+      if (calc === "past-life") {
+        f("name").value = "Eleanor Whitfield";
+        f("month").value = "4"; f("day").value = "21"; f("year").value = "1926";
+        root.querySelector(".btn").click();
         return;
       }
       if (calc === "lunar-node") {

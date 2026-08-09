@@ -16,11 +16,74 @@ const CALCULATORS = [
     mountId: "ps-rising-sign",
   },
   {
+    slug: "mercury-retrograde",
+    name: "Is Mercury in Retrograde?",
+    description:
+      "Live yes/no tracker: computes whether Mercury is currently retrograde, shows the current or next retrograde window with countdowns, lists the year's retrograde periods, and gives phase-appropriate guidance. Real-time, so the answer changes with the sky.",
+    mountId: "ps-mercury-retrograde",
+  },
+  {
+    slug: "moon-phase",
+    name: "Moon Phase Today",
+    description:
+      "A live moon-phase widget: shows today's moon rendered to its actual illumination and waxing/waning shape (drawn in SVG), with the phase name, illumination %, moon age, next new and full moon dates, a reading for the phase, and prev/next-day navigation.",
+    mountId: "ps-moon-phase",
+  },
+  {
     slug: "moon-sign",
     name: "Moon Sign Calculator",
     description:
       "Night-sky themed. Computes the Moon's actual position at the moment of birth (lunar theory accurate to a hundredth of a degree) and reveals the visitor's moon sign with an emotions-focused meaning write-up.",
     mountId: "ps-moon-sign",
+  },
+  {
+    slug: "zodiac-sign",
+    name: "What's My Zodiac Sign?",
+    description:
+      "Birthday in, Sun sign out: glyph, date range, element, modality, ruling planet, and a traits write-up for all 12 signs. Dead-simple, very high volume ('what is my zodiac sign', '[month] zodiac sign').",
+    mountId: "ps-zodiac-sign",
+  },
+  {
+    slug: "love-calculator",
+    name: "Love Calculator (name match)",
+    description:
+      "The viral name-compatibility toy: two names in, a deterministic order-independent percentage out with a filling heart meter and a message band. Distinct from the astrology-based Venus & Mars compatibility tool. No CTA URL wired yet.",
+    mountId: "ps-love-calculator",
+  },
+  {
+    slug: "yes-no-tarot",
+    name: "Yes / No Tarot",
+    description:
+      "Ask a yes-or-no question and draw one Major Arcana card that flips to reveal a Yes, No, or Maybe verdict with a short reason. Reuses the Rider-Waite deck. No CTA URL wired yet.",
+    mountId: "ps-yes-no-tarot",
+  },
+  {
+    slug: "saturn-return",
+    name: "Saturn Return Calculator",
+    description:
+      "Birth date in; computes natal Saturn, then finds when transiting Saturn returns to it (first around age 29, second around 59), with date ranges, current status, and meaning. Reuses the validated Saturn engine.",
+    mountId: "ps-saturn-return",
+  },
+  {
+    slug: "birth-chart",
+    name: "Birth Chart Calculator",
+    description:
+      "Full natal chart from birth date, time, and city: an SVG chart wheel with the zodiac ring, Placidus house cusps, and all ten planets placed by longitude, plus a placements table (planet, sign, degree, house) with Ascendant and Midheaven. All positions computed and validated in the browser.",
+    mountId: "ps-birth-chart",
+  },
+  {
+    slug: "big-three",
+    name: "Sun, Moon & Rising (Big 3)",
+    description:
+      "Birth date, time, and city in; returns all three foundational placements at once, Sun (core self), Moon (emotional world), and Rising (how others see you), each with a short read. Reuses the validated sign and ascendant math.",
+    mountId: "ps-big-three",
+  },
+  {
+    slug: "venus-sign",
+    name: "Venus Sign Calculator",
+    description:
+      "Computes the visitor's Venus sign (love style and values) from birth date/time/place, with a per-sign meaning. Companion to the Venus House calculator (which gives the life-area placement instead).",
+    mountId: "ps-venus-sign",
   },
   {
     slug: "mars-sign",
@@ -63,6 +126,56 @@ const CALCULATORS = [
     description:
       "Vintage paper theme with a faint handwritten-digits texture. Full name plus birthdate in, then a five-screen reading: Life Path (with the calculation breakdown, strengths, weaknesses, and best jobs), Destiny, Personality, Soul Urge, and a Summary. Pythagorean numerology, no API dependencies.",
     mountId: "ps-numerology",
+  },
+  {
+    slug: "ai-tarot",
+    name: "AI Tarot Reading",
+    description:
+      "The AI-tarot intercept: visitors draw three cards for a Past/Present/Future reading generated live by an AI (server-side, rate-limited), woven into one narrative, ending with a hand-off to a real psychic. The strategic counter to people using ChatGPT for tarot. CTA URL not wired yet.",
+    mountId: "ps-ai-tarot",
+  },
+  {
+    slug: "yes-no-tarot",
+    name: "Yes / No Tarot",
+    description:
+      "Ask a yes-or-no question and draw one Major Arcana card that flips to a Yes, No, or Maybe verdict with a reason. Reuses the Rider-Waite deck. CTA URL not wired yet.",
+    mountId: "ps-yes-no-tarot",
+  },
+  {
+    slug: "aura-quiz",
+    name: "Aura Color Quiz",
+    description: "Six-question quiz revealing the visitor's dominant aura color (one of seven) with a color swatch and meaning. High-volume 'aura' cluster.",
+    mountId: "ps-aura-quiz",
+  },
+  {
+    slug: "chakra-quiz",
+    name: "Chakra Quiz",
+    description: "Six-question quiz revealing which of the seven chakras is most active, with its color and guidance. High-volume, low-difficulty 'chakra' cluster.",
+    mountId: "ps-chakra-quiz",
+  },
+  {
+    slug: "spirit-animal-quiz",
+    name: "Spirit Animal Quiz",
+    description: "Six-question quiz revealing the visitor's spirit animal (one of seven) with its symbolism. High-volume 'spirit animal' term.",
+    mountId: "ps-spirit-animal-quiz",
+  },
+  {
+    slug: "angel-number",
+    name: "Angel Number Meaning",
+    description: "Enter a repeating number (111, 444, 1111...) to decode its angel-number meaning, with a fallback that interprets any digit combination. Part of the ~2.8M-search angel-number cluster.",
+    mountId: "ps-angel-number",
+  },
+  {
+    slug: "birthstone",
+    name: "Birthstone by Month",
+    description: "Pick a birth month to reveal its birthstone, color, alternates, and spiritual meaning. Companion to the birthstone content cluster.",
+    mountId: "ps-birthstone",
+  },
+  {
+    slug: "past-life",
+    name: "Past Life Generator",
+    description: "Name and birth date in; a deterministic (stable per person) past-life persona out: era, role, and a lesson carried into this life. Shareable novelty tool.",
+    mountId: "ps-past-life",
   },
   {
     slug: "tarot-reading",
