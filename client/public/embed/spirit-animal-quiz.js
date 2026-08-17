@@ -8,7 +8,7 @@
   "use strict";
   var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/our-psychics";
   var CTA_TEXT = "Discover your guides with a psychic";
   var TITLE = "What's My Spirit Animal?";
   var INTRO = "A spirit animal reflects your deepest instincts and the energy you carry through the world. Answer a few questions to reveal yours.";

@@ -8,7 +8,7 @@
   "use strict";
   var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/our-psychics";
   var CTA_TEXT = "Explore your energy with a psychic";
   var TITLE = "Which Chakra Rules You?";
   var INTRO = "Your seven chakras are the energy centers of the body, and one usually leads the way. Answer a few questions to discover which chakra is most active in you right now.";

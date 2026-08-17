@@ -8,7 +8,7 @@
   "use strict";
   var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/our-psychics";
   var CTA_TEXT = "Ask a psychic to read your aura";
   var TITLE = "What Color Is My Aura?";
   var INTRO = "Your aura is the energy field that surrounds you, and its color reveals your emotional and spiritual state. Answer a few questions to discover the dominant color of yours.";

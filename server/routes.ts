@@ -10,6 +10,7 @@ import { normalizeHoroscopeHeadings, hasAllCanonicalSections } from "./horoscope
 import { registerVspRoutes } from "./routes-vsp";
 import { registerCiRoutes } from "./routes-ci";
 import { registerCalculatorRoutes } from "./routes-calculators";
+import { registerHubRoutes } from "./routes-hub";
 import { registerSocialPostsRoutes } from "./routes-social-posts";
 import { verifyAdminAuth } from "./auth-middleware";
 import { expensiveApiLimiter } from "./rate-limiters";
@@ -345,6 +346,7 @@ export async function registerRoutes(
   registerVspRoutes(app);
   registerCiRoutes(app);
   registerCalculatorRoutes(app);
+  registerHubRoutes(app);
   registerSocialPostsRoutes(app);
 
   // ============ ADMIN AUTH GUARD ============

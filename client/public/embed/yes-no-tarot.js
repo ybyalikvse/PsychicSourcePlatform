@@ -11,7 +11,7 @@
   var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
 
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/psychic-advice/tarot-readings";
   var CTA_TEXT = "Ask a psychic for the full story";
 
   // idx 0-21 map to Major Arcana with a yes/no/maybe verdict + reason.

@@ -12,7 +12,7 @@
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
 
   // Set to a destination URL to show a CTA link on the result panel.
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/psychic-advice/tarot-readings";
   var CTA_TEXT = "Talk with a Tarot Reader";
 
   var CARDS = [

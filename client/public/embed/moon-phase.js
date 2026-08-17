@@ -12,7 +12,7 @@
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
 
   // Set to a destination URL to show the CTA button.
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/our-psychics";
   var CTA_TEXT = "Ask a psychic what the moon means for you";
 
   var READINGS = {

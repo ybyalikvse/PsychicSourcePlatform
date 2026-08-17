@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>A Shared Dream</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap">
+<style>
+:root{--ps-accent:#a5121b;--ps-text:#241f1d;--ps-muted:#6f6a66;--ps-panel:#f7f3f0;--ps-border:#e4dcd4}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--ps-text);background:#fff;line-height:1.65}
+.wrap{max-width:680px;margin:0 auto;padding:46px 22px 70px}
+.eyebrow{text-align:center;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--ps-muted);margin-bottom:4px}
+h1{font-family:'Great Vibes',cursive;font-weight:400;font-size:clamp(40px,7vw,64px);color:var(--ps-accent);text-align:center;line-height:1.05}
+.date{text-align:center;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--ps-accent);margin-top:6px}
+.flags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:14px 0 4px}
+.flag{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ps-accent);border:1px solid rgba(165,18,27,.5);border-radius:999px;padding:3px 10px}
+.img{width:100%;max-width:520px;display:block;margin:22px auto 0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.narr{font-size:18px;line-height:1.8;white-space:pre-wrap;margin:22px 0}
+.meta{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:16px 0}
+.mitem{background:var(--ps-panel);border:1px solid var(--ps-border);border-radius:12px;padding:10px 16px;font-size:14px;text-align:center}
+.mitem b{display:block;color:var(--ps-accent);font-size:16px}
+.block{background:var(--ps-panel);border:1px solid var(--ps-border);border-radius:14px;padding:18px 20px;margin-top:18px}
+.block h4{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ps-accent);margin-bottom:8px}
+.interp{white-space:pre-wrap;font-size:16px}
+.lens{margin-bottom:16px}.lens:last-child{margin-bottom:0}
+.lenslabel{display:inline-block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ps-accent);margin-bottom:4px}
+.foot{text-align:center;margin-top:34px;font-size:13px;color:var(--ps-muted)}
+.state{text-align:center;padding:80px 20px;color:var(--ps-muted);font-size:17px}
+</style>
+</head>
+<body>
+<div class="wrap"><div id="app"><div class="state">Loading this dream...</div></div></div>
+<script>
+(function(){
+  var app=document.getElementById("app");
+  var slug=new URLSearchParams(location.search).get("d")||"";
+  function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+  function fmt(iso){try{return new Date(iso+"T00:00:00").toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"});}catch(e){return iso;}}
+  if(!/^[a-z0-9]{6,40}$/i.test(slug)){ app.innerHTML="<div class='state'>This dream link is not valid.</div>"; return; }
+  fetch("/api/hub/shared/"+encodeURIComponent(slug)).then(function(r){return r.ok?r.json():r.json().then(function(j){throw new Error(j.error||"Not found");});}).then(function(data){
+    var d=data.dream;
+    var flags=[d.isLucid?"Lucid":null,d.isRecurring?"Recurring":null,d.isNightmare?"Nightmare":null,d.isFalseAwakening?"False awakening":null,d.isSleepParalysis?"Sleep paralysis":null].filter(Boolean);
+    var meta=[];
+    if(d.mood) meta.push("<div class='mitem'>Mood on waking<b>"+esc(d.mood)+"</b></div>");
+    if(d.moodBeforeSleep) meta.push("<div class='mitem'>Before sleep<b>"+esc(d.moodBeforeSleep)+"</b></div>");
+    if(d.vividness) meta.push("<div class='mitem'>Vividness<b>"+d.vividness+"/5</b></div>");
+    if(d.sleepQuality) meta.push("<div class='mitem'>Sleep quality<b>"+d.sleepQuality+"/5</b></div>");
+    if(d.pov) meta.push("<div class='mitem'>Point of view<b>"+esc(d.pov)+"</b></div>");
+    if(d.agency) meta.push("<div class='mitem'>Sense of control<b>"+esc(d.agency)+"</b></div>");
+    var chips=function(arr){return (arr||[]).map(function(t){return "<span class='flag'>"+esc(t)+"</span>";}).join("");};
+    var LABEL={emotional:"Emotional",symbolic:"Symbolic",spiritual:"Spiritual",practical:"Practical"};
+    var interps=d.interpretations||{};
+    var interpHtml=Object.keys(interps).length?"<div class='block'><h4>Interpretation</h4>"+["emotional","symbolic","spiritual","practical"].filter(function(k){return interps[k];}).map(function(k){return "<div class='lens'><span class='lenslabel'>"+(LABEL[k]||k)+"</span><div class='interp'>"+esc(interps[k])+"</div></div>";}).join("")+"</div>":"";
+    var imgs=(d.images&&d.images.length)?d.images:(d.imageUrl?[{url:d.imageUrl}]:[]);
+    var imgHtml=imgs.length?"<img class='img' src='"+esc(imgs[0].url)+"' alt='Dream image'>":"";
+    app.innerHTML=
+      "<div class='eyebrow'>A dream from the Psychic Source Dream Journal</div>"+
+      "<h1>"+esc(d.title||"Untitled dream")+"</h1>"+
+      "<div class='date'>"+fmt(d.dreamtOn)+"</div>"+
+      (flags.length?"<div class='flags'>"+flags.map(function(f){return "<span class='flag'>"+esc(f)+"</span>";}).join("")+"</div>":"")+
+      imgHtml+
+      "<div class='narr'>"+esc(d.narrative)+"</div>"+
+      (meta.length?"<div class='meta'>"+meta.join("")+"</div>":"")+
+      ((d.emotions&&d.emotions.length)?"<div class='block'><h4>Emotions</h4><div class='flags' style='justify-content:flex-start'>"+chips(d.emotions)+"</div></div>":"")+
+      ((d.themes&&d.themes.length)?"<div class='block'><h4>Themes</h4><div class='flags' style='justify-content:flex-start'>"+chips(d.themes)+"</div></div>":"")+
+      interpHtml+
+      "<div class='foot'>Shared privately from the Psychic Source member Dream Journal.</div>";
+    document.title=(d.title||"A dream")+" | Dream Journal";
+  }).catch(function(e){ app.innerHTML="<div class='state'>"+esc(e.message||"This dream link is no longer available.")+"</div>"; });
+})();
+</script>
+</body>
+</html>

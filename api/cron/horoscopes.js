@@ -5388,6 +5388,8 @@ __export(schema_exports, {
   conversations: () => conversations,
   horoscopeEntries: () => horoscopeEntries,
   horoscopePrompts: () => horoscopePrompts,
+  hubDreamMessages: () => hubDreamMessages,
+  hubDreams: () => hubDreams,
   imageStyles: () => imageStyles,
   insertAnalyticsSnapshotSchema: () => insertAnalyticsSnapshotSchema,
   insertArticleSchema: () => insertArticleSchema,
@@ -16885,6 +16887,46 @@ var socialMediaLibrary = pgTable("social_media_library", {
   createdAt: text("created_at").notNull().default(sql`now()`)
 });
 var insertSocialMediaLibrarySchema = createInsertSchema(socialMediaLibrary).omit({ id: true, createdAt: true });
+var hubDreams = pgTable("hub_dreams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()::text`),
+  userId: text("user_id").notNull(),
+  dreamtOn: date("dreamt_on").notNull(),
+  title: text("title"),
+  narrative: text("narrative").notNull(),
+  mood: text("mood"),
+  isLucid: boolean("is_lucid").notNull().default(false),
+  isRecurring: boolean("is_recurring").notNull().default(false),
+  isNightmare: boolean("is_nightmare").notNull().default(false),
+  tags: jsonb("tags").$type(),
+  // richer capture (all optional)
+  vividness: integer("vividness"),
+  sleepQuality: integer("sleep_quality"),
+  moodBeforeSleep: text("mood_before_sleep"),
+  pov: text("pov"),
+  emotions: jsonb("emotions").$type(),
+  agency: text("agency"),
+  isFalseAwakening: boolean("is_false_awakening").notNull().default(false),
+  isSleepParalysis: boolean("is_sleep_paralysis").notNull().default(false),
+  // AI theme/symbol auto-extraction (replaces manual tags)
+  themes: jsonb("themes").$type(),
+  // interpretations keyed by lens (emotional/symbolic/spiritual/practical)
+  interpretations: jsonb("interpretations").$type(),
+  interpretation: text("interpretation"),
+  imageUrl: text("image_url"),
+  // history of every generated dream image (latest also mirrored to imageUrl)
+  images: jsonb("images").$type(),
+  // when set, the dream has an unguessable public read-only link
+  publicSlug: text("public_slug"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+var hubDreamMessages = pgTable("hub_dream_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()::text`),
+  dreamId: varchar("dream_id").notNull().references(() => hubDreams.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+});
 
 // server/storage.ts
 import { randomUUID } from "crypto";

@@ -10,7 +10,7 @@
   var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
 
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/psychics/love-psychics";
   var CTA_TEXT = "Ask a love psychic about your connection";
 
   // Deterministic, order-independent score mapped to an encouraging 40-99 band.

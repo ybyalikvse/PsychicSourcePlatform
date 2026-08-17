@@ -11,7 +11,7 @@
   var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
   var ORIGIN = SCRIPT_SRC ? new URL(SCRIPT_SRC).origin : "https://psychic-source-platform.vercel.app";
 
-  var CTA_URL = "";
+  var CTA_URL = "https://www.psychicsource.com/psychic-advice/tarot-readings";
   var CTA_TEXT = "Get a reading from a real psychic";
 
   var CARDS = ["The Fool","The Magician","The High Priestess","The Empress","The Emperor","The Hierophant","The Lovers","The Chariot","Strength","The Hermit","Wheel of Fortune","Justice","The Hanged Man","Death","Temperance","The Devil","The Tower","The Star","The Moon","The Sun","Judgement","The World"];

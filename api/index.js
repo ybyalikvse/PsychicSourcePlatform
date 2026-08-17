@@ -277167,6 +277167,8 @@ __export(schema_exports, {
   conversations: () => conversations,
   horoscopeEntries: () => horoscopeEntries,
   horoscopePrompts: () => horoscopePrompts,
+  hubDreamMessages: () => hubDreamMessages,
+  hubDreams: () => hubDreams,
   imageStyles: () => imageStyles,
   insertAnalyticsSnapshotSchema: () => insertAnalyticsSnapshotSchema,
   insertArticleSchema: () => insertArticleSchema,
@@ -288664,6 +288666,46 @@ var socialMediaLibrary = pgTable("social_media_library", {
   createdAt: text("created_at").notNull().default(sql`now()`)
 });
 var insertSocialMediaLibrarySchema = createInsertSchema(socialMediaLibrary).omit({ id: true, createdAt: true });
+var hubDreams = pgTable("hub_dreams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()::text`),
+  userId: text("user_id").notNull(),
+  dreamtOn: date("dreamt_on").notNull(),
+  title: text("title"),
+  narrative: text("narrative").notNull(),
+  mood: text("mood"),
+  isLucid: boolean("is_lucid").notNull().default(false),
+  isRecurring: boolean("is_recurring").notNull().default(false),
+  isNightmare: boolean("is_nightmare").notNull().default(false),
+  tags: jsonb("tags").$type(),
+  // richer capture (all optional)
+  vividness: integer("vividness"),
+  sleepQuality: integer("sleep_quality"),
+  moodBeforeSleep: text("mood_before_sleep"),
+  pov: text("pov"),
+  emotions: jsonb("emotions").$type(),
+  agency: text("agency"),
+  isFalseAwakening: boolean("is_false_awakening").notNull().default(false),
+  isSleepParalysis: boolean("is_sleep_paralysis").notNull().default(false),
+  // AI theme/symbol auto-extraction (replaces manual tags)
+  themes: jsonb("themes").$type(),
+  // interpretations keyed by lens (emotional/symbolic/spiritual/practical)
+  interpretations: jsonb("interpretations").$type(),
+  interpretation: text("interpretation"),
+  imageUrl: text("image_url"),
+  // history of every generated dream image (latest also mirrored to imageUrl)
+  images: jsonb("images").$type(),
+  // when set, the dream has an unguessable public read-only link
+  publicSlug: text("public_slug"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+var hubDreamMessages = pgTable("hub_dream_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()::text`),
+  dreamId: varchar("dream_id").notNull().references(() => hubDreams.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+});
 
 // server/storage.ts
 import { randomUUID } from "crypto";
@@ -313064,6 +313106,497 @@ function registerCalculatorRoutes(app2) {
   });
 }
 
+// server/routes-hub.ts
+init_s3();
+var OPENROUTER = "https://openrouter.ai/api/v1/chat/completions";
+var TEXT_MODEL = "anthropic/claude-sonnet-4-5";
+var IMAGE_MODEL = process.env.IMAGE_MODEL || "openai/gpt-5.4-image-2";
+var hits = {};
+function rateLimit(key, max, windowMs) {
+  const now = Date.now();
+  const arr = (hits[key] || []).filter((t6) => now - t6 < windowMs);
+  arr.push(now);
+  hits[key] = arr;
+  return arr.length <= max;
+}
+function resolveUser(req) {
+  const token = req.header("X-PS-Hub-Token");
+  if (token) {
+  }
+  const uid = (req.header("X-PS-Hub-Uid") || "").trim();
+  if (!uid || uid.length > 128) return null;
+  return uid;
+}
+async function openrouterText(system, messages2, maxTokens) {
+  const res = await fetch(OPENROUTER, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: TEXT_MODEL, max_tokens: maxTokens, messages: [{ role: "system", content: system }, ...messages2] })
+  });
+  if (!res.ok) throw new Error(`openrouter ${res.status}: ${await res.text()}`);
+  const data2 = await res.json();
+  return (data2?.choices?.[0]?.message?.content || "").trim();
+}
+async function openrouterImage(prompt) {
+  const res = await fetch(OPENROUTER, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: IMAGE_MODEL, modalities: ["image", "text"], messages: [{ role: "user", content: prompt }] })
+  });
+  if (!res.ok) throw new Error(`openrouter image ${res.status}: ${await res.text()}`);
+  const data2 = await res.json();
+  const msg = data2?.choices?.[0]?.message;
+  const fromImages = msg?.images?.[0]?.image_url?.url;
+  if (fromImages) return fromImages;
+  if (Array.isArray(msg?.content)) {
+    for (const block of msg.content) if (block?.type === "image_url" && block?.image_url?.url) return block.image_url.url;
+  }
+  throw new Error("openrouter response had no image");
+}
+var INTERPRET_SYSTEM = "You are a thoughtful, warm dream interpreter for a personal journaling tool. Offer an insightful, multi-layered reading of the dream: the emotional themes, notable symbols and what they can represent, and a gentle reflection or question for the dreamer to sit with. Treat interpretation as a reflective, generative practice, not fortune-telling or medical advice. Write in flowing prose of two to four short paragraphs, in a caring second-person voice. Do not use markdown headings. Do not use em dashes or en dashes.";
+var CHAT_SYSTEM = "You are continuing a warm, thoughtful conversation about a specific dream the user recorded. You already know the dream and any interpretation given; do not repeat them at length. Answer the user's follow-up with curiosity and care, staying grounded in their dream. Keep replies to a short paragraph or two. This is reflective journaling support, not fortune-telling or medical advice. Do not use em dashes or en dashes.";
+function dreamContext(d5) {
+  var parts = [];
+  if (d5.title) parts.push(`Title: ${d5.title}`);
+  parts.push(`Dreamt on: ${d5.dreamtOn}`);
+  if (d5.mood) parts.push(`Mood on waking: ${d5.mood}`);
+  var flags = [d5.isLucid ? "lucid" : null, d5.isRecurring ? "recurring" : null, d5.isNightmare ? "nightmare" : null].filter(Boolean);
+  if (flags.length) parts.push(`Qualities: ${flags.join(", ")}`);
+  if (d5.tags && d5.tags.length) parts.push(`Tags: ${d5.tags.join(", ")}`);
+  parts.push(`
+Dream:
+${d5.narrative}`);
+  return parts.join("\n");
+}
+function buildImagePrompt(narrative, title) {
+  var base = (title ? title + ". " : "") + narrative;
+  if (base.length > 900) base = base.slice(0, 900);
+  return "A dreamlike, surreal, painterly artwork depicting this dream. Soft ethereal light, rich atmosphere, symbolic and evocative, no text or words in the image. The dream: " + base;
+}
+function publicDream(d5) {
+  return {
+    id: d5.id,
+    dreamtOn: d5.dreamtOn,
+    title: d5.title,
+    narrative: d5.narrative,
+    mood: d5.mood,
+    isLucid: d5.isLucid,
+    isRecurring: d5.isRecurring,
+    isNightmare: d5.isNightmare,
+    vividness: d5.vividness,
+    sleepQuality: d5.sleepQuality,
+    moodBeforeSleep: d5.moodBeforeSleep,
+    pov: d5.pov,
+    agency: d5.agency,
+    emotions: d5.emotions || [],
+    isFalseAwakening: d5.isFalseAwakening,
+    isSleepParalysis: d5.isSleepParalysis,
+    themes: d5.themes || [],
+    interpretations: d5.interpretations || {},
+    imageUrl: d5.imageUrl,
+    images: d5.images || [],
+    publicSlug: d5.publicSlug || null,
+    createdAt: d5.createdAt instanceof Date ? d5.createdAt.toISOString() : d5.createdAt
+  };
+}
+function extraFields(b5) {
+  var f7 = {};
+  function rating(v8) {
+    var n5 = parseInt(v8, 10);
+    return v8 == null || isNaN(n5) ? null : Math.max(1, Math.min(5, n5));
+  }
+  if ("vividness" in b5) f7.vividness = rating(b5.vividness);
+  if ("sleepQuality" in b5) f7.sleepQuality = rating(b5.sleepQuality);
+  if ("moodBeforeSleep" in b5) f7.moodBeforeSleep = b5.moodBeforeSleep ? String(b5.moodBeforeSleep).slice(0, 40) : null;
+  if ("pov" in b5) f7.pov = b5.pov ? String(b5.pov).slice(0, 40) : null;
+  if ("emotions" in b5) f7.emotions = Array.isArray(b5.emotions) ? b5.emotions.map((t6) => String(t6).trim()).filter(Boolean).slice(0, 20) : null;
+  if ("agency" in b5) f7.agency = b5.agency ? String(b5.agency).slice(0, 40) : null;
+  if ("isFalseAwakening" in b5) f7.isFalseAwakening = !!b5.isFalseAwakening;
+  if ("isSleepParalysis" in b5) f7.isSleepParalysis = !!b5.isSleepParalysis;
+  return f7;
+}
+var DREAM_LENSES = {
+  emotional: "Read the dream through an emotional lens: the feelings present and what they reveal about the dreamer's inner state right now.",
+  symbolic: "Read the dream through a symbolic lens: the key symbols and images and the range of things they can represent.",
+  spiritual: "Read the dream through a gentle spiritual and intuitive lens: its deeper meaning and what the soul may be working through.",
+  practical: "Read the dream through a practical lens: what it may be nudging the dreamer to notice, tend to, or act on in waking life."
+};
+async function extractThemes(narrative) {
+  try {
+    var sys = 'Extract 3 to 6 short recurring themes or symbols from this dream. Output ONLY a JSON array of lowercase short strings, for example ["water","falling","being chased"]. No other text.';
+    var txt = await openrouterText(sys, [{ role: "user", content: narrative.slice(0, 4e3) }], 80);
+    var m6 = txt.match(/\[[\s\S]*\]/);
+    if (m6) {
+      var arr = JSON.parse(m6[0]);
+      if (Array.isArray(arr)) return arr.map((x6) => String(x6).trim().toLowerCase()).filter(Boolean).slice(0, 8);
+    }
+  } catch (e6) {
+  }
+  return [];
+}
+function makeSlug() {
+  try {
+    return globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  } catch (e6) {
+    return "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+}
+function registerHubRoutes(app2) {
+  const cors = (_req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-PS-Hub-Token, X-PS-Hub-Uid");
+    next();
+  };
+  const auth2 = (req, res, next) => {
+    const uid = resolveUser(req);
+    if (!uid) return res.status(401).json({ error: "Missing hub identity." });
+    req.hubUser = uid;
+    next();
+  };
+  app2.options("/api/hub/*", cors, (_req, res) => res.sendStatus(204));
+  app2.get("/api/hub/dreams", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      const rows = await db.select().from(hubDreams).where(eq(hubDreams.userId, uid)).orderBy(desc(hubDreams.dreamtOn), desc(hubDreams.createdAt));
+      res.json({ dreams: rows.map(publicDream) });
+    } catch (e6) {
+      console.error("hub list", e6);
+      res.status(500).json({ error: "Could not load dreams." });
+    }
+  });
+  app2.get("/api/hub/patterns", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      const rows = await db.select().from(hubDreams).where(eq(hubDreams.userId, uid));
+      const total = rows.length;
+      const count = (fn) => {
+        const m6 = {};
+        rows.forEach((d5) => {
+          const v8 = fn(d5);
+          (Array.isArray(v8) ? v8 : [v8]).forEach((x6) => {
+            if (x6) m6[x6] = (m6[x6] || 0) + 1;
+          });
+        });
+        return Object.entries(m6).sort((a5, b5) => b5[1] - a5[1]);
+      };
+      const weekday = new Array(7).fill(0);
+      rows.forEach((d5) => {
+        const wd = (/* @__PURE__ */ new Date(d5.dreamtOn + "T00:00:00")).getDay();
+        weekday[wd]++;
+      });
+      res.json({
+        total,
+        lucid: rows.filter((d5) => d5.isLucid).length,
+        recurring: rows.filter((d5) => d5.isRecurring).length,
+        nightmares: rows.filter((d5) => d5.isNightmare).length,
+        interpreted: rows.filter((d5) => d5.interpretation).length,
+        moods: count((d5) => d5.mood).slice(0, 6),
+        themes: count((d5) => d5.themes).slice(0, 12),
+        weekday
+      });
+    } catch (e6) {
+      console.error("hub patterns", e6);
+      res.status(500).json({ error: "Could not load patterns." });
+    }
+  });
+  app2.get("/api/hub/dreams/:id", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      const [d5] = await db.select().from(hubDreams).where(and(eq(hubDreams.id, req.params.id), eq(hubDreams.userId, uid))).limit(1);
+      if (!d5) return res.status(404).json({ error: "Dream not found." });
+      const msgs = await db.select().from(hubDreamMessages).where(eq(hubDreamMessages.dreamId, d5.id)).orderBy(hubDreamMessages.createdAt);
+      res.json({ dream: publicDream(d5), messages: msgs.map((m6) => ({ role: m6.role, content: m6.content })) });
+    } catch (e6) {
+      console.error("hub get", e6);
+      res.status(500).json({ error: "Could not load dream." });
+    }
+  });
+  app2.post("/api/hub/dreams", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      const b5 = req.body || {};
+      const narrative = String(b5.narrative || "").trim();
+      const dreamtOn = String(b5.dreamtOn || "").trim();
+      if (!narrative) return res.status(400).json({ error: "Please describe your dream." });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dreamtOn)) return res.status(400).json({ error: "A valid date is required." });
+      if (!rateLimit(`create:${uid}`, 60, 6e4)) return res.status(429).json({ error: "Slow down a moment." });
+      const values = {
+        userId: uid,
+        dreamtOn,
+        title: b5.title ? String(b5.title).slice(0, 200) : null,
+        narrative: narrative.slice(0, 8e3),
+        mood: b5.mood ? String(b5.mood).slice(0, 40) : null,
+        isLucid: !!b5.isLucid,
+        isRecurring: !!b5.isRecurring,
+        isNightmare: !!b5.isNightmare
+      };
+      Object.assign(values, extraFields(b5));
+      const themes = await extractThemes(narrative);
+      if (themes.length) values.themes = themes;
+      const [d5] = await db.insert(hubDreams).values(values).returning();
+      res.json({ dream: publicDream(d5) });
+    } catch (e6) {
+      console.error("hub create", e6);
+      res.status(500).json({ error: "Could not save your dream." });
+    }
+  });
+  app2.patch("/api/hub/dreams/:id", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      const b5 = req.body || {};
+      const patch = { updatedAt: /* @__PURE__ */ new Date() };
+      ["title", "narrative", "mood"].forEach((k5) => {
+        if (k5 in b5) patch[k5] = b5[k5] == null ? null : String(b5[k5]).slice(0, k5 === "narrative" ? 8e3 : 200);
+      });
+      ["isLucid", "isRecurring", "isNightmare"].forEach((k5) => {
+        if (k5 in b5) patch[k5] = !!b5[k5];
+      });
+      Object.assign(patch, extraFields(b5));
+      if (typeof b5.narrative === "string" && b5.narrative.trim()) {
+        const th = await extractThemes(b5.narrative);
+        if (th.length) patch.themes = th;
+      }
+      const [d5] = await db.update(hubDreams).set(patch).where(and(eq(hubDreams.id, req.params.id), eq(hubDreams.userId, uid))).returning();
+      if (!d5) return res.status(404).json({ error: "Dream not found." });
+      res.json({ dream: publicDream(d5) });
+    } catch (e6) {
+      console.error("hub update", e6);
+      res.status(500).json({ error: "Could not update." });
+    }
+  });
+  app2.delete("/api/hub/dreams/:id", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      const [d5] = await db.delete(hubDreams).where(and(eq(hubDreams.id, req.params.id), eq(hubDreams.userId, uid))).returning();
+      if (!d5) return res.status(404).json({ error: "Dream not found." });
+      res.json({ ok: true });
+    } catch (e6) {
+      console.error("hub delete", e6);
+      res.status(500).json({ error: "Could not delete." });
+    }
+  });
+  async function loadOwned(uid, id) {
+    const [d5] = await db.select().from(hubDreams).where(and(eq(hubDreams.id, id), eq(hubDreams.userId, uid))).limit(1);
+    return d5;
+  }
+  app2.post("/api/hub/dreams/:id/share", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      const enabled = (req.body || {}).enabled !== false;
+      const d5 = await loadOwned(uid, req.params.id);
+      if (!d5) return res.status(404).json({ error: "Dream not found." });
+      let slug = d5.publicSlug || null;
+      if (enabled) {
+        if (!slug) {
+          slug = makeSlug();
+          await db.update(hubDreams).set({ publicSlug: slug, updatedAt: /* @__PURE__ */ new Date() }).where(eq(hubDreams.id, d5.id));
+        }
+      } else {
+        slug = null;
+        await db.update(hubDreams).set({ publicSlug: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq(hubDreams.id, d5.id));
+      }
+      res.json({ publicSlug: slug });
+    } catch (e6) {
+      console.error("hub share", e6);
+      res.status(500).json({ error: "Could not update sharing." });
+    }
+  });
+  app2.get("/api/hub/shared/:slug", cors, async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      if (!/^[a-z0-9]{6,40}$/i.test(slug)) return res.status(404).json({ error: "Not found." });
+      const [d5] = await db.select().from(hubDreams).where(eq(hubDreams.publicSlug, slug)).limit(1);
+      if (!d5) return res.status(404).json({ error: "This dream link is no longer available." });
+      const pd = publicDream(d5);
+      delete pd.publicSlug;
+      res.json({ dream: pd });
+    } catch (e6) {
+      console.error("hub shared", e6);
+      res.status(500).json({ error: "Could not load this dream." });
+    }
+  });
+  app2.post("/api/hub/dreams/:id/interpret", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      if (!rateLimit(`interpret:${uid}`, 20, 6e4)) return res.status(429).json({ error: "Please wait a moment before interpreting again." });
+      const lens = DREAM_LENSES[String((req.body || {}).lens)] ? String((req.body || {}).lens) : "emotional";
+      const d5 = await loadOwned(uid, req.params.id);
+      if (!d5) return res.status(404).json({ error: "Dream not found." });
+      const sys = INTERPRET_SYSTEM + " " + DREAM_LENSES[lens];
+      const text2 = await openrouterText(sys, [{ role: "user", content: dreamContext(d5) }], 600);
+      if (!text2) return res.status(502).json({ error: "Could not interpret right now." });
+      const interps = Object.assign({}, d5.interpretations || {});
+      interps[lens] = text2;
+      await db.update(hubDreams).set({ interpretations: interps, updatedAt: /* @__PURE__ */ new Date() }).where(eq(hubDreams.id, d5.id));
+      res.json({ lens, text: text2, interpretations: interps });
+    } catch (e6) {
+      console.error("hub interpret", e6);
+      res.status(502).json({ error: "Could not interpret right now." });
+    }
+  });
+  app2.post("/api/hub/dreams/:id/chat", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      if (!rateLimit(`chat:${uid}`, 40, 6e4)) return res.status(429).json({ error: "Please slow down a moment." });
+      const message = String((req.body || {}).message || "").trim();
+      if (!message) return res.status(400).json({ error: "Type a question first." });
+      const d5 = await loadOwned(uid, req.params.id);
+      if (!d5) return res.status(404).json({ error: "Dream not found." });
+      const prior = await db.select().from(hubDreamMessages).where(eq(hubDreamMessages.dreamId, d5.id)).orderBy(hubDreamMessages.createdAt);
+      const interpText = Object.values(d5.interpretations || {}).join("\n\n");
+      const context = dreamContext(d5) + (interpText ? `
+
+Earlier interpretation:
+${interpText}` : "");
+      const msgs = [
+        { role: "user", content: `Here is my dream for context.
+
+${context}` },
+        ...prior.slice(-12).map((m6) => ({ role: m6.role, content: m6.content })),
+        { role: "user", content: message }
+      ];
+      const reply = await openrouterText(CHAT_SYSTEM, msgs, 500);
+      if (!reply) return res.status(502).json({ error: "No reply right now." });
+      await db.insert(hubDreamMessages).values([{ dreamId: d5.id, role: "user", content: message.slice(0, 2e3) }, { dreamId: d5.id, role: "assistant", content: reply }]);
+      res.json({ reply });
+    } catch (e6) {
+      console.error("hub chat", e6);
+      res.status(502).json({ error: "Could not reply right now." });
+    }
+  });
+  app2.post("/api/hub/dreams/:id/image", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      if (!rateLimit(`image:${uid}`, 10, 6e4)) return res.status(429).json({ error: "Please wait before generating another image." });
+      const d5 = await loadOwned(uid, req.params.id);
+      if (!d5) return res.status(404).json({ error: "Dream not found." });
+      const dataUrl = await openrouterImage(buildImagePrompt(d5.narrative, d5.title));
+      let url2 = dataUrl;
+      if (isS3Configured()) {
+        try {
+          url2 = await uploadImageToS3(dataUrl, `images/dreams/${d5.id}-${Date.now()}.png`, "image/png");
+        } catch (e6) {
+          console.error("hub image s3 upload failed, using data url", e6);
+        }
+      }
+      const images = [{ url: url2, createdAt: (/* @__PURE__ */ new Date()).toISOString() }].concat(d5.images || []).slice(0, 12);
+      await db.update(hubDreams).set({ imageUrl: url2, images, updatedAt: /* @__PURE__ */ new Date() }).where(eq(hubDreams.id, d5.id));
+      res.json({ imageUrl: url2, images });
+    } catch (e6) {
+      console.error("hub image", e6);
+      res.status(502).json({ error: "Could not create the dream image right now." });
+    }
+  });
+  app2.post("/api/hub/transcribe", cors, auth2, async (req, res) => {
+    try {
+      const uid = req.hubUser;
+      if (!process.env.OPENROUTER_API_KEY) return res.status(503).json({ error: "Voice transcription is not configured." });
+      if (!rateLimit(`transcribe:${uid}`, 20, 6e4)) return res.status(429).json({ error: "Please wait a moment." });
+      const body = req.body || {};
+      const audio = String(body.audio || "");
+      const b64 = audio.includes(",") ? audio.split(",")[1] : audio;
+      if (!b64) return res.status(400).json({ error: "No audio received." });
+      const buf = Buffer.from(b64, "base64");
+      if (buf.length === 0) return res.status(400).json({ error: "Empty audio." });
+      if (buf.length > 25 * 1024 * 1024) return res.status(413).json({ error: "Recording is too long." });
+      var format2 = String(body.format || "wav").toLowerCase().replace(/[^a-z0-9]/g, "");
+      var r6 = await fetch(OPENROUTER, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: [
+            { type: "text", text: "Transcribe this audio verbatim. Output only the exact words spoken, with no quotation marks, labels, or commentary. If there is no discernible speech, output nothing." },
+            { type: "input_audio", input_audio: { data: b64, format: format2 } }
+          ] }]
+        })
+      });
+      if (!r6.ok) {
+        console.error("hub transcribe openrouter", r6.status, await r6.text());
+        return res.status(502).json({ error: "Could not transcribe the audio." });
+      }
+      var data2 = await r6.json();
+      var text2 = (data2?.choices?.[0]?.message?.content || "").trim().replace(/^["'“‘]+|["'”’]+$/g, "").trim();
+      res.json({ text: text2 });
+    } catch (e6) {
+      console.error("hub transcribe", e6);
+      res.status(502).json({ error: "Could not transcribe the audio." });
+    }
+  });
+  function clientIp(req) {
+    var fwd = req.headers["x-forwarded-for"] || "";
+    return fwd.split(",")[0].trim() || req.socket && req.socket.remoteAddress || "anon";
+  }
+  var GUARDRAILS = " Interpret ONLY the specific data provided in the reading data; every insight must reference a specific factor from that data by name (for example a specific number, sign, house, aspect, or score). Never invent numbers, placements, or facts that are not in the data. This is reflective self-insight, not prediction, and never medical, financial, legal, or life-and-death advice. Frame difficulties as opportunities for growth. Write warmly in the second person as flowing prose, no markdown headings and no bulleted lists. Return plain prose only, with no surrounding tags, labels, or code fences. Do not use em dashes or en dashes.";
+  function clean(t6) {
+    return (t6 || "").trim().replace(/^\s*<[a-zA-Z_][^>]*>\s*/, "").replace(/\s*<\/[a-zA-Z_][^>]*>\s*$/, "").replace(/\s*[—–]\s*/g, ", ").replace(/ +- +/g, ", ").trim();
+  }
+  var KINDS = {
+    numerology: { role: "You are a wise, warm numerologist giving a personal reading.", words: 320 },
+    "birth-chart": { role: "You are an insightful astrologer interpreting a natal chart.", words: 380 },
+    compatibility: { role: "You are a relationship astrologer interpreting the synastry between two charts.", words: 340 },
+    attachment: { role: "You are a compassionate attachment-style coach.", words: 300 },
+    fortune: { role: "You are writing a short, uplifting daily reading.", words: 110 },
+    transits: { role: "You are an astrologer describing what current sky transits mean for a person's natal chart right now.", words: 260 }
+  };
+  function factsMsg(facts, extra) {
+    return "Here is the reading data (the computed facts). " + (extra || "") + "\n<reading_data>\n" + JSON.stringify(facts, null, 2) + "\n</reading_data>";
+  }
+  app2.post("/api/hub/ai/interpret", cors, async (req, res) => {
+    try {
+      if (!rateLimit(`ai-interp:${clientIp(req)}`, 15, 6e4)) return res.status(429).json({ error: "Please wait a moment before generating another reading." });
+      const b5 = req.body || {};
+      const kind = KINDS[String(b5.kind)] ? String(b5.kind) : null;
+      if (!kind) return res.status(400).json({ error: "Unknown reading type." });
+      if (!b5.facts || typeof b5.facts !== "object") return res.status(400).json({ error: "Missing reading data." });
+      const sys = KINDS[kind].role + GUARDRAILS + " Keep the whole reading to about " + KINDS[kind].words + " words.";
+      const extra = b5.mode ? "This is a " + String(b5.mode).slice(0, 30) + " reading." : "";
+      const text2 = await openrouterText(sys, [{ role: "user", content: factsMsg(b5.facts, extra) }], Math.ceil(KINDS[kind].words * 2.2));
+      if (!text2) return res.status(502).json({ error: "Could not generate the reading right now." });
+      res.json({ text: clean(text2) });
+    } catch (e6) {
+      console.error("hub ai interpret", e6);
+      res.status(502).json({ error: "Could not generate the reading right now." });
+    }
+  });
+  app2.post("/api/hub/ai/chat", cors, async (req, res) => {
+    try {
+      if (!rateLimit(`ai-chat:${clientIp(req)}`, 30, 6e4)) return res.status(429).json({ error: "Please slow down a moment." });
+      const b5 = req.body || {};
+      const kind = KINDS[String(b5.kind)] ? String(b5.kind) : null;
+      if (!kind) return res.status(400).json({ error: "Unknown reading type." });
+      if (!b5.facts || typeof b5.facts !== "object") return res.status(400).json({ error: "Missing reading data." });
+      const msgs = Array.isArray(b5.messages) ? b5.messages : [];
+      if (!msgs.length) return res.status(400).json({ error: "Ask a question first." });
+      const sys = KINDS[kind].role + " You are continuing a conversation about the person's reading." + GUARDRAILS + " Keep replies to a short paragraph or two.";
+      const convo = [{ role: "user", content: factsMsg(b5.facts, "Use this as grounding for the conversation.") }].concat(msgs.slice(-12).map(function(m6) {
+        return { role: m6.role === "assistant" ? "assistant" : "user", content: String(m6.content || "").slice(0, 1500) };
+      }));
+      const reply = await openrouterText(sys, convo, 500);
+      if (!reply) return res.status(502).json({ error: "No reply right now." });
+      res.json({ reply: clean(reply) });
+    } catch (e6) {
+      console.error("hub ai chat", e6);
+      res.status(502).json({ error: "Could not reply right now." });
+    }
+  });
+  app2.post("/api/hub/ai/title", cors, async (req, res) => {
+    try {
+      if (!rateLimit(`ai-title:${clientIp(req)}`, 20, 6e4)) return res.status(429).json({ error: "Please wait a moment." });
+      var narrative = String((req.body || {}).narrative || "").trim();
+      if (!narrative) return res.status(400).json({ error: "Write your dream first." });
+      var sys = "You write a short, evocative title for a dream. Output only the title, two to six words, with no quotation marks and no ending punctuation. Do not use em dashes or en dashes.";
+      var text2 = await openrouterText(sys, [{ role: "user", content: "Dream:\n" + narrative.slice(0, 4e3) }], 30);
+      if (!text2) return res.status(502).json({ error: "Could not suggest a title." });
+      res.json({ title: clean(text2).replace(/["'.]+$/g, "").slice(0, 80) });
+    } catch (e6) {
+      console.error("hub ai title", e6);
+      res.status(502).json({ error: "Could not suggest a title." });
+    }
+  });
+}
+
 // server/routes-social-posts.ts
 var import_express3 = __toESM(require_express2(), 1);
 init_openai();
@@ -314236,11 +314769,11 @@ var validations = {
    *
    * @param hits {any} - The `totalHits` returned by the store.
    */
-  positiveHits(hits) {
-    if (typeof hits !== "number" || hits < 1 || hits !== Math.round(hits)) {
+  positiveHits(hits2) {
+    if (typeof hits2 !== "number" || hits2 < 1 || hits2 !== Math.round(hits2)) {
       throw new ValidationError(
         "ERR_ERL_INVALID_HITS",
-        `The totalHits value returned from the store must be a positive integer, got ${hits}`
+        `The totalHits value returned from the store must be a positive integer, got ${hits2}`
       );
     }
   },
@@ -314672,7 +315205,7 @@ var handleAsyncErrors = (fn) => async (request, response, next) => {
     next(error2);
   }
 };
-var rateLimit = (passedOptions) => {
+var rateLimit2 = (passedOptions) => {
   const config = parseOptions(passedOptions ?? {});
   const options = getOptionsFromConfig(config);
   config.validations.creationStack(config.store);
@@ -314805,7 +315338,7 @@ var rateLimit = (passedOptions) => {
   middleware.getKey = typeof config.store.get === "function" ? config.store.get.bind(config.store) : getThrowFn;
   return middleware;
 };
-var rate_limit_default = rateLimit;
+var rate_limit_default = rateLimit2;
 
 // server/rate-limiters.ts
 var expensiveApiLimiter = rate_limit_default({
@@ -321213,6 +321746,7 @@ async function registerRoutes(httpServer, app2) {
   registerVspRoutes(app2);
   registerCiRoutes(app2);
   registerCalculatorRoutes(app2);
+  registerHubRoutes(app2);
   registerSocialPostsRoutes(app2);
   const ADMIN_GUARD_SKIP_PREFIXES = [
     "/auth/",

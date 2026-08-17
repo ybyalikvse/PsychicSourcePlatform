@@ -9,6 +9,13 @@ const EMBED_ORIGIN = "https://psychic-source-platform.vercel.app";
 
 const CALCULATORS = [
   {
+    slug: "tools-hub",
+    name: "Member Tools Hub (subscriber-only)",
+    description:
+      "ONE embed for the whole subscriber toolkit. Renders a hub landing grid and lazy-loads each tool (Life Path, Fortune Cookie, Zodiac Compatibility, Birth Chart, Attachment Style, Dream Journal) as an in-place view with a back button. Meant to be placed behind the Psychic Source member login. Supports an optional signed member token (data-token) for real gating and cross-device saved data; falls back to an anonymous per-browser id otherwise.",
+    mountId: "ps-tools-hub",
+  },
+  {
     slug: "rising-sign",
     name: "Rising Sign Calculator",
     description:
