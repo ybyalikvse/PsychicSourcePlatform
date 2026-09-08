@@ -16,3 +16,6 @@ replit.md
 .agents/
 .vercel
 .env*.local
+
+# local scratch (horoscope cleanup backups, import dumps)
+tmp/
