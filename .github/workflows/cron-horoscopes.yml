@@ -122,6 +122,14 @@ jobs:
             # failed to generate. No-op (skipped by the API) on healthy days.
             generate weekly "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) weekly catchup" || FAILURES=$((FAILURES+1))
             generate monthly "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) monthly catchup" || FAILURES=$((FAILURES+1))
+            # Look one week ahead so a period never has to be created on the day
+            # it starts. Downstream pulls at 00:03 ET used to race that morning's
+            # run and 404 every Monday (new week) and every 1st (new month).
+            # +7d always lands in next week, so next week's weekly is built a
+            # week early; for monthly it is a no-op mid-month and builds next
+            # month once we are inside the last 7 days of this one.
+            generate weekly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) weekly +7d lookahead" || FAILURES=$((FAILURES+1))
+            generate monthly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) monthly +7d lookahead" || FAILURES=$((FAILURES+1))
           else
             generate "$HOROSCOPE_TYPE" "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) $HOROSCOPE_TYPE" || FAILURES=$((FAILURES+1))
           fi

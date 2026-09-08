@@ -324977,7 +324977,12 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         });
       }
       let targetDate;
-      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+      if (typeof daysAhead === "number" && daysAhead !== 0) {
+        if (!Number.isInteger(daysAhead) || daysAhead < GEN_DAYS_AHEAD_MIN || daysAhead > GEN_DAYS_AHEAD_MAX) {
+          return res.status(400).json({
+            error: `daysAhead must be an integer from ${GEN_DAYS_AHEAD_MIN} to ${GEN_DAYS_AHEAD_MAX}.`
+          });
+        }
         targetDate = /* @__PURE__ */ new Date();
         targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
@@ -325034,7 +325039,12 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       }
       const lang = language || "en";
       let targetDate;
-      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+      if (typeof daysAhead === "number" && daysAhead !== 0) {
+        if (!Number.isInteger(daysAhead) || daysAhead < GEN_DAYS_AHEAD_MIN || daysAhead > GEN_DAYS_AHEAD_MAX) {
+          return res.status(400).json({
+            error: `daysAhead must be an integer from ${GEN_DAYS_AHEAD_MIN} to ${GEN_DAYS_AHEAD_MAX}.`
+          });
+        }
         targetDate = /* @__PURE__ */ new Date();
         targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
@@ -325049,6 +325059,8 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   function escapeXml2(str2) {
     return str2.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   }
+  const GEN_DAYS_AHEAD_MIN = -400;
+  const GEN_DAYS_AHEAD_MAX = 31;
   const FEED_PCF_MIN = -31;
   const FEED_PCF_MAX = 3;
   const SITE_LINKS = {

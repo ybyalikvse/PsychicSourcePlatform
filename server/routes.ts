@@ -4359,8 +4359,19 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         });
       }
 
+      // daysAhead shifts the target date for every type, not just daily. Weekly
+      // and monthly periods only came into existence on the day they started,
+      // so the consumer's 00:03 ET pull raced that day's generation run and got
+      // a 404 every Monday and every 1st of the month. Running the daily job
+      // with daysAhead=7 now materialises next week and next month ahead of
+      // time, which removes the race instead of narrowing it.
       let targetDate: Date | undefined;
-      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+      if (typeof daysAhead === "number" && daysAhead !== 0) {
+        if (!Number.isInteger(daysAhead) || daysAhead < GEN_DAYS_AHEAD_MIN || daysAhead > GEN_DAYS_AHEAD_MAX) {
+          return res.status(400).json({
+            error: `daysAhead must be an integer from ${GEN_DAYS_AHEAD_MIN} to ${GEN_DAYS_AHEAD_MAX}.`
+          });
+        }
         targetDate = new Date();
         targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
@@ -4419,7 +4430,12 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const lang = language || "en";
 
       let targetDate: Date | undefined;
-      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+      if (typeof daysAhead === "number" && daysAhead !== 0) {
+        if (!Number.isInteger(daysAhead) || daysAhead < GEN_DAYS_AHEAD_MIN || daysAhead > GEN_DAYS_AHEAD_MAX) {
+          return res.status(400).json({
+            error: `daysAhead must be an integer from ${GEN_DAYS_AHEAD_MIN} to ${GEN_DAYS_AHEAD_MAX}.`
+          });
+        }
         targetDate = new Date();
         targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
@@ -4442,6 +4458,12 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
   }
+
+  // Generation offset bounds. Negative values backfill a past period that no
+  // run will ever revisit on its own; the upper bound covers a full month of
+  // lookahead so next month can be built before it starts.
+  const GEN_DAYS_AHEAD_MIN = -400;
+  const GEN_DAYS_AHEAD_MAX = 31;
 
   // Daily feed offset bounds; the upper bound matches the generation lookahead.
   const FEED_PCF_MIN = -31;
