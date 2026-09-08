@@ -37,12 +37,14 @@ const ZODIAC_SYMBOLS: Record<string, string> = {
   Sagittarius: "\u2650", Capricorn: "\u2651", Aquarius: "\u2652", Pisces: "\u2653"
 };
 
-const DAILY_DAY_LABELS = ["Today", "Tomorrow", "+2 Days", "+3 Days"];
+const DAILY_DAY_LABELS = ["Today", "Tomorrow", "+2 Days", "+3 Days", "+4 Days", "+5 Days"];
 
-// Today, tomorrow and +2 are always populated by earlier runs. +3 is only
-// filled by the current day's run, which GitHub schedules hours late, so it is
-// legitimately empty for much of the day and must not read as a failure.
-const REQUIRED_DAILY_DAYS = 3;
+const DAILY_DAY_OFFSETS = [0, 1, 2, 3, 4, 5];
+
+// psychicsource.com pulls today+3 at 00:03 ET, before that day's run, so
+// today..+3 must always already be on hand — that is the real health bar.
+// +4 and +5 are margin the current run tops up, so their absence is normal.
+const REQUIRED_DAILY_DAYS = 4;
 
 // A site/language pair with no active prompt is an intentional gap — pathforward
 // has no Spanish — so it gets its own neutral state instead of "Pending".
@@ -133,7 +135,7 @@ export default function Horoscopes() {
 
     try {
       if (type === "daily") {
-        const daysToGen = [0, 1, 2, 3];
+        const daysToGen = DAILY_DAY_OFFSETS;
         let totalCount = 0;
         let completedCount = 0;
 
@@ -362,7 +364,7 @@ export default function Horoscopes() {
 
   const dailyDayStatuses = useMemo(() => {
     if (!siteStatus?.daily) return [];
-    return [0, 1, 2, 3].map(d => {
+    return DAILY_DAY_OFFSETS.map(d => {
       const dayStatus = siteStatus.daily[`day${d}`];
       return {
         daysAhead: d,
@@ -479,8 +481,8 @@ export default function Horoscopes() {
                 const count = dailyDayStatuses.filter(d => d.generated).length;
                 const requiredMet = dailyDayStatuses.every(d => !d.required || d.generated);
                 return requiredMet
-                  ? <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />{count}/4 Days</Badge>
-                  : <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />{count}/4 Days</Badge>;
+                  ? <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />{count}/{DAILY_DAY_OFFSETS.length} Days</Badge>
+                  : <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />{count}/{DAILY_DAY_OFFSETS.length} Days</Badge>;
               })()}
             </div>
           </CardContent>
@@ -551,7 +553,7 @@ export default function Horoscopes() {
 
         <TabsContent value="daily" className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            {[0, 1, 2, 3].map(d => {
+            {DAILY_DAY_OFFSETS.map(d => {
               const dayStatus = dailyDayStatuses[d];
               const isActive = dailyDaysAhead === d;
               return (

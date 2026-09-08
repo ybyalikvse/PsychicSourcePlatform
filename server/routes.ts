@@ -4467,7 +4467,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
   // Daily feed offset bounds; the upper bound matches the generation lookahead.
   const FEED_PCF_MIN = -31;
-  const FEED_PCF_MAX = 3;
+  const FEED_PCF_MAX = 5;
 
   const SITE_LINKS: Record<string, string> = {
     psychicsource: "https://www.psychicsource.com",
@@ -4559,7 +4559,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const weeklyPeriod = getHoroscopePeriod("weekly", now);
       const monthlyPeriod = getHoroscopePeriod("monthly", now);
 
-      const dailyDays = [0, 1, 2, 3];
+      const dailyDays = [0, 1, 2, 3, 4, 5];
       const dailyPeriods = dailyDays.map(d => {
         const date = new Date();
         date.setUTCDate(date.getUTCDate() + d);

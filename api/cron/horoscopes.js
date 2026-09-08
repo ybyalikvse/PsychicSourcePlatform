@@ -25505,10 +25505,11 @@ async function generateValidatedContent(sign, type, language, periodLabel, promp
   }
   throw new Error(`Generated content for ${sign} (${type}/${language}/${site}) is missing required sections after ${maxAttempts} attempts`);
 }
+var DAILY_LOOKAHEAD_DAYS = [0, 1, 2, 3, 4, 5];
 var HOROSCOPE_SITES = ["psychicsource", "pathforward"];
 async function runHoroscopeGeneration(type) {
   const languages = ["en", "es"];
-  const daysToGenerate = type === "daily" ? [0, 1, 2, 3] : [0];
+  const daysToGenerate = type === "daily" ? DAILY_LOOKAHEAD_DAYS : [0];
   for (const siteId of HOROSCOPE_SITES) {
     for (const lang of languages) {
       try {

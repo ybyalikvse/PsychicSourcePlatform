@@ -325062,7 +325062,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   const GEN_DAYS_AHEAD_MIN = -400;
   const GEN_DAYS_AHEAD_MAX = 31;
   const FEED_PCF_MIN = -31;
-  const FEED_PCF_MAX = 3;
+  const FEED_PCF_MAX = 5;
   const SITE_LINKS = {
     psychicsource: "https://www.psychicsource.com",
     pathforward: "https://www.pathforwardpsychics.com"
@@ -325145,7 +325145,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const now = /* @__PURE__ */ new Date();
       const weeklyPeriod = getHoroscopePeriod("weekly", now);
       const monthlyPeriod = getHoroscopePeriod("monthly", now);
-      const dailyDays = [0, 1, 2, 3];
+      const dailyDays = [0, 1, 2, 3, 4, 5];
       const dailyPeriods = dailyDays.map((d5) => {
         const date3 = /* @__PURE__ */ new Date();
         date3.setUTCDate(date3.getUTCDate() + d5);

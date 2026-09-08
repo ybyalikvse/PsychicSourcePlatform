@@ -114,7 +114,7 @@ jobs:
           FAILURES=0
 
           if [ "$HOROSCOPE_TYPE" = "daily" ]; then
-            for DAYS_AHEAD in 0 1 2 3; do
+            for DAYS_AHEAD in 0 1 2 3 4 5; do
               generate daily "$DAYS_AHEAD" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) daily +${DAYS_AHEAD}d" || FAILURES=$((FAILURES+1))
               sleep 2
             done

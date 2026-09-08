@@ -111,11 +111,19 @@ async function generateValidatedContent(
   throw new Error(`Generated content for ${sign} (${type}/${language}/${site}) is missing required sections after ${maxAttempts} attempts`);
 }
 
+// The consumer pulls "today + 3" at 00:03 ET, which is hours BEFORE this job
+// runs. So today+3 has to already exist from a previous run: a horizon of
+// exactly +3 meant the furthest day on hand at pull time was only today+2, and
+// the pull 404'd every single night. Generating through +5 keeps two full days
+// of margin, so a completely missed run still cannot starve the consumer.
+// Steady-state cost is unchanged — each run only fills the new furthest day.
+const DAILY_LOOKAHEAD_DAYS = [0, 1, 2, 3, 4, 5];
+
 const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
 
 export async function runHoroscopeGeneration(type: string) {
   const languages = ["en", "es"];
-  const daysToGenerate = type === "daily" ? [0, 1, 2, 3] : [0];
+  const daysToGenerate = type === "daily" ? DAILY_LOOKAHEAD_DAYS : [0];
 
   for (const siteId of HOROSCOPE_SITES) {
     for (const lang of languages) {
@@ -173,7 +181,7 @@ async function runStartupCatchup() {
 
   for (const type of ["daily", "weekly", "monthly"] as const) {
     const languages = ["en", "es"];
-    const daysToCheck = type === "daily" ? [0, 1, 2, 3] : [0];
+    const daysToCheck = type === "daily" ? DAILY_LOOKAHEAD_DAYS : [0];
 
     for (const siteId of HOROSCOPE_SITES) {
       for (const lang of languages) {
