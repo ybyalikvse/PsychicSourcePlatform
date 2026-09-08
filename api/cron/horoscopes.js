@@ -25443,25 +25443,25 @@ function getHoroscopePeriod(type, date2) {
   const formatDate = (dt) => dt.toISOString().split("T")[0];
   if (type === "daily") {
     const dateStr = formatDate(d);
-    return { start: dateStr, end: dateStr, label: d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }) };
+    return { start: dateStr, end: dateStr, label: d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) };
   } else if (type === "weekly") {
-    const dayOfWeek = d.getDay();
+    const dayOfWeek = d.getUTCDay();
     const monday = new Date(d);
-    monday.setDate(d.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    monday.setUTCDate(d.getUTCDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
     const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
     return {
       start: formatDate(monday),
       end: formatDate(sunday),
-      label: `week beginning ${monday.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}`
+      label: `week beginning ${monday.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}`
     };
   } else {
-    const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
     return {
       start: formatDate(firstDay),
       end: formatDate(lastDay),
-      label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+      label: d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
     };
   }
 }
@@ -25520,7 +25520,7 @@ async function runHoroscopeGeneration(type) {
           let targetDate;
           if (dayOffset > 0) {
             targetDate = /* @__PURE__ */ new Date();
-            targetDate.setDate(targetDate.getDate() + dayOffset);
+            targetDate.setUTCDate(targetDate.getUTCDate() + dayOffset);
           }
           const period = getHoroscopePeriod(type, targetDate);
           const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start, siteId);

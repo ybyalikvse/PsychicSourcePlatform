@@ -11,28 +11,32 @@ const ZODIAC_SIGNS = [
 function getHoroscopePeriod(type: string, date?: Date): { start: string; end: string; label: string } {
   const d = date || new Date();
   const formatDate = (dt: Date) => dt.toISOString().split('T')[0];
+  // Every value below is derived in UTC. formatDate serialises through
+  // toISOString, so local-time getters here shifted the period on any host that
+  // isn't UTC: monthly built `new Date(y, m, 1)` at local midnight and wrote the
+  // last day of the *previous* month when run from UTC+n.
 
   if (type === "daily") {
     const dateStr = formatDate(d);
-    return { start: dateStr, end: dateStr, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }) };
+    return { start: dateStr, end: dateStr, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) };
   } else if (type === "weekly") {
-    const dayOfWeek = d.getDay();
+    const dayOfWeek = d.getUTCDay();
     const monday = new Date(d);
-    monday.setDate(d.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    monday.setUTCDate(d.getUTCDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
     const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
     return {
       start: formatDate(monday),
       end: formatDate(sunday),
-      label: `week beginning ${monday.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}`
+      label: `week beginning ${monday.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}`
     };
   } else {
-    const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
     return {
       start: formatDate(firstDay),
       end: formatDate(lastDay),
-      label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     };
   }
 }
@@ -125,7 +129,7 @@ export async function runHoroscopeGeneration(type: string) {
           let targetDate: Date | undefined;
           if (dayOffset > 0) {
             targetDate = new Date();
-            targetDate.setDate(targetDate.getDate() + dayOffset);
+            targetDate.setUTCDate(targetDate.getUTCDate() + dayOffset);
           }
 
           const period = getHoroscopePeriod(type, targetDate);
@@ -180,7 +184,7 @@ async function runStartupCatchup() {
           let targetDate: Date | undefined;
           if (dayOffset > 0) {
             targetDate = new Date();
-            targetDate.setDate(targetDate.getDate() + dayOffset);
+            targetDate.setUTCDate(targetDate.getUTCDate() + dayOffset);
           }
 
           const period = getHoroscopePeriod(type, targetDate);

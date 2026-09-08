@@ -4260,28 +4260,32 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
   function getHoroscopePeriod(type: string, date?: Date): { start: string; end: string; label: string } {
     const d = date || new Date();
     const formatDate = (dt: Date) => dt.toISOString().split('T')[0];
+    // Every value below is derived in UTC. formatDate serialises through
+    // toISOString, so local-time getters here shifted the period on any host that
+    // isn't UTC: monthly built `new Date(y, m, 1)` at local midnight and wrote the
+    // last day of the *previous* month when run from UTC+n.
 
     if (type === "daily") {
       const dateStr = formatDate(d);
-      return { start: dateStr, end: dateStr, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }) };
+      return { start: dateStr, end: dateStr, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) };
     } else if (type === "weekly") {
-      const dayOfWeek = d.getDay();
+      const dayOfWeek = d.getUTCDay();
       const monday = new Date(d);
-      monday.setDate(d.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      monday.setUTCDate(d.getUTCDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
       const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
       return {
         start: formatDate(monday),
         end: formatDate(sunday),
-        label: `week beginning ${monday.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}`
+        label: `week beginning ${monday.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}`
       };
     } else {
-      const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
-      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+      const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
       return {
         start: formatDate(firstDay),
         end: formatDate(lastDay),
-        label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
       };
     }
   }
@@ -4358,7 +4362,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       let targetDate: Date | undefined;
       if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
         targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() + daysAhead);
+        targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
 
       const period = getHoroscopePeriod(type, targetDate);
@@ -4417,7 +4421,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       let targetDate: Date | undefined;
       if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
         targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() + daysAhead);
+        targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
 
       const period = getHoroscopePeriod(type, targetDate);
@@ -4439,6 +4443,10 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       .replace(/'/g, '&apos;');
   }
 
+  // Daily feed offset bounds; the upper bound matches the generation lookahead.
+  const FEED_PCF_MIN = -31;
+  const FEED_PCF_MAX = 3;
+
   const SITE_LINKS: Record<string, string> = {
     psychicsource: "https://www.psychicsource.com",
     pathforward: "https://www.pathforwardpsychics.com",
@@ -4455,17 +4463,26 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
       let targetDate: Date | undefined;
       if (type === "daily") {
+        // PCF is a day offset from today: negative for past days, positive for
+        // the lookahead. The old guard accepted 0..3 only and then fell through
+        // with targetDate still undefined, so ?PCF=-1 quietly served *today's*
+        // feed. Out-of-range is now a loud 400 rather than silently wrong data.
         const pcf = parseInt(req.query.PCF as string || "0", 10);
-        if (!isNaN(pcf) && pcf >= 0 && pcf <= 3) {
-          targetDate = new Date();
-          targetDate.setDate(targetDate.getDate() + pcf);
+        if (isNaN(pcf) || pcf < FEED_PCF_MIN || pcf > FEED_PCF_MAX) {
+          res.setHeader("Cache-Control", "no-store");
+          return res.status(400).type("application/xml").send(
+            `<?xml version="1.0" encoding="UTF-8"?>\n<rss><channel><title>PCF must be an integer from ${FEED_PCF_MIN} to ${FEED_PCF_MAX}</title></channel></rss>`
+          );
         }
+        targetDate = new Date();
+        targetDate.setUTCDate(targetDate.getUTCDate() + pcf);
       }
 
       const period = getHoroscopePeriod(type, targetDate);
       const entries = await storage.getHoroscopeEntriesByPeriod(type, language, period.start, siteId);
 
       if (entries.length === 0) {
+        res.setHeader("Cache-Control", "no-store");
         return res.status(404).type("application/xml").send(
           `<?xml version="1.0" encoding="UTF-8"?>\n<rss><channel><title>No horoscopes found</title></channel></rss>`
         );
@@ -4495,6 +4512,12 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
       xml += `</channel>\n</rss>`;
 
+      // Serve this from Vercel's edge cache. Each miss costs a cold start plus
+      // a cross-region database round trip, which is what timed out the
+      // consumer's nightly pull. s-maxage is short enough that the UTC midnight
+      // period rollover surfaces within minutes, while stale-while-revalidate
+      // keeps a repeat pull or a retry instant while the refresh runs behind it.
+      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=300, stale-while-revalidate=86400");
       res.type("application/xml").send(xml);
     } catch (error) {
       console.error("[Horoscope Feed] Error:", error);
@@ -4517,7 +4540,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const dailyDays = [0, 1, 2, 3];
       const dailyPeriods = dailyDays.map(d => {
         const date = new Date();
-        date.setDate(date.getDate() + d);
+        date.setUTCDate(date.getUTCDate() + d);
         return getHoroscopePeriod("daily", date);
       });
 
@@ -4535,42 +4558,45 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
       for (const siteId of HOROSCOPE_SITES) {
         const langs = activeSiteLangs.get(siteId) || new Set<string>();
+        // Only report languages this site has an active prompt for. siteLangs
+        // used to be computed and then ignored, so pathforward was queried and
+        // reported for Spanish it never had, showing a permanent red 'Pending'.
         const siteLangs = HOROSCOPE_LANGUAGES.filter(l => langs.has(l));
         if (siteLangs.length === 0 && siteId !== "psychicsource") continue;
 
         const dailyPromises = dailyDays.flatMap(d =>
-          HOROSCOPE_LANGUAGES.map(l => storage.getHoroscopeEntriesByPeriod("daily", l, dailyPeriods[d].start, siteId))
+          siteLangs.map(l => storage.getHoroscopeEntriesByPeriod("daily", l, dailyPeriods[d].start, siteId))
         );
 
-        const weeklyMonthlyPromises = HOROSCOPE_LANGUAGES.flatMap(l => [
+        const weeklyMonthlyPromises = siteLangs.flatMap(l => [
           storage.getHoroscopeEntriesByPeriod("weekly", l, weeklyPeriod.start, siteId),
           storage.getHoroscopeEntriesByPeriod("monthly", l, monthlyPeriod.start, siteId),
         ]);
 
         const allResults = await Promise.all([...dailyPromises, ...weeklyMonthlyPromises]);
-        const dailyResults = allResults.slice(0, dailyDays.length * HOROSCOPE_LANGUAGES.length);
-        const wmResults = allResults.slice(dailyDays.length * HOROSCOPE_LANGUAGES.length);
+        const dailyResults = allResults.slice(0, dailyDays.length * siteLangs.length);
+        const wmResults = allResults.slice(dailyDays.length * siteLangs.length);
 
         const dailySt: Record<string, Record<string, any>> = {};
         for (let d = 0; d < dailyDays.length; d++) {
           const langData: Record<string, any> = {};
-          for (let li = 0; li < HOROSCOPE_LANGUAGES.length; li++) {
-            const entries = dailyResults[d * HOROSCOPE_LANGUAGES.length + li];
-            langData[HOROSCOPE_LANGUAGES[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d] };
+          for (let li = 0; li < siteLangs.length; li++) {
+            const entries = dailyResults[d * siteLangs.length + li];
+            langData[siteLangs[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d] };
           }
           dailySt[`day${d}`] = { ...langData, daysAhead: d };
         }
 
         const weeklySt: Record<string, any> = {};
         const monthlySt: Record<string, any> = {};
-        for (let li = 0; li < HOROSCOPE_LANGUAGES.length; li++) {
+        for (let li = 0; li < siteLangs.length; li++) {
           const wEntries = wmResults[li * 2];
           const mEntries = wmResults[li * 2 + 1];
-          weeklySt[HOROSCOPE_LANGUAGES[li]] = { generated: wEntries.length > 0, count: wEntries.length, period: weeklyPeriod };
-          monthlySt[HOROSCOPE_LANGUAGES[li]] = { generated: mEntries.length > 0, count: mEntries.length, period: monthlyPeriod };
+          weeklySt[siteLangs[li]] = { generated: wEntries.length > 0, count: wEntries.length, period: weeklyPeriod };
+          monthlySt[siteLangs[li]] = { generated: mEntries.length > 0, count: mEntries.length, period: monthlyPeriod };
         }
 
-        siteStatus[siteId] = { daily: dailySt, weekly: weeklySt, monthly: monthlySt };
+        siteStatus[siteId] = { languages: siteLangs, daily: dailySt, weekly: weeklySt, monthly: monthlySt };
       }
 
       const defaultSite = siteStatus.psychicsource || { daily: {}, weekly: {}, monthly: {} };
