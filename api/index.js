@@ -324906,25 +324906,25 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
     const formatDate = (dt) => dt.toISOString().split("T")[0];
     if (type === "daily") {
       const dateStr = formatDate(d5);
-      return { start: dateStr, end: dateStr, label: d5.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }) };
+      return { start: dateStr, end: dateStr, label: d5.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) };
     } else if (type === "weekly") {
-      const dayOfWeek = d5.getDay();
+      const dayOfWeek = d5.getUTCDay();
       const monday = new Date(d5);
-      monday.setDate(d5.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      monday.setUTCDate(d5.getUTCDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
       const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
       return {
         start: formatDate(monday),
         end: formatDate(sunday),
-        label: `week beginning ${monday.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}`
+        label: `week beginning ${monday.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}`
       };
     } else {
-      const firstDay = new Date(d5.getFullYear(), d5.getMonth(), 1);
-      const lastDay = new Date(d5.getFullYear(), d5.getMonth() + 1, 0);
+      const firstDay = new Date(Date.UTC(d5.getUTCFullYear(), d5.getUTCMonth(), 1));
+      const lastDay = new Date(Date.UTC(d5.getUTCFullYear(), d5.getUTCMonth() + 1, 0));
       return {
         start: formatDate(firstDay),
         end: formatDate(lastDay),
-        label: d5.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+        label: d5.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
       };
     }
   }
@@ -324977,9 +324977,14 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         });
       }
       let targetDate;
-      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+      if (typeof daysAhead === "number" && daysAhead !== 0) {
+        if (!Number.isInteger(daysAhead) || daysAhead < GEN_DAYS_AHEAD_MIN || daysAhead > GEN_DAYS_AHEAD_MAX) {
+          return res.status(400).json({
+            error: `daysAhead must be an integer from ${GEN_DAYS_AHEAD_MIN} to ${GEN_DAYS_AHEAD_MAX}.`
+          });
+        }
         targetDate = /* @__PURE__ */ new Date();
-        targetDate.setDate(targetDate.getDate() + daysAhead);
+        targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
       const period = getHoroscopePeriod(type, targetDate);
       const existing = await storage.getHoroscopeEntriesByPeriod(type, lang, period.start, siteId);
@@ -325034,9 +325039,14 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       }
       const lang = language || "en";
       let targetDate;
-      if (type === "daily" && typeof daysAhead === "number" && daysAhead > 0) {
+      if (typeof daysAhead === "number" && daysAhead !== 0) {
+        if (!Number.isInteger(daysAhead) || daysAhead < GEN_DAYS_AHEAD_MIN || daysAhead > GEN_DAYS_AHEAD_MAX) {
+          return res.status(400).json({
+            error: `daysAhead must be an integer from ${GEN_DAYS_AHEAD_MIN} to ${GEN_DAYS_AHEAD_MAX}.`
+          });
+        }
         targetDate = /* @__PURE__ */ new Date();
-        targetDate.setDate(targetDate.getDate() + daysAhead);
+        targetDate.setUTCDate(targetDate.getUTCDate() + daysAhead);
       }
       const period = getHoroscopePeriod(type, targetDate);
       await storage.deleteHoroscopeEntriesByPeriod(type, lang, period.start, siteId);
@@ -325049,6 +325059,10 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   function escapeXml2(str2) {
     return str2.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   }
+  const GEN_DAYS_AHEAD_MIN = -400;
+  const GEN_DAYS_AHEAD_MAX = 31;
+  const FEED_PCF_MIN = -31;
+  const FEED_PCF_MAX = 3;
   const SITE_LINKS = {
     psychicsource: "https://www.psychicsource.com",
     pathforward: "https://www.pathforwardpsychics.com"
@@ -325063,14 +325077,20 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       let targetDate;
       if (type === "daily") {
         const pcf = parseInt(req.query.PCF || "0", 10);
-        if (!isNaN(pcf) && pcf >= 0 && pcf <= 3) {
-          targetDate = /* @__PURE__ */ new Date();
-          targetDate.setDate(targetDate.getDate() + pcf);
+        if (isNaN(pcf) || pcf < FEED_PCF_MIN || pcf > FEED_PCF_MAX) {
+          res.setHeader("Cache-Control", "no-store");
+          return res.status(400).type("application/xml").send(
+            `<?xml version="1.0" encoding="UTF-8"?>
+<rss><channel><title>PCF must be an integer from ${FEED_PCF_MIN} to ${FEED_PCF_MAX}</title></channel></rss>`
+          );
         }
+        targetDate = /* @__PURE__ */ new Date();
+        targetDate.setUTCDate(targetDate.getUTCDate() + pcf);
       }
       const period = getHoroscopePeriod(type, targetDate);
       const entries = await storage.getHoroscopeEntriesByPeriod(type, language, period.start, siteId);
       if (entries.length === 0) {
+        res.setHeader("Cache-Control", "no-store");
         return res.status(404).type("application/xml").send(
           `<?xml version="1.0" encoding="UTF-8"?>
 <rss><channel><title>No horoscopes found</title></channel></rss>`
@@ -325108,6 +325128,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       }
       xml += `</channel>
 </rss>`;
+      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=300, stale-while-revalidate=86400");
       res.type("application/xml").send(xml);
     } catch (error2) {
       console.error("[Horoscope Feed] Error:", error2);
@@ -325127,7 +325148,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const dailyDays = [0, 1, 2, 3];
       const dailyPeriods = dailyDays.map((d5) => {
         const date3 = /* @__PURE__ */ new Date();
-        date3.setDate(date3.getDate() + d5);
+        date3.setUTCDate(date3.getUTCDate() + d5);
         return getHoroscopePeriod("daily", date3);
       });
       const allPrompts = await storage.getHoroscopePrompts();
@@ -325145,33 +325166,33 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         const siteLangs = HOROSCOPE_LANGUAGES.filter((l5) => langs.has(l5));
         if (siteLangs.length === 0 && siteId !== "psychicsource") continue;
         const dailyPromises = dailyDays.flatMap(
-          (d5) => HOROSCOPE_LANGUAGES.map((l5) => storage.getHoroscopeEntriesByPeriod("daily", l5, dailyPeriods[d5].start, siteId))
+          (d5) => siteLangs.map((l5) => storage.getHoroscopeEntriesByPeriod("daily", l5, dailyPeriods[d5].start, siteId))
         );
-        const weeklyMonthlyPromises = HOROSCOPE_LANGUAGES.flatMap((l5) => [
+        const weeklyMonthlyPromises = siteLangs.flatMap((l5) => [
           storage.getHoroscopeEntriesByPeriod("weekly", l5, weeklyPeriod.start, siteId),
           storage.getHoroscopeEntriesByPeriod("monthly", l5, monthlyPeriod.start, siteId)
         ]);
         const allResults = await Promise.all([...dailyPromises, ...weeklyMonthlyPromises]);
-        const dailyResults = allResults.slice(0, dailyDays.length * HOROSCOPE_LANGUAGES.length);
-        const wmResults = allResults.slice(dailyDays.length * HOROSCOPE_LANGUAGES.length);
+        const dailyResults = allResults.slice(0, dailyDays.length * siteLangs.length);
+        const wmResults = allResults.slice(dailyDays.length * siteLangs.length);
         const dailySt = {};
         for (let d5 = 0; d5 < dailyDays.length; d5++) {
           const langData = {};
-          for (let li = 0; li < HOROSCOPE_LANGUAGES.length; li++) {
-            const entries = dailyResults[d5 * HOROSCOPE_LANGUAGES.length + li];
-            langData[HOROSCOPE_LANGUAGES[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d5] };
+          for (let li = 0; li < siteLangs.length; li++) {
+            const entries = dailyResults[d5 * siteLangs.length + li];
+            langData[siteLangs[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d5] };
           }
           dailySt[`day${d5}`] = { ...langData, daysAhead: d5 };
         }
         const weeklySt = {};
         const monthlySt = {};
-        for (let li = 0; li < HOROSCOPE_LANGUAGES.length; li++) {
+        for (let li = 0; li < siteLangs.length; li++) {
           const wEntries = wmResults[li * 2];
           const mEntries = wmResults[li * 2 + 1];
-          weeklySt[HOROSCOPE_LANGUAGES[li]] = { generated: wEntries.length > 0, count: wEntries.length, period: weeklyPeriod };
-          monthlySt[HOROSCOPE_LANGUAGES[li]] = { generated: mEntries.length > 0, count: mEntries.length, period: monthlyPeriod };
+          weeklySt[siteLangs[li]] = { generated: wEntries.length > 0, count: wEntries.length, period: weeklyPeriod };
+          monthlySt[siteLangs[li]] = { generated: mEntries.length > 0, count: mEntries.length, period: monthlyPeriod };
         }
-        siteStatus[siteId] = { daily: dailySt, weekly: weeklySt, monthly: monthlySt };
+        siteStatus[siteId] = { languages: siteLangs, daily: dailySt, weekly: weeklySt, monthly: monthlySt };
       }
       const defaultSite = siteStatus.psychicsource || { daily: {}, weekly: {}, monthly: {} };
       res.json({

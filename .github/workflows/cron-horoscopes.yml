@@ -2,12 +2,17 @@ name: Horoscope Generation
 
 on:
   schedule:
-    # Daily at 10:00 UTC (5:00 AM ET during EDT)
-    - cron: "0 10 * * *"
-    # Weekly on Monday at 10:00 UTC
-    - cron: "0 10 * * 1"
-    # Monthly on 1st at 10:00 UTC
-    - cron: "0 10 1 * *"
+    # GitHub deprioritises scheduled runs under queue load, and the top of the
+    # hour is the most contended slot there is: at "0 10 * * *" this workflow
+    # started between 3.4h and 11.2h late, every single day, never on time.
+    # An off-peak minute plus an early hour keeps the run ahead of the
+    # downstream 04:03 UTC feed pull even after a few hours of drift.
+    # Daily at 02:23 UTC (10:23 PM ET previous day, during EDT)
+    - cron: "23 2 * * *"
+    # Weekly on Monday at 02:23 UTC
+    - cron: "23 2 * * 1"
+    # Monthly on 1st at 02:23 UTC
+    - cron: "23 2 1 * *"
   workflow_dispatch:
     inputs:
       type:
@@ -33,9 +38,9 @@ jobs:
             echo "type=${{ github.event.inputs.type }}" >> $GITHUB_OUTPUT
           else
             CRON="${{ github.event.schedule }}"
-            if [ "$CRON" = "0 10 1 * *" ]; then
+            if [ "$CRON" = "23 2 1 * *" ]; then
               echo "type=monthly" >> $GITHUB_OUTPUT
-            elif [ "$CRON" = "0 10 * * 1" ]; then
+            elif [ "$CRON" = "23 2 * * 1" ]; then
               echo "type=weekly" >> $GITHUB_OUTPUT
             else
               echo "type=daily" >> $GITHUB_OUTPUT
@@ -117,6 +122,14 @@ jobs:
             # failed to generate. No-op (skipped by the API) on healthy days.
             generate weekly "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) weekly catchup" || FAILURES=$((FAILURES+1))
             generate monthly "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) monthly catchup" || FAILURES=$((FAILURES+1))
+            # Look one week ahead so a period never has to be created on the day
+            # it starts. Downstream pulls at 00:03 ET used to race that morning's
+            # run and 404 every Monday (new week) and every 1st (new month).
+            # +7d always lands in next week, so next week's weekly is built a
+            # week early; for monthly it is a no-op mid-month and builds next
+            # month once we are inside the last 7 days of this one.
+            generate weekly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) weekly +7d lookahead" || FAILURES=$((FAILURES+1))
+            generate monthly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) monthly +7d lookahead" || FAILURES=$((FAILURES+1))
           else
             generate "$HOROSCOPE_TYPE" "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) $HOROSCOPE_TYPE" || FAILURES=$((FAILURES+1))
           fi

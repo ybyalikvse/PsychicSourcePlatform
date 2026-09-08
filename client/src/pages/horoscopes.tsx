@@ -39,10 +39,28 @@ const ZODIAC_SYMBOLS: Record<string, string> = {
 
 const DAILY_DAY_LABELS = ["Today", "Tomorrow", "+2 Days", "+3 Days"];
 
+// Today, tomorrow and +2 are always populated by earlier runs. +3 is only
+// filled by the current day's run, which GitHub schedules hours late, so it is
+// legitimately empty for much of the day and must not read as a failure.
+const REQUIRED_DAILY_DAYS = 3;
+
+// A site/language pair with no active prompt is an intentional gap — pathforward
+// has no Spanish — so it gets its own neutral state instead of "Pending".
+function NotConfiguredBadge() {
+  return (
+    <Badge variant="outline" className="text-muted-foreground" data-testid="badge-not-configured">
+      Not configured
+    </Badge>
+  );
+}
+
 function getDayDateLabel(daysAhead: number): string {
+  // Periods are UTC days on the server, so label them in UTC too. Rendering in
+  // the browser's zone put a different date on the tab than the one the API had
+  // generated for it whenever the viewer's local date was ahead of UTC.
   const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  d.setUTCDate(d.getUTCDate() + daysAhead);
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 export default function Horoscopes() {
@@ -79,6 +97,11 @@ export default function Horoscopes() {
 
   const status = cronStatus as any;
   const siteStatus = status?.sites?.[activeSite] || status;
+  // The API reports which languages a site has active prompts for. A language
+  // that isn't configured is a deliberate gap, not a generation failure, so it
+  // must not render as "Pending" alongside genuinely-missing content.
+  const languageConfigured: boolean =
+    !Array.isArray(siteStatus?.languages) || siteStatus.languages.includes(language);
 
   const dailyPeriodStart = useMemo(() => {
     if (!siteStatus?.daily) return null;
@@ -347,6 +370,10 @@ export default function Horoscopes() {
         dateLabel: getDayDateLabel(d),
         generated: dayStatus?.[language]?.generated || false,
         count: dayStatus?.[language]?.count || 0,
+        // Today through +2 come from earlier runs and must always be present.
+        // +3 is only filled by the current day's run, so it is empty for most
+        // of the day and its absence is normal rather than a fault.
+        required: d < REQUIRED_DAILY_DAYS,
       };
     });
   }, [siteStatus, language]);
@@ -442,18 +469,18 @@ export default function Horoscopes() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Daily</p>
-                <p className="text-xs text-muted-foreground">Every day at 5 AM ET (4 days)</p>
+                <p className="text-xs text-muted-foreground">Daily at 02:23 UTC (4 days)</p>
               </div>
               {(() => {
-                const allGenerated = dailyDayStatuses.length > 0 && dailyDayStatuses.every(d => d.generated);
-                const someGenerated = dailyDayStatuses.some(d => d.generated);
-                if (allGenerated) {
-                  return <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />4/4 Days</Badge>;
-                } else if (someGenerated) {
-                  const count = dailyDayStatuses.filter(d => d.generated).length;
-                  return <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />{count}/4 Days</Badge>;
+                if (!languageConfigured) return <NotConfiguredBadge />;
+                if (dailyDayStatuses.length === 0) {
+                  return <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
                 }
-                return <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+                const count = dailyDayStatuses.filter(d => d.generated).length;
+                const requiredMet = dailyDayStatuses.every(d => !d.required || d.generated);
+                return requiredMet
+                  ? <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />{count}/4 Days</Badge>
+                  : <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />{count}/4 Days</Badge>;
               })()}
             </div>
           </CardContent>
@@ -463,9 +490,11 @@ export default function Horoscopes() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Weekly</p>
-                <p className="text-xs text-muted-foreground">Every Monday at 5 AM ET</p>
+                <p className="text-xs text-muted-foreground">Mondays at 02:23 UTC</p>
               </div>
-              {siteStatus?.weekly?.[language]?.generated ? (
+              {!languageConfigured ? (
+                <NotConfiguredBadge />
+              ) : siteStatus?.weekly?.[language]?.generated ? (
                 <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
               ) : (
                 <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
@@ -478,9 +507,11 @@ export default function Horoscopes() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Monthly</p>
-                <p className="text-xs text-muted-foreground">1st of month at 5 AM ET</p>
+                <p className="text-xs text-muted-foreground">1st of month at 02:23 UTC</p>
               </div>
-              {siteStatus?.monthly?.[language]?.generated ? (
+              {!languageConfigured ? (
+                <NotConfiguredBadge />
+              ) : siteStatus?.monthly?.[language]?.generated ? (
                 <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
               ) : (
                 <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
