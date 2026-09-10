@@ -4534,12 +4534,25 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
       xml += `</channel>\n</rss>`;
 
-      // Serve this from Vercel's edge cache. Each miss costs a cold start plus
-      // a cross-region database round trip, which is what timed out the
-      // consumer's nightly pull. s-maxage is short enough that the UTC midnight
-      // period rollover surfaces within minutes, while stale-while-revalidate
-      // keeps a repeat pull or a retry instant while the refresh runs behind it.
-      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=300, stale-while-revalidate=86400");
+      // Cache at the edge, but only until the period this URL resolves to can
+      // change. PCF is an offset from *today*, so ?PCF=0 means a different day
+      // either side of UTC midnight. An earlier version set s-maxage=300 with
+      // stale-while-revalidate=86400, which let an edge keep serving yesterday's
+      // "today" for a full day after it went stale — the consumer then saw a
+      // pubDate that didn't match the day it asked for and treated it as empty.
+      // Weekly and monthly survived that because their content is the same all
+      // week/month; only the day-relative feeds broke, which is exactly the
+      // shape of the failure. Expiring precisely at the rollover keeps the
+      // caching benefit with no window in which a stale day can be served, so
+      // there is deliberately no stale-while-revalidate here.
+      const nowMs = Date.now();
+      const nextUtcMidnight = Date.UTC(
+        new Date(nowMs).getUTCFullYear(),
+        new Date(nowMs).getUTCMonth(),
+        new Date(nowMs).getUTCDate() + 1
+      );
+      const sMaxAge = Math.max(1, Math.floor((nextUtcMidnight - nowMs) / 1000));
+      res.setHeader("Cache-Control", `public, max-age=0, s-maxage=${sMaxAge}`);
       res.type("application/xml").send(xml);
     } catch (error) {
       console.error("[Horoscope Feed] Error:", error);

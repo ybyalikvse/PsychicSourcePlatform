@@ -325128,7 +325128,14 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       }
       xml += `</channel>
 </rss>`;
-      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=300, stale-while-revalidate=86400");
+      const nowMs = Date.now();
+      const nextUtcMidnight = Date.UTC(
+        new Date(nowMs).getUTCFullYear(),
+        new Date(nowMs).getUTCMonth(),
+        new Date(nowMs).getUTCDate() + 1
+      );
+      const sMaxAge = Math.max(1, Math.floor((nextUtcMidnight - nowMs) / 1e3));
+      res.setHeader("Cache-Control", `public, max-age=0, s-maxage=${sMaxAge}`);
       res.type("application/xml").send(xml);
     } catch (error2) {
       console.error("[Horoscope Feed] Error:", error2);
