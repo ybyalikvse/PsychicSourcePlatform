@@ -138,3 +138,21 @@ jobs:
             echo "$FAILURES generation(s) still failing after retries"
             exit 1
           fi
+
+  # Deterministic post-generation gate: assert the feeds a consumer will read
+  # actually serve the period they are asked for, with a full set of signs.
+  # Runs even when some generation jobs failed — that is exactly when the
+  # resulting gaps need to be visible.
+  verify-feeds:
+    needs: generate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify feeds after generation
+        env:
+          APP_URL: ${{ secrets.VERCEL_APP_URL }}
+        run: node script/check-feeds.mjs

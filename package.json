@@ -10,6 +10,7 @@
     "build:vercel": "vite build",
     "build:api": "tsx script/build-api.ts",
     "check": "tsc",
+    "check:feeds": "node script/check-feeds.mjs",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

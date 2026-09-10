@@ -1,0 +1,32 @@
+name: Feed Health Check
+
+# Verifies the public feeds the way psychicsource.com's nightly job consumes
+# them. Both real outages returned HTTP 200 with valid XML — one served a day
+# that had never been generated, the other a stale CDN copy under the wrong
+# pubDate — so the assertion that matters is that each feed returns the period
+# it was asked for, with all 12 signs.
+on:
+  schedule:
+    # ~1h before the consumer's 04:03 UTC pull, on an off-peak minute. GitHub
+    # can still delay this by hours, so treat it as a daily check rather than a
+    # guaranteed pre-flight; the post-generation job below is the deterministic
+    # one.
+    - cron: "7 3 * * *"
+    # Second look during the day, to catch a period rollover or cache problem
+    # that appears after the morning run.
+    - cron: "7 15 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # No install step: the script is dependency-free on purpose.
+      - name: Verify feeds serve the period they were asked for
+        env:
+          APP_URL: ${{ secrets.VERCEL_APP_URL }}
+        run: node script/check-feeds.mjs
