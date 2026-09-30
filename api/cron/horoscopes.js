@@ -17463,21 +17463,24 @@ var DatabaseStorage = class {
   }
   // Horoscope Entries
   async getHoroscopeEntries(type, language, site) {
-    const all = await db.select().from(horoscopeEntries).orderBy(desc(horoscopeEntries.createdAt));
-    return all.filter((e) => {
-      if (type && e.type !== type) return false;
-      if (language && e.language !== language) return false;
-      if (site && e.site !== site) return false;
-      return true;
-    });
+    const conditions = [];
+    if (type) conditions.push(eq(horoscopeEntries.type, type));
+    if (language) conditions.push(eq(horoscopeEntries.language, language));
+    if (site) conditions.push(eq(horoscopeEntries.site, site));
+    const query = db.select().from(horoscopeEntries).orderBy(desc(horoscopeEntries.createdAt));
+    return conditions.length > 0 ? query.where(and(...conditions)) : query;
   }
   async getHoroscopeEntry(id) {
     const [entry] = await db.select().from(horoscopeEntries).where(eq(horoscopeEntries.id, id));
     return entry;
   }
   async getHoroscopeEntriesByPeriod(type, language, periodStart, site = "psychicsource") {
-    const all = await db.select().from(horoscopeEntries);
-    return all.filter((e) => e.type === type && e.language === language && e.periodStart === periodStart && e.site === site);
+    return db.select().from(horoscopeEntries).where(and(
+      eq(horoscopeEntries.type, type),
+      eq(horoscopeEntries.language, language),
+      eq(horoscopeEntries.periodStart, periodStart),
+      eq(horoscopeEntries.site, site)
+    ));
   }
   async createHoroscopeEntry(entry) {
     const [created] = await db.insert(horoscopeEntries).values(entry).returning();
@@ -18072,6 +18075,17 @@ var DatabaseStorage = class {
   async deleteCiCompetitor(id) {
     const results = await db.delete(ciCompetitors).where(eq(ciCompetitors.id, id)).returning();
     return results.length > 0;
+  }
+  // Counts only, so the dashboard doesn't download every transcript and brief just to size them.
+  async getCiCounts() {
+    const n = async (t) => Number((await db.select({ c: sql`count(*)` }).from(t))[0].c);
+    const [competitors, videos, analyses, briefs] = await Promise.all([
+      n(ciCompetitors),
+      n(ciScrapedVideos),
+      n(ciVideoAnalyses),
+      n(ciContentBriefs)
+    ]);
+    return { competitors, videos, analyses, briefs };
   }
   // ===== CI Scraped Videos =====
   async getCiScrapedVideos(filters) {

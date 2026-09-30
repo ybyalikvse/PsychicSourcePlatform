@@ -262,6 +262,8 @@ export interface IStorage {
   updateCiCompetitor(id: string, data: Partial<InsertCiCompetitor>): Promise<CiCompetitor | undefined>;
   deleteCiCompetitor(id: string): Promise<boolean>;
 
+  getCiCounts(): Promise<{ competitors: number, videos: number, analyses: number, briefs: number }>;
+
   // CI Scraped Videos
   getCiScrapedVideos(filters?: { competitorId?: string, transcriptStatus?: string, analysisStatus?: string, minViews?: number }): Promise<CiScrapedVideo[]>;
   getCiScrapedVideo(id: string): Promise<CiScrapedVideo | undefined>;
@@ -659,6 +661,7 @@ export class MemStorage implements IStorage {
   async deleteCiCompetitor(_id: string): Promise<boolean> { return false; }
 
   // CI Scraped Videos stubs
+  async getCiCounts() { return { competitors: 0, videos: 0, analyses: 0, briefs: 0 }; }
   async getCiScrapedVideos(_filters?: { competitorId?: string, transcriptStatus?: string, analysisStatus?: string, minViews?: number }): Promise<CiScrapedVideo[]> { return []; }
   async getCiScrapedVideo(_id: string): Promise<CiScrapedVideo | undefined> { return undefined; }
   async getCiScrapedVideoByExternalId(_externalVideoId: string): Promise<CiScrapedVideo | undefined> { return undefined; }
@@ -1069,13 +1072,12 @@ export class DatabaseStorage implements IStorage {
 
   // Horoscope Entries
   async getHoroscopeEntries(type?: string, language?: string, site?: string): Promise<HoroscopeEntry[]> {
-    const all = await db.select().from(horoscopeEntries).orderBy(desc(horoscopeEntries.createdAt));
-    return all.filter(e => {
-      if (type && e.type !== type) return false;
-      if (language && e.language !== language) return false;
-      if (site && e.site !== site) return false;
-      return true;
-    });
+    const conditions = [];
+    if (type) conditions.push(eq(horoscopeEntries.type, type));
+    if (language) conditions.push(eq(horoscopeEntries.language, language));
+    if (site) conditions.push(eq(horoscopeEntries.site, site));
+    const query = db.select().from(horoscopeEntries).orderBy(desc(horoscopeEntries.createdAt));
+    return conditions.length > 0 ? query.where(and(...conditions)) : query;
   }
 
   async getHoroscopeEntry(id: string): Promise<HoroscopeEntry | undefined> {
@@ -1084,8 +1086,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getHoroscopeEntriesByPeriod(type: string, language: string, periodStart: string, site: string = "psychicsource"): Promise<HoroscopeEntry[]> {
-    const all = await db.select().from(horoscopeEntries);
-    return all.filter(e => e.type === type && e.language === language && e.periodStart === periodStart && e.site === site);
+    return db.select().from(horoscopeEntries).where(and(
+      eq(horoscopeEntries.type, type),
+      eq(horoscopeEntries.language, language),
+      eq(horoscopeEntries.periodStart, periodStart),
+      eq(horoscopeEntries.site, site),
+    ));
   }
 
   async createHoroscopeEntry(entry: InsertHoroscopeEntry): Promise<HoroscopeEntry> {
@@ -1825,6 +1831,15 @@ export class DatabaseStorage implements IStorage {
   async deleteCiCompetitor(id: string): Promise<boolean> {
     const results = await db.delete(ciCompetitors).where(eq(ciCompetitors.id, id)).returning();
     return results.length > 0;
+  }
+
+  // Counts only, so the dashboard doesn't download every transcript and brief just to size them.
+  async getCiCounts() {
+    const n = async (t: any) => Number((await db.select({ c: sql<number>`count(*)` }).from(t))[0].c);
+    const [competitors, videos, analyses, briefs] = await Promise.all([
+      n(ciCompetitors), n(ciScrapedVideos), n(ciVideoAnalyses), n(ciContentBriefs),
+    ]);
+    return { competitors, videos, analyses, briefs };
   }
 
   // ===== CI Scraped Videos =====

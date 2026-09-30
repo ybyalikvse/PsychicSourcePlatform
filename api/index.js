@@ -289242,21 +289242,24 @@ var DatabaseStorage = class {
   }
   // Horoscope Entries
   async getHoroscopeEntries(type, language, site) {
-    const all3 = await db.select().from(horoscopeEntries).orderBy(desc(horoscopeEntries.createdAt));
-    return all3.filter((e6) => {
-      if (type && e6.type !== type) return false;
-      if (language && e6.language !== language) return false;
-      if (site && e6.site !== site) return false;
-      return true;
-    });
+    const conditions = [];
+    if (type) conditions.push(eq(horoscopeEntries.type, type));
+    if (language) conditions.push(eq(horoscopeEntries.language, language));
+    if (site) conditions.push(eq(horoscopeEntries.site, site));
+    const query = db.select().from(horoscopeEntries).orderBy(desc(horoscopeEntries.createdAt));
+    return conditions.length > 0 ? query.where(and(...conditions)) : query;
   }
   async getHoroscopeEntry(id) {
     const [entry] = await db.select().from(horoscopeEntries).where(eq(horoscopeEntries.id, id));
     return entry;
   }
   async getHoroscopeEntriesByPeriod(type, language, periodStart, site = "psychicsource") {
-    const all3 = await db.select().from(horoscopeEntries);
-    return all3.filter((e6) => e6.type === type && e6.language === language && e6.periodStart === periodStart && e6.site === site);
+    return db.select().from(horoscopeEntries).where(and(
+      eq(horoscopeEntries.type, type),
+      eq(horoscopeEntries.language, language),
+      eq(horoscopeEntries.periodStart, periodStart),
+      eq(horoscopeEntries.site, site)
+    ));
   }
   async createHoroscopeEntry(entry) {
     const [created] = await db.insert(horoscopeEntries).values(entry).returning();
@@ -289851,6 +289854,17 @@ var DatabaseStorage = class {
   async deleteCiCompetitor(id) {
     const results = await db.delete(ciCompetitors).where(eq(ciCompetitors.id, id)).returning();
     return results.length > 0;
+  }
+  // Counts only, so the dashboard doesn't download every transcript and brief just to size them.
+  async getCiCounts() {
+    const n5 = async (t6) => Number((await db.select({ c: sql`count(*)` }).from(t6))[0].c);
+    const [competitors, videos, analyses, briefs] = await Promise.all([
+      n5(ciCompetitors),
+      n5(ciScrapedVideos),
+      n5(ciVideoAnalyses),
+      n5(ciContentBriefs)
+    ]);
+    return { competitors, videos, analyses, briefs };
   }
   // ===== CI Scraped Videos =====
   async getCiScrapedVideos(filters) {
@@ -312635,18 +312649,7 @@ function registerCiRoutes(app2) {
   });
   router.get("/stats", async (req, res) => {
     try {
-      const [competitors, videos, analyses, briefs] = await Promise.all([
-        storage.getCiCompetitors(),
-        storage.getCiScrapedVideos(),
-        storage.getCiVideoAnalyses(),
-        storage.getCiContentBriefs()
-      ]);
-      res.json({
-        competitors: competitors.length,
-        videos: videos.length,
-        analyses: analyses.length,
-        briefs: briefs.length
-      });
+      res.json(await storage.getCiCounts());
     } catch (error2) {
       console.error("[CI] Error fetching stats:", error2);
       res.status(500).json({ error: "Failed to fetch stats" });

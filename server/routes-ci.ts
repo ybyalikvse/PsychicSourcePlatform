@@ -1623,19 +1623,7 @@ export function registerCiRoutes(app: Express) {
 
   router.get("/stats", async (req, res) => {
     try {
-      const [competitors, videos, analyses, briefs] = await Promise.all([
-        storage.getCiCompetitors(),
-        storage.getCiScrapedVideos(),
-        storage.getCiVideoAnalyses(),
-        storage.getCiContentBriefs(),
-      ]);
-
-      res.json({
-        competitors: competitors.length,
-        videos: videos.length,
-        analyses: analyses.length,
-        briefs: briefs.length,
-      });
+      res.json(await storage.getCiCounts());
     } catch (error) {
       console.error("[CI] Error fetching stats:", error);
       res.status(500).json({ error: "Failed to fetch stats" });
