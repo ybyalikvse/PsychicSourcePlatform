@@ -60,7 +60,8 @@ jobs:
       max-parallel: 2
       matrix:
         site: [psychicsource, pathforward]
-        language: [en, es]
+        # Spanish was retired in October 2026.
+        language: [en]
         sign:
           - Aries
           - Taurus
@@ -74,10 +75,6 @@ jobs:
           - Capricorn
           - Aquarius
           - Pisces
-        exclude:
-          # pathforward has no Spanish horoscopes
-          - site: pathforward
-            language: es
     env:
       HOROSCOPE_TYPE: ${{ needs.determine-type.outputs.horoscope_type }}
       APP_URL: ${{ secrets.VERCEL_APP_URL }}
@@ -135,16 +132,11 @@ jobs:
             # month once we are inside the last 7 days of this one.
             generate weekly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) weekly +7d lookahead" || FAILURES=$((FAILURES+1))
             generate monthly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) monthly +7d lookahead" || FAILURES=$((FAILURES+1))
-            # Yearly is English only, so skip it for Spanish jobs rather than
-            # logging a config 400 every night. +30d is the lookahead because a
-            # year boundary needs more runway than a month: next year's forecast
-            # exists from about 1 December, well before any 1 January pull.
-            if [ "${{ matrix.language }}" = "en" ]; then
-              generate yearly "" "${{ matrix.sign }} (en/${{ matrix.site }}) yearly catchup" || FAILURES=$((FAILURES+1))
-              generate yearly 30 "${{ matrix.sign }} (en/${{ matrix.site }}) yearly +30d lookahead" || FAILURES=$((FAILURES+1))
-            fi
-          elif [ "$HOROSCOPE_TYPE" = "yearly" ] && [ "${{ matrix.language }}" != "en" ]; then
-            echo "  - yearly is English only, skipping ${{ matrix.language }}"
+            # +30d is the yearly lookahead because a year boundary needs more
+            # runway than a month: next year's forecast exists from about
+            # 1 December, well before any 1 January pull.
+            generate yearly "" "${{ matrix.sign }} (en/${{ matrix.site }}) yearly catchup" || FAILURES=$((FAILURES+1))
+            generate yearly 30 "${{ matrix.sign }} (en/${{ matrix.site }}) yearly +30d lookahead" || FAILURES=$((FAILURES+1))
           else
             generate "$HOROSCOPE_TYPE" "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) $HOROSCOPE_TYPE" || FAILURES=$((FAILURES+1))
           fi

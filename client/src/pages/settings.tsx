@@ -1323,7 +1323,7 @@ export default function Settings() {
               <Star className="h-5 w-5 text-muted-foreground" />
               <div>
                 <CardTitle className="text-lg">Horoscope Prompts</CardTitle>
-                <CardDescription>Configure AI prompts for horoscope generation by type and language</CardDescription>
+                <CardDescription>Configure AI prompts for horoscope generation by site and type</CardDescription>
               </div>
             </div>
             <Button
@@ -1345,7 +1345,7 @@ export default function Settings() {
           {horoscopePromptsLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : horoscopePrompts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No horoscope prompts configured. Add prompts for daily, weekly, monthly, and yearly horoscopes. Yearly is English only.</p>
+            <p className="text-sm text-muted-foreground">No horoscope prompts configured. Add prompts for daily, weekly, monthly, and yearly horoscopes.</p>
           ) : (
             <div className="space-y-3">
               {horoscopePrompts.map((prompt) => (
@@ -1354,7 +1354,7 @@ export default function Settings() {
                     <div className="flex items-center gap-2 mb-1">
                       <Badge variant="outline">{prompt.site === "pathforward" ? "Pathforward" : "Psychic Source"}</Badge>
                       <Badge variant="outline">{prompt.type}</Badge>
-                      <Badge variant="secondary">{prompt.language === "en" ? "English" : "Spanish"}</Badge>
+                      <Badge variant="secondary">{prompt.language === "en" ? "English" : prompt.language}</Badge>
                       <Badge variant={prompt.isActive ? "default" : "outline"}>
                         {prompt.isActive ? "Active" : "Inactive"}
                       </Badge>
@@ -1431,7 +1431,6 @@ export default function Settings() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="es">Spanish</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

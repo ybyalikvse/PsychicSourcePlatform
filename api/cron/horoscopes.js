@@ -16291,7 +16291,7 @@ var horoscopePrompts = pgTable("horoscope_prompts", {
   type: text("type").notNull(),
   // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
-  // en, es
+  // en
   prompt: text("prompt").notNull(),
   aiModel: text("ai_model").default("claude"),
   // claude, gpt
@@ -25552,7 +25552,7 @@ async function generateValidatedContent(sign, type, language, periodLabel, promp
 var DAILY_LOOKAHEAD_DAYS = [0, 1, 2, 3, 4, 5];
 var HOROSCOPE_SITES = ["psychicsource", "pathforward"];
 async function runHoroscopeGeneration(type) {
-  const languages = ["en", "es"];
+  const languages = ["en"];
   const daysToGenerate = type === "daily" ? DAILY_LOOKAHEAD_DAYS : [0];
   for (const siteId of HOROSCOPE_SITES) {
     for (const lang of languages) {

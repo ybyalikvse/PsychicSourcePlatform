@@ -288070,7 +288070,7 @@ var horoscopePrompts = pgTable("horoscope_prompts", {
   type: text("type").notNull(),
   // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
-  // en, es
+  // en
   prompt: text("prompt").notNull(),
   aiModel: text("ai_model").default("claude"),
   // claude, gpt
@@ -325179,7 +325179,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     }
   });
   const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
-  const HOROSCOPE_LANGUAGES = ["en", "es"];
+  const HOROSCOPE_LANGUAGES = ["en"];
   const PERIODIC_TYPES = ["weekly", "monthly", "yearly"];
   app2.get("/api/horoscopes/cron-status", async (_req, res) => {
     try {

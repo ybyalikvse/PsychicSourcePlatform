@@ -14,8 +14,8 @@
  * and deliberately does NOT cache-bust: we want to see exactly what a consumer
  * sees, stale edge copies included.
  *
- * Covers daily (five offsets), weekly and monthly for every configured
- * site/language pair, plus yearly where it exists (English only).
+ * Covers daily (five offsets), weekly, monthly and yearly for every
+ * configured site. English only since Spanish was retired.
  *
  * Usage:  node script/check-feeds.mjs [--self-test]
  * Env:    APP_URL (default: production), REQUEST_TIMEOUT_MS, SLOW_WARN_MS
@@ -26,11 +26,10 @@ const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 20000);
 const SLOW_WARN_MS = Number(process.env.SLOW_WARN_MS || 3000);
 const SIGNS_PER_FEED = 12;
 
-// Site/language pairs that have an active prompt. pathforward has no Spanish,
-// so it is intentionally absent rather than missing.
+// Site/language pairs that have an active prompt. Spanish was retired in
+// October 2026, so every pair is English.
 const COMBOS = [
   { site: "psychicsource", language: "en" },
-  { site: "psychicsource", language: "es" },
   { site: "pathforward", language: "en" },
 ];
 
@@ -111,10 +110,7 @@ function buildChecks(now) {
         expectedStart: expectedPeriodStart("daily", now, off),
       });
     }
-    // Yearly is English only, so it is checked only where it exists. Asking for
-    // a Spanish yearly would fail on a gap that is intentional.
-    const periodicTypes = language === "en" ? ["weekly", "monthly", "yearly"] : ["weekly", "monthly"];
-    for (const type of periodicTypes) {
+    for (const type of ["weekly", "monthly", "yearly"]) {
       checks.push({
         name: `${type} ${language}/${site}`,
         url: `${APP_URL}/api/horoscopes/feed/${type}/${language}/${site}`,

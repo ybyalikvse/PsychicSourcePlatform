@@ -131,7 +131,7 @@ const DAILY_LOOKAHEAD_DAYS = [0, 1, 2, 3, 4, 5];
 const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
 
 export async function runHoroscopeGeneration(type: string) {
-  const languages = ["en", "es"];
+  const languages = ["en"];
   const daysToGenerate = type === "daily" ? DAILY_LOOKAHEAD_DAYS : [0];
 
   for (const siteId of HOROSCOPE_SITES) {
@@ -189,7 +189,7 @@ async function runStartupCatchup() {
   console.log("[Horoscope Cron] Running startup catchup check...");
 
   for (const type of ["daily", "weekly", "monthly", "yearly"] as const) {
-    const languages = ["en", "es"];
+    const languages = ["en"];
     const daysToCheck = type === "daily" ? DAILY_LOOKAHEAD_DAYS : [0];
 
     for (const siteId of HOROSCOPE_SITES) {

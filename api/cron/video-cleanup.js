@@ -16291,7 +16291,7 @@ var horoscopePrompts = pgTable("horoscope_prompts", {
   type: text("type").notNull(),
   // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
-  // en, es
+  // en
   prompt: text("prompt").notNull(),
   aiModel: text("ai_model").default("claude"),
   // claude, gpt

@@ -334,7 +334,7 @@ export const horoscopePrompts = pgTable("horoscope_prompts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   site: text("site").notNull().default("psychicsource"), // psychicsource, pathforward
   type: text("type").notNull(), // daily, weekly, monthly, yearly
-  language: text("language").notNull().default("en"), // en, es
+  language: text("language").notNull().default("en"), // en
   prompt: text("prompt").notNull(),
   aiModel: text("ai_model").default("claude"), // claude, gpt
   isActive: boolean("is_active").default(true),

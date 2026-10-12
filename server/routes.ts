@@ -4573,7 +4573,9 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
 
   // ============ HOROSCOPE CRON STATUS ============
   const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
-  const HOROSCOPE_LANGUAGES = ["en", "es"];
+  // Spanish was retired in October 2026; the consuming sites no longer
+  // request it and the stored Spanish entries were removed.
+  const HOROSCOPE_LANGUAGES = ["en"];
   // Types with a single current period, as opposed to daily's rolling window.
   const PERIODIC_TYPES = ["weekly", "monthly", "yearly"] as const;
 

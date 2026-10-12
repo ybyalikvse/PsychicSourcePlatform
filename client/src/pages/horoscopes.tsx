@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Star, RefreshCw, Rss, Globe, Copy, Edit2, Trash2, Loader2, CheckCircle, Clock, Square, RotateCw, Calendar } from "lucide-react";
+import { Star, RefreshCw, Rss, Copy, Edit2, Trash2, Loader2, CheckCircle, Clock, Square, RotateCw, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -69,7 +69,9 @@ export default function Horoscopes() {
   const { toast } = useToast();
   const [activeSite, setActiveSite] = useState("psychicsource");
   const [activeType, setActiveType] = useState("daily");
-  const [language, setLanguage] = useState("en");
+  // Spanish was retired in October 2026. Kept as a constant rather than
+  // threaded out, so query keys and status lookups stay unchanged.
+  const language = "en";
   const [dailyDaysAhead, setDailyDaysAhead] = useState(0);
   const [editingEntry, setEditingEntry] = useState<HoroscopeEntry | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -401,16 +403,6 @@ export default function Horoscopes() {
             <SelectContent>
               <SelectItem value="psychicsource" data-testid="option-site-psychicsource">Psychic Source</SelectItem>
               <SelectItem value="pathforward" data-testid="option-site-pathforward">Pathforward Psychics</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={language} onValueChange={setLanguage} data-testid="select-language">
-            <SelectTrigger className="w-[140px]" data-testid="select-language-trigger">
-              <Globe className="h-4 w-4 mr-2" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="en" data-testid="option-language-en">English</SelectItem>
-              <SelectItem value="es" data-testid="option-language-es">Spanish</SelectItem>
             </SelectContent>
           </Select>
           {activeType === "daily" && (
