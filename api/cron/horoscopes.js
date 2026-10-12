@@ -16289,7 +16289,7 @@ var horoscopePrompts = pgTable("horoscope_prompts", {
   site: text("site").notNull().default("psychicsource"),
   // psychicsource, pathforward
   type: text("type").notNull(),
-  // daily, weekly, monthly
+  // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
   // en, es
   prompt: text("prompt").notNull(),
@@ -16307,7 +16307,7 @@ var horoscopeEntries = pgTable("horoscope_entries", {
   site: text("site").notNull().default("psychicsource"),
   // psychicsource, pathforward
   type: text("type").notNull(),
-  // daily, weekly, monthly
+  // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
   sign: text("sign").notNull(),
   // aries, taurus, etc.
@@ -25332,6 +25332,17 @@ var SECTIONS = {
       { id: "finances", text: { en: "Financial Mindset", es: "Mentalidad Financiera" }, match: /financ|mentalidad/ },
       { id: "wellbeing", text: { en: "Emotional and Physical Wellbeing", es: "Bienestar Emocional y F\xEDsico" }, match: /wellbeing|bienestar/ },
       { id: "evolution", text: { en: "Personal Evolution", es: "Evoluci\xF3n Personal" }, match: /evolution|evolucion/ }
+    ],
+    yearly: [
+      { id: "theme", text: { en: "The Central Theme of the Year" }, match: /central theme/ },
+      { id: "opening-months", text: { en: "The Opening Months" }, match: /opening months|early (year|months)|first quarter|start of the year/ },
+      { id: "midyear", text: { en: "The Midyear Turning Point" }, match: /midyear|mid-year|middle of the year/ },
+      { id: "closing-months", text: { en: "The Closing Months" }, match: /closing months|late (year|months)|final months|end of the year/ },
+      { id: "relationships", text: { en: "Relationships" }, match: /relationship|relacion/ },
+      { id: "career", text: { en: "Career and Long-Term Direction" }, match: /career|carrera/ },
+      { id: "finances", text: { en: "Financial Mindset" }, match: /financ/ },
+      { id: "wellbeing", text: { en: "Emotional and Physical Wellbeing" }, match: /wellbeing|well-being/ },
+      { id: "evolution", text: { en: "Personal Evolution" }, match: /evolution/ }
     ]
   },
   pathforward: {
@@ -25359,6 +25370,17 @@ var SECTIONS = {
       { id: "opening", text: { en: "The Opening Pages" }, match: /opening/ },
       { id: "turning", text: { en: "The Turning Scene" }, match: /turning/ },
       { id: "closing", text: { en: "The Closing Arc" }, match: /closing/ },
+      { id: "relationships", text: { en: "Relationships" }, match: /relationship/ },
+      { id: "career", text: { en: "Career and Legacy" }, match: /career|legacy/ },
+      { id: "finances", text: { en: "Financial Self-Belief" }, match: /financ|self-belief|self belief/ },
+      { id: "body", text: { en: "Body and Resilience" }, match: /body|resilience/ },
+      { id: "identity", text: { en: "Identity in Motion" }, match: /identity/ }
+    ],
+    yearly: [
+      { id: "story", text: { en: "The Story This Year Tells" }, match: /story/ },
+      { id: "first-act", text: { en: "The First Act" }, match: /first act|opening act|act one/ },
+      { id: "midpoint", text: { en: "The Midpoint Reversal" }, match: /midpoint|mid-point|reversal|midyear|mid-year/ },
+      { id: "final-act", text: { en: "The Final Act" }, match: /final act|closing act|last act|act three/ },
       { id: "relationships", text: { en: "Relationships" }, match: /relationship/ },
       { id: "career", text: { en: "Career and Legacy" }, match: /career|legacy/ },
       { id: "finances", text: { en: "Financial Self-Belief" }, match: /financ|self-belief|self belief/ },
@@ -25469,6 +25491,14 @@ function getHoroscopePeriod(type, date2) {
       end: formatDate(sunday),
       label: `week beginning ${monday.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}`
     };
+  } else if (type === "yearly") {
+    const firstDay = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), 11, 31));
+    return {
+      start: formatDate(firstDay),
+      end: formatDate(lastDay),
+      label: String(d.getUTCFullYear())
+    };
   } else {
     const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
     const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
@@ -25481,7 +25511,7 @@ function getHoroscopePeriod(type, date2) {
 }
 async function generateHoroscopeContent(sign, type, language, periodLabel, promptTemplate, aiModel, site) {
   const languageInstruction = language === "es" ? "Write the horoscope entirely in Spanish." : "Write the horoscope in English.";
-  const typeLabel = type === "daily" ? "daily" : type === "weekly" ? "weekly" : "monthly";
+  const typeLabel = ["daily", "weekly", "monthly", "yearly"].includes(type) ? type : "monthly";
   const fullPrompt = `${promptTemplate}
 
 Zodiac Sign: ${sign}
@@ -25582,8 +25612,8 @@ async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   const type = req.query.type || "daily";
-  if (!["daily", "weekly", "monthly"].includes(type)) {
-    return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
+  if (!["daily", "weekly", "monthly", "yearly"].includes(type)) {
+    return res.status(400).json({ error: "Invalid type. Must be daily, weekly, monthly, or yearly." });
   }
   try {
     console.log(`[Cron] Running ${type} horoscope generation...`);

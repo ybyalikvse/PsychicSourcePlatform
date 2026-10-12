@@ -16289,7 +16289,7 @@ var horoscopePrompts = pgTable("horoscope_prompts", {
   site: text("site").notNull().default("psychicsource"),
   // psychicsource, pathforward
   type: text("type").notNull(),
-  // daily, weekly, monthly
+  // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
   // en, es
   prompt: text("prompt").notNull(),
@@ -16307,7 +16307,7 @@ var horoscopeEntries = pgTable("horoscope_entries", {
   site: text("site").notNull().default("psychicsource"),
   // psychicsource, pathforward
   type: text("type").notNull(),
-  // daily, weekly, monthly
+  // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
   sign: text("sign").notNull(),
   // aries, taurus, etc.

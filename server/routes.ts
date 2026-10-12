@@ -4279,6 +4279,15 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
         end: formatDate(sunday),
         label: `week beginning ${monday.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}`
       };
+    } else if (type === "yearly") {
+      // Jan 1 to Dec 31 of the UTC year; the label is just the year.
+      const firstDay = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const lastDay = new Date(Date.UTC(d.getUTCFullYear(), 11, 31));
+      return {
+        start: formatDate(firstDay),
+        end: formatDate(lastDay),
+        label: String(d.getUTCFullYear())
+      };
     } else {
       const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
       const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
@@ -4303,7 +4312,7 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
       ? "Write the horoscope entirely in Spanish."
       : "Write the horoscope in English.";
 
-    const typeLabel = type === "daily" ? "daily" : type === "weekly" ? "weekly" : "monthly";
+    const typeLabel = ["daily", "weekly", "monthly", "yearly"].includes(type) ? type : "monthly";
     const fullPrompt = `${promptTemplate}
 
 Zodiac Sign: ${sign}
@@ -4344,8 +4353,8 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const { type, language, sign, daysAhead, site } = req.body;
       const siteId = site || "psychicsource";
 
-      if (!type || !["daily", "weekly", "monthly"].includes(type)) {
-        return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
+      if (!type || !["daily", "weekly", "monthly", "yearly"].includes(type)) {
+        return res.status(400).json({ error: "Invalid type. Must be daily, weekly, monthly, or yearly." });
       }
       if (!sign || !ZODIAC_SIGNS.includes(sign)) {
         return res.status(400).json({ error: "Invalid zodiac sign." });
@@ -4424,7 +4433,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     try {
       const { type, language, daysAhead, site } = req.body;
       const siteId = site || "psychicsource";
-      if (!type || !["daily", "weekly", "monthly"].includes(type)) {
+      if (!type || !["daily", "weekly", "monthly", "yearly"].includes(type)) {
         return res.status(400).json({ error: "Invalid type." });
       }
       const lang = language || "en";
@@ -4479,7 +4488,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       const { type, language } = req.params;
       const siteId = req.params.site || "psychicsource";
 
-      if (!["daily", "weekly", "monthly"].includes(type)) {
+      if (!["daily", "weekly", "monthly", "yearly"].includes(type)) {
         return res.status(400).send("Invalid type");
       }
 
@@ -4565,12 +4574,17 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   // ============ HOROSCOPE CRON STATUS ============
   const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
   const HOROSCOPE_LANGUAGES = ["en", "es"];
+  // Types with a single current period, as opposed to daily's rolling window.
+  const PERIODIC_TYPES = ["weekly", "monthly", "yearly"] as const;
 
   app.get("/api/horoscopes/cron-status", async (_req, res) => {
     try {
       const now = new Date();
-      const weeklyPeriod = getHoroscopePeriod("weekly", now);
-      const monthlyPeriod = getHoroscopePeriod("monthly", now);
+      const periodFor: Record<string, { start: string; end: string; label: string }> = {
+        weekly: getHoroscopePeriod("weekly", now),
+        monthly: getHoroscopePeriod("monthly", now),
+        yearly: getHoroscopePeriod("yearly", now),
+      };
 
       const dailyDays = [0, 1, 2, 3, 4, 5];
       const dailyPeriods = dailyDays.map(d => {
@@ -4580,61 +4594,71 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
       });
 
       const allPrompts = await storage.getHoroscopePrompts();
-      const activeSiteLangs = new Map<string, Set<string>>();
-      for (const p of allPrompts) {
-        if (p.isActive) {
-          const key = p.site || "psychicsource";
-          if (!activeSiteLangs.has(key)) activeSiteLangs.set(key, new Set());
-          activeSiteLangs.get(key)!.add(p.language);
-        }
+      // Languages are tracked per site AND per type. Yearly is English-only
+      // while daily, weekly and monthly still carry Spanish, so a single
+      // site-wide language set would query and report a Spanish yearly that was
+      // never meant to exist and show it as a "Pending" no run could clear.
+      const activeLangs = new Map<string, Set<string>>();
+      for (const prompt of allPrompts) {
+        if (!prompt.isActive) continue;
+        const key = `${prompt.site || "psychicsource"}:${prompt.type}`;
+        if (!activeLangs.has(key)) activeLangs.set(key, new Set());
+        activeLangs.get(key)!.add(prompt.language);
       }
+      const langsFor = (site: string, type: string) =>
+        HOROSCOPE_LANGUAGES.filter(l => activeLangs.get(`${site}:${type}`)?.has(l));
 
       const siteStatus: Record<string, any> = {};
 
       for (const siteId of HOROSCOPE_SITES) {
-        const langs = activeSiteLangs.get(siteId) || new Set<string>();
-        // Only report languages this site has an active prompt for. siteLangs
-        // used to be computed and then ignored, so pathforward was queried and
-        // reported for Spanish it never had, showing a permanent red 'Pending'.
-        const siteLangs = HOROSCOPE_LANGUAGES.filter(l => langs.has(l));
+        const dailyLangs = langsFor(siteId, "daily");
+        const siteLangs = HOROSCOPE_LANGUAGES.filter(l =>
+          ["daily", ...PERIODIC_TYPES].some(t => langsFor(siteId, t).includes(l))
+        );
         if (siteLangs.length === 0 && siteId !== "psychicsource") continue;
 
         const dailyPromises = dailyDays.flatMap(d =>
-          siteLangs.map(l => storage.getHoroscopeEntriesByPeriod("daily", l, dailyPeriods[d].start, siteId))
+          dailyLangs.map(l => storage.getHoroscopeEntriesByPeriod("daily", l, dailyPeriods[d].start, siteId))
         );
 
-        const weeklyMonthlyPromises = siteLangs.flatMap(l => [
-          storage.getHoroscopeEntriesByPeriod("weekly", l, weeklyPeriod.start, siteId),
-          storage.getHoroscopeEntriesByPeriod("monthly", l, monthlyPeriod.start, siteId),
-        ]);
+        // One lookup per (type, language) that actually has a prompt.
+        const periodicJobs: { type: string; language: string }[] = [];
+        for (const type of PERIODIC_TYPES) {
+          for (const language of langsFor(siteId, type)) periodicJobs.push({ type, language });
+        }
+        const periodicPromises = periodicJobs.map(j =>
+          storage.getHoroscopeEntriesByPeriod(j.type, j.language, periodFor[j.type].start, siteId)
+        );
 
-        const allResults = await Promise.all([...dailyPromises, ...weeklyMonthlyPromises]);
-        const dailyResults = allResults.slice(0, dailyDays.length * siteLangs.length);
-        const wmResults = allResults.slice(dailyDays.length * siteLangs.length);
+        const allResults = await Promise.all([...dailyPromises, ...periodicPromises]);
+        const dailyResults = allResults.slice(0, dailyPromises.length);
+        const periodicResults = allResults.slice(dailyPromises.length);
 
-        const dailySt: Record<string, Record<string, any>> = {};
+        const dailySt: Record<string, any> = { languages: dailyLangs };
         for (let d = 0; d < dailyDays.length; d++) {
           const langData: Record<string, any> = {};
-          for (let li = 0; li < siteLangs.length; li++) {
-            const entries = dailyResults[d * siteLangs.length + li];
-            langData[siteLangs[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d] };
+          for (let li = 0; li < dailyLangs.length; li++) {
+            const entries = dailyResults[d * dailyLangs.length + li];
+            langData[dailyLangs[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d] };
           }
           dailySt[`day${d}`] = { ...langData, daysAhead: d };
         }
 
-        const weeklySt: Record<string, any> = {};
-        const monthlySt: Record<string, any> = {};
-        for (let li = 0; li < siteLangs.length; li++) {
-          const wEntries = wmResults[li * 2];
-          const mEntries = wmResults[li * 2 + 1];
-          weeklySt[siteLangs[li]] = { generated: wEntries.length > 0, count: wEntries.length, period: weeklyPeriod };
-          monthlySt[siteLangs[li]] = { generated: mEntries.length > 0, count: mEntries.length, period: monthlyPeriod };
-        }
+        const periodicSt: Record<string, any> = {};
+        for (const type of PERIODIC_TYPES) periodicSt[type] = { languages: langsFor(siteId, type) };
+        periodicJobs.forEach((job, i) => {
+          const entries = periodicResults[i];
+          periodicSt[job.type][job.language] = {
+            generated: entries.length > 0,
+            count: entries.length,
+            period: periodFor[job.type],
+          };
+        });
 
-        siteStatus[siteId] = { languages: siteLangs, daily: dailySt, weekly: weeklySt, monthly: monthlySt };
+        siteStatus[siteId] = { languages: siteLangs, daily: dailySt, ...periodicSt };
       }
 
-      const defaultSite = siteStatus.psychicsource || { daily: {}, weekly: {}, monthly: {} };
+      const defaultSite = siteStatus.psychicsource || { daily: {}, weekly: {}, monthly: {}, yearly: {} };
       res.json({
         ...defaultSite,
         sites: siteStatus,

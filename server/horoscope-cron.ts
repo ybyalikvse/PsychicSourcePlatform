@@ -30,6 +30,15 @@ function getHoroscopePeriod(type: string, date?: Date): { start: string; end: st
       end: formatDate(sunday),
       label: `week beginning ${monday.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}`
     };
+  } else if (type === "yearly") {
+    // Jan 1 to Dec 31 of the UTC year; the label is just the year.
+    const firstDay = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), 11, 31));
+    return {
+      start: formatDate(firstDay),
+      end: formatDate(lastDay),
+      label: String(d.getUTCFullYear())
+    };
   } else {
     const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
     const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
@@ -54,7 +63,7 @@ async function generateHoroscopeContent(
     ? "Write the horoscope entirely in Spanish."
     : "Write the horoscope in English.";
 
-  const typeLabel = type === "daily" ? "daily" : type === "weekly" ? "weekly" : "monthly";
+  const typeLabel = ["daily", "weekly", "monthly", "yearly"].includes(type) ? type : "monthly";
   const fullPrompt = `${promptTemplate}
 
 Zodiac Sign: ${sign}
@@ -179,7 +188,7 @@ export async function runHoroscopeGeneration(type: string) {
 async function runStartupCatchup() {
   console.log("[Horoscope Cron] Running startup catchup check...");
 
-  for (const type of ["daily", "weekly", "monthly"] as const) {
+  for (const type of ["daily", "weekly", "monthly", "yearly"] as const) {
     const languages = ["en", "es"];
     const daysToCheck = type === "daily" ? DAILY_LOOKAHEAD_DAYS : [0];
 

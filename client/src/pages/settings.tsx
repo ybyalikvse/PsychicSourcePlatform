@@ -1345,7 +1345,7 @@ export default function Settings() {
           {horoscopePromptsLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : horoscopePrompts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No horoscope prompts configured. Add prompts for daily, weekly, and monthly horoscopes in English and Spanish.</p>
+            <p className="text-sm text-muted-foreground">No horoscope prompts configured. Add prompts for daily, weekly, monthly, and yearly horoscopes. Yearly is English only.</p>
           ) : (
             <div className="space-y-3">
               {horoscopePrompts.map((prompt) => (
@@ -1419,6 +1419,7 @@ export default function Settings() {
                     <SelectItem value="daily">Daily</SelectItem>
                     <SelectItem value="weekly">Weekly</SelectItem>
                     <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="yearly">Yearly</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

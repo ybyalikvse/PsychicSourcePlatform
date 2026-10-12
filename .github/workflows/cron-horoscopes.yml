@@ -13,6 +13,8 @@ on:
     - cron: "23 2 * * 1"
     # Monthly on 1st at 02:23 UTC
     - cron: "23 2 1 * *"
+    # Yearly on 1 Jan at 02:23 UTC
+    - cron: "23 2 1 1 *"
   workflow_dispatch:
     inputs:
       type:
@@ -24,6 +26,7 @@ on:
           - daily
           - weekly
           - monthly
+          - yearly
 
 jobs:
   determine-type:
@@ -38,7 +41,9 @@ jobs:
             echo "type=${{ github.event.inputs.type }}" >> $GITHUB_OUTPUT
           else
             CRON="${{ github.event.schedule }}"
-            if [ "$CRON" = "23 2 1 * *" ]; then
+            if [ "$CRON" = "23 2 1 1 *" ]; then
+              echo "type=yearly" >> $GITHUB_OUTPUT
+            elif [ "$CRON" = "23 2 1 * *" ]; then
               echo "type=monthly" >> $GITHUB_OUTPUT
             elif [ "$CRON" = "23 2 * * 1" ]; then
               echo "type=weekly" >> $GITHUB_OUTPUT
@@ -130,6 +135,16 @@ jobs:
             # month once we are inside the last 7 days of this one.
             generate weekly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) weekly +7d lookahead" || FAILURES=$((FAILURES+1))
             generate monthly 7 "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) monthly +7d lookahead" || FAILURES=$((FAILURES+1))
+            # Yearly is English only, so skip it for Spanish jobs rather than
+            # logging a config 400 every night. +30d is the lookahead because a
+            # year boundary needs more runway than a month: next year's forecast
+            # exists from about 1 December, well before any 1 January pull.
+            if [ "${{ matrix.language }}" = "en" ]; then
+              generate yearly "" "${{ matrix.sign }} (en/${{ matrix.site }}) yearly catchup" || FAILURES=$((FAILURES+1))
+              generate yearly 30 "${{ matrix.sign }} (en/${{ matrix.site }}) yearly +30d lookahead" || FAILURES=$((FAILURES+1))
+            fi
+          elif [ "$HOROSCOPE_TYPE" = "yearly" ] && [ "${{ matrix.language }}" != "en" ]; then
+            echo "  - yearly is English only, skipping ${{ matrix.language }}"
           else
             generate "$HOROSCOPE_TYPE" "" "${{ matrix.sign }} (${{ matrix.language }}/${{ matrix.site }}) $HOROSCOPE_TYPE" || FAILURES=$((FAILURES+1))
           fi

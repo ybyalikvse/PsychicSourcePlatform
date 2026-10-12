@@ -288068,7 +288068,7 @@ var horoscopePrompts = pgTable("horoscope_prompts", {
   site: text("site").notNull().default("psychicsource"),
   // psychicsource, pathforward
   type: text("type").notNull(),
-  // daily, weekly, monthly
+  // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
   // en, es
   prompt: text("prompt").notNull(),
@@ -288086,7 +288086,7 @@ var horoscopeEntries = pgTable("horoscope_entries", {
   site: text("site").notNull().default("psychicsource"),
   // psychicsource, pathforward
   type: text("type").notNull(),
-  // daily, weekly, monthly
+  // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
   sign: text("sign").notNull(),
   // aries, taurus, etc.
@@ -290303,6 +290303,17 @@ var SECTIONS = {
       { id: "finances", text: { en: "Financial Mindset", es: "Mentalidad Financiera" }, match: /financ|mentalidad/ },
       { id: "wellbeing", text: { en: "Emotional and Physical Wellbeing", es: "Bienestar Emocional y F\xEDsico" }, match: /wellbeing|bienestar/ },
       { id: "evolution", text: { en: "Personal Evolution", es: "Evoluci\xF3n Personal" }, match: /evolution|evolucion/ }
+    ],
+    yearly: [
+      { id: "theme", text: { en: "The Central Theme of the Year" }, match: /central theme/ },
+      { id: "opening-months", text: { en: "The Opening Months" }, match: /opening months|early (year|months)|first quarter|start of the year/ },
+      { id: "midyear", text: { en: "The Midyear Turning Point" }, match: /midyear|mid-year|middle of the year/ },
+      { id: "closing-months", text: { en: "The Closing Months" }, match: /closing months|late (year|months)|final months|end of the year/ },
+      { id: "relationships", text: { en: "Relationships" }, match: /relationship|relacion/ },
+      { id: "career", text: { en: "Career and Long-Term Direction" }, match: /career|carrera/ },
+      { id: "finances", text: { en: "Financial Mindset" }, match: /financ/ },
+      { id: "wellbeing", text: { en: "Emotional and Physical Wellbeing" }, match: /wellbeing|well-being/ },
+      { id: "evolution", text: { en: "Personal Evolution" }, match: /evolution/ }
     ]
   },
   pathforward: {
@@ -290330,6 +290341,17 @@ var SECTIONS = {
       { id: "opening", text: { en: "The Opening Pages" }, match: /opening/ },
       { id: "turning", text: { en: "The Turning Scene" }, match: /turning/ },
       { id: "closing", text: { en: "The Closing Arc" }, match: /closing/ },
+      { id: "relationships", text: { en: "Relationships" }, match: /relationship/ },
+      { id: "career", text: { en: "Career and Legacy" }, match: /career|legacy/ },
+      { id: "finances", text: { en: "Financial Self-Belief" }, match: /financ|self-belief|self belief/ },
+      { id: "body", text: { en: "Body and Resilience" }, match: /body|resilience/ },
+      { id: "identity", text: { en: "Identity in Motion" }, match: /identity/ }
+    ],
+    yearly: [
+      { id: "story", text: { en: "The Story This Year Tells" }, match: /story/ },
+      { id: "first-act", text: { en: "The First Act" }, match: /first act|opening act|act one/ },
+      { id: "midpoint", text: { en: "The Midpoint Reversal" }, match: /midpoint|mid-point|reversal|midyear|mid-year/ },
+      { id: "final-act", text: { en: "The Final Act" }, match: /final act|closing act|last act|act three/ },
       { id: "relationships", text: { en: "Relationships" }, match: /relationship/ },
       { id: "career", text: { en: "Career and Legacy" }, match: /career|legacy/ },
       { id: "finances", text: { en: "Financial Self-Belief" }, match: /financ|self-belief|self belief/ },
@@ -324921,6 +324943,14 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
         end: formatDate(sunday),
         label: `week beginning ${monday.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}`
       };
+    } else if (type === "yearly") {
+      const firstDay = new Date(Date.UTC(d5.getUTCFullYear(), 0, 1));
+      const lastDay = new Date(Date.UTC(d5.getUTCFullYear(), 11, 31));
+      return {
+        start: formatDate(firstDay),
+        end: formatDate(lastDay),
+        label: String(d5.getUTCFullYear())
+      };
     } else {
       const firstDay = new Date(Date.UTC(d5.getUTCFullYear(), d5.getUTCMonth(), 1));
       const lastDay = new Date(Date.UTC(d5.getUTCFullYear(), d5.getUTCMonth() + 1, 0));
@@ -324933,7 +324963,7 @@ IMPORTANT: Do NOT add rel="noopener noreferrer nofollow" or target="_blank" to i
   }
   async function generateHoroscopeContent(sign, type, language, periodLabel, promptTemplate, aiModel, site) {
     const languageInstruction = language === "es" ? "Write the horoscope entirely in Spanish." : "Write the horoscope in English.";
-    const typeLabel = type === "daily" ? "daily" : type === "weekly" ? "weekly" : "monthly";
+    const typeLabel = ["daily", "weekly", "monthly", "yearly"].includes(type) ? type : "monthly";
     const fullPrompt = `${promptTemplate}
 
 Zodiac Sign: ${sign}
@@ -324966,8 +324996,8 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     try {
       const { type, language, sign, daysAhead, site } = req.body;
       const siteId = site || "psychicsource";
-      if (!type || !["daily", "weekly", "monthly"].includes(type)) {
-        return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
+      if (!type || !["daily", "weekly", "monthly", "yearly"].includes(type)) {
+        return res.status(400).json({ error: "Invalid type. Must be daily, weekly, monthly, or yearly." });
       }
       if (!sign || !ZODIAC_SIGNS.includes(sign)) {
         return res.status(400).json({ error: "Invalid zodiac sign." });
@@ -325037,7 +325067,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     try {
       const { type, language, daysAhead, site } = req.body;
       const siteId = site || "psychicsource";
-      if (!type || !["daily", "weekly", "monthly"].includes(type)) {
+      if (!type || !["daily", "weekly", "monthly", "yearly"].includes(type)) {
         return res.status(400).json({ error: "Invalid type." });
       }
       const lang = language || "en";
@@ -325074,7 +325104,7 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
     try {
       const { type, language } = req.params;
       const siteId = req.params.site || "psychicsource";
-      if (!["daily", "weekly", "monthly"].includes(type)) {
+      if (!["daily", "weekly", "monthly", "yearly"].includes(type)) {
         return res.status(400).send("Invalid type");
       }
       let targetDate;
@@ -325150,11 +325180,15 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
   });
   const HOROSCOPE_SITES = ["psychicsource", "pathforward"];
   const HOROSCOPE_LANGUAGES = ["en", "es"];
+  const PERIODIC_TYPES = ["weekly", "monthly", "yearly"];
   app2.get("/api/horoscopes/cron-status", async (_req, res) => {
     try {
       const now = /* @__PURE__ */ new Date();
-      const weeklyPeriod = getHoroscopePeriod("weekly", now);
-      const monthlyPeriod = getHoroscopePeriod("monthly", now);
+      const periodFor = {
+        weekly: getHoroscopePeriod("weekly", now),
+        monthly: getHoroscopePeriod("monthly", now),
+        yearly: getHoroscopePeriod("yearly", now)
+      };
       const dailyDays = [0, 1, 2, 3, 4, 5];
       const dailyPeriods = dailyDays.map((d5) => {
         const date3 = /* @__PURE__ */ new Date();
@@ -325162,49 +325196,56 @@ OUTPUT FORMAT: Clean HTML only. Use <h2> tags for section headings (NOT markdown
         return getHoroscopePeriod("daily", date3);
       });
       const allPrompts = await storage.getHoroscopePrompts();
-      const activeSiteLangs = /* @__PURE__ */ new Map();
-      for (const p5 of allPrompts) {
-        if (p5.isActive) {
-          const key = p5.site || "psychicsource";
-          if (!activeSiteLangs.has(key)) activeSiteLangs.set(key, /* @__PURE__ */ new Set());
-          activeSiteLangs.get(key).add(p5.language);
-        }
+      const activeLangs = /* @__PURE__ */ new Map();
+      for (const prompt of allPrompts) {
+        if (!prompt.isActive) continue;
+        const key = `${prompt.site || "psychicsource"}:${prompt.type}`;
+        if (!activeLangs.has(key)) activeLangs.set(key, /* @__PURE__ */ new Set());
+        activeLangs.get(key).add(prompt.language);
       }
+      const langsFor = (site, type) => HOROSCOPE_LANGUAGES.filter((l5) => activeLangs.get(`${site}:${type}`)?.has(l5));
       const siteStatus = {};
       for (const siteId of HOROSCOPE_SITES) {
-        const langs = activeSiteLangs.get(siteId) || /* @__PURE__ */ new Set();
-        const siteLangs = HOROSCOPE_LANGUAGES.filter((l5) => langs.has(l5));
+        const dailyLangs = langsFor(siteId, "daily");
+        const siteLangs = HOROSCOPE_LANGUAGES.filter(
+          (l5) => ["daily", ...PERIODIC_TYPES].some((t6) => langsFor(siteId, t6).includes(l5))
+        );
         if (siteLangs.length === 0 && siteId !== "psychicsource") continue;
         const dailyPromises = dailyDays.flatMap(
-          (d5) => siteLangs.map((l5) => storage.getHoroscopeEntriesByPeriod("daily", l5, dailyPeriods[d5].start, siteId))
+          (d5) => dailyLangs.map((l5) => storage.getHoroscopeEntriesByPeriod("daily", l5, dailyPeriods[d5].start, siteId))
         );
-        const weeklyMonthlyPromises = siteLangs.flatMap((l5) => [
-          storage.getHoroscopeEntriesByPeriod("weekly", l5, weeklyPeriod.start, siteId),
-          storage.getHoroscopeEntriesByPeriod("monthly", l5, monthlyPeriod.start, siteId)
-        ]);
-        const allResults = await Promise.all([...dailyPromises, ...weeklyMonthlyPromises]);
-        const dailyResults = allResults.slice(0, dailyDays.length * siteLangs.length);
-        const wmResults = allResults.slice(dailyDays.length * siteLangs.length);
-        const dailySt = {};
+        const periodicJobs = [];
+        for (const type of PERIODIC_TYPES) {
+          for (const language of langsFor(siteId, type)) periodicJobs.push({ type, language });
+        }
+        const periodicPromises = periodicJobs.map(
+          (j5) => storage.getHoroscopeEntriesByPeriod(j5.type, j5.language, periodFor[j5.type].start, siteId)
+        );
+        const allResults = await Promise.all([...dailyPromises, ...periodicPromises]);
+        const dailyResults = allResults.slice(0, dailyPromises.length);
+        const periodicResults = allResults.slice(dailyPromises.length);
+        const dailySt = { languages: dailyLangs };
         for (let d5 = 0; d5 < dailyDays.length; d5++) {
           const langData = {};
-          for (let li = 0; li < siteLangs.length; li++) {
-            const entries = dailyResults[d5 * siteLangs.length + li];
-            langData[siteLangs[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d5] };
+          for (let li = 0; li < dailyLangs.length; li++) {
+            const entries = dailyResults[d5 * dailyLangs.length + li];
+            langData[dailyLangs[li]] = { generated: entries.length > 0, count: entries.length, period: dailyPeriods[d5] };
           }
           dailySt[`day${d5}`] = { ...langData, daysAhead: d5 };
         }
-        const weeklySt = {};
-        const monthlySt = {};
-        for (let li = 0; li < siteLangs.length; li++) {
-          const wEntries = wmResults[li * 2];
-          const mEntries = wmResults[li * 2 + 1];
-          weeklySt[siteLangs[li]] = { generated: wEntries.length > 0, count: wEntries.length, period: weeklyPeriod };
-          monthlySt[siteLangs[li]] = { generated: mEntries.length > 0, count: mEntries.length, period: monthlyPeriod };
-        }
-        siteStatus[siteId] = { languages: siteLangs, daily: dailySt, weekly: weeklySt, monthly: monthlySt };
+        const periodicSt = {};
+        for (const type of PERIODIC_TYPES) periodicSt[type] = { languages: langsFor(siteId, type) };
+        periodicJobs.forEach((job, i6) => {
+          const entries = periodicResults[i6];
+          periodicSt[job.type][job.language] = {
+            generated: entries.length > 0,
+            count: entries.length,
+            period: periodFor[job.type]
+          };
+        });
+        siteStatus[siteId] = { languages: siteLangs, daily: dailySt, ...periodicSt };
       }
-      const defaultSite = siteStatus.psychicsource || { daily: {}, weekly: {}, monthly: {} };
+      const defaultSite = siteStatus.psychicsource || { daily: {}, weekly: {}, monthly: {}, yearly: {} };
       res.json({
         ...defaultSite,
         sites: siteStatus

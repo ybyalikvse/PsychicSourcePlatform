@@ -14,6 +14,9 @@
  * and deliberately does NOT cache-bust: we want to see exactly what a consumer
  * sees, stale edge copies included.
  *
+ * Covers daily (five offsets), weekly and monthly for every configured
+ * site/language pair, plus yearly where it exists (English only).
+ *
  * Usage:  node script/check-feeds.mjs [--self-test]
  * Env:    APP_URL (default: production), REQUEST_TIMEOUT_MS, SLOW_WARN_MS
  */
@@ -48,6 +51,7 @@ function expectedPeriodStart(type, now, offsetDays = 0) {
     d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));
     return ymd(d);
   }
+  if (type === "yearly") return ymd(new Date(Date.UTC(d.getUTCFullYear(), 0, 1)));
   return ymd(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)));
 }
 
@@ -107,7 +111,10 @@ function buildChecks(now) {
         expectedStart: expectedPeriodStart("daily", now, off),
       });
     }
-    for (const type of ["weekly", "monthly"]) {
+    // Yearly is English only, so it is checked only where it exists. Asking for
+    // a Spanish yearly would fail on a gap that is intentional.
+    const periodicTypes = language === "en" ? ["weekly", "monthly", "yearly"] : ["weekly", "monthly"];
+    for (const type of periodicTypes) {
       checks.push({
         name: `${type} ${language}/${site}`,
         url: `${APP_URL}/api/horoscopes/feed/${type}/${language}/${site}`,

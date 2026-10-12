@@ -9,8 +9,8 @@ export default async function handler(req: any, res: any) {
   }
 
   const type = (req.query.type as string) || "daily";
-  if (!["daily", "weekly", "monthly"].includes(type)) {
-    return res.status(400).json({ error: "Invalid type. Must be daily, weekly, or monthly." });
+  if (!["daily", "weekly", "monthly", "yearly"].includes(type)) {
+    return res.status(400).json({ error: "Invalid type. Must be daily, weekly, monthly, or yearly." });
   }
 
   try {

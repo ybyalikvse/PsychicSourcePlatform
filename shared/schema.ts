@@ -333,7 +333,7 @@ export interface MetaSuggestions {
 export const horoscopePrompts = pgTable("horoscope_prompts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   site: text("site").notNull().default("psychicsource"), // psychicsource, pathforward
-  type: text("type").notNull(), // daily, weekly, monthly
+  type: text("type").notNull(), // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"), // en, es
   prompt: text("prompt").notNull(),
   aiModel: text("ai_model").default("claude"), // claude, gpt
@@ -353,7 +353,7 @@ export type HoroscopePrompt = typeof horoscopePrompts.$inferSelect;
 export const horoscopeEntries = pgTable("horoscope_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   site: text("site").notNull().default("psychicsource"), // psychicsource, pathforward
-  type: text("type").notNull(), // daily, weekly, monthly
+  type: text("type").notNull(), // daily, weekly, monthly, yearly
   language: text("language").notNull().default("en"),
   sign: text("sign").notNull(), // aries, taurus, etc.
   content: text("content").notNull(),

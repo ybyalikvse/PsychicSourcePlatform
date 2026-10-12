@@ -99,11 +99,17 @@ export default function Horoscopes() {
 
   const status = cronStatus as any;
   const siteStatus = status?.sites?.[activeSite] || status;
-  // The API reports which languages a site has active prompts for. A language
+  // The API reports which languages have an active prompt, per type. A language
   // that isn't configured is a deliberate gap, not a generation failure, so it
-  // must not render as "Pending" alongside genuinely-missing content.
-  const languageConfigured: boolean =
-    !Array.isArray(siteStatus?.languages) || siteStatus.languages.includes(language);
+  // must not render as "Pending" alongside genuinely-missing content. This is
+  // per-type because yearly is English-only while daily, weekly and monthly
+  // still carry Spanish.
+  const isLanguageConfigured = (type: string): boolean => {
+    const forType = siteStatus?.[type]?.languages;
+    if (Array.isArray(forType)) return forType.includes(language);
+    return !Array.isArray(siteStatus?.languages) || siteStatus.languages.includes(language);
+  };
+  const languageConfigured = isLanguageConfigured(activeType);
 
   const dailyPeriodStart = useMemo(() => {
     if (!siteStatus?.daily) return null;
@@ -385,7 +391,7 @@ export default function Horoscopes() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight" data-testid="text-horoscopes-title">Horoscopes</h1>
-          <p className="text-muted-foreground">Generate and manage daily, weekly, and monthly horoscopes</p>
+          <p className="text-muted-foreground">Generate and manage daily, weekly, monthly, and yearly horoscopes</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={activeSite} onValueChange={setActiveSite} data-testid="select-site">
@@ -465,7 +471,7 @@ export default function Horoscopes() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card data-testid="card-cron-daily">
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
@@ -474,7 +480,7 @@ export default function Horoscopes() {
                 <p className="text-xs text-muted-foreground">Daily at 02:23 UTC (4 days)</p>
               </div>
               {(() => {
-                if (!languageConfigured) return <NotConfiguredBadge />;
+                if (!isLanguageConfigured("daily")) return <NotConfiguredBadge />;
                 if (dailyDayStatuses.length === 0) {
                   return <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
                 }
@@ -494,7 +500,7 @@ export default function Horoscopes() {
                 <p className="text-sm font-medium">Weekly</p>
                 <p className="text-xs text-muted-foreground">Mondays at 02:23 UTC</p>
               </div>
-              {!languageConfigured ? (
+              {!isLanguageConfigured("weekly") ? (
                 <NotConfiguredBadge />
               ) : siteStatus?.weekly?.[language]?.generated ? (
                 <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
@@ -511,9 +517,26 @@ export default function Horoscopes() {
                 <p className="text-sm font-medium">Monthly</p>
                 <p className="text-xs text-muted-foreground">1st of month at 02:23 UTC</p>
               </div>
-              {!languageConfigured ? (
+              {!isLanguageConfigured("monthly") ? (
                 <NotConfiguredBadge />
               ) : siteStatus?.monthly?.[language]?.generated ? (
+                <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
+              ) : (
+                <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-cron-yearly">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Yearly</p>
+                <p className="text-xs text-muted-foreground">1 Jan at 02:23 UTC (English only)</p>
+              </div>
+              {!isLanguageConfigured("yearly") ? (
+                <NotConfiguredBadge />
+              ) : siteStatus?.yearly?.[language]?.generated ? (
                 <Badge variant="outline" className="text-green-600"><CheckCircle className="h-3 w-3 mr-1" />Generated</Badge>
               ) : (
                 <Badge variant="outline" className="text-orange-500"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
@@ -549,6 +572,7 @@ export default function Horoscopes() {
           <TabsTrigger value="daily" data-testid="tab-daily">Daily</TabsTrigger>
           <TabsTrigger value="weekly" data-testid="tab-weekly">Weekly</TabsTrigger>
           <TabsTrigger value="monthly" data-testid="tab-monthly">Monthly</TabsTrigger>
+          <TabsTrigger value="yearly" data-testid="tab-yearly">Yearly</TabsTrigger>
         </TabsList>
 
         <TabsContent value="daily" className="space-y-4">
@@ -709,7 +733,7 @@ export default function Horoscopes() {
           )}
         </TabsContent>
 
-        {["weekly", "monthly"].map(type => (
+        {["weekly", "monthly", "yearly"].map(type => (
           <TabsContent key={type} value={type} className="space-y-4">
             {isGenerating && (
               <Card>
